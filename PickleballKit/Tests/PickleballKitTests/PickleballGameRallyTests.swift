@@ -4,7 +4,7 @@ import XCTest
 final class PickleballGameRallyTests: XCTestCase {
     func testRallyPointAlwaysScoresAndPassesServeToWinner() {
         let config = GameConfiguration(scoringFormat: .rally(freeze: false))
-        let game = PickleballGame(configuration: config, firstServingTeam: .teamA)
+        let game = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
 
         game.recordPoint(for: .teamB) // teamB wins the rally despite receiving
         XCTAssertEqual(game.state.teamBScore, 1)
@@ -21,7 +21,7 @@ final class PickleballGameRallyTests: XCTestCase {
             winningScore: .eleven,
             winByTwo: true
         )
-        let game = PickleballGame(configuration: config, firstServingTeam: .teamA)
+        let game = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
         for _ in 1...10 { game.recordPoint(for: .teamA) }
         game.recordPoint(for: .teamB) // 10-1, teamA still well ahead
         for _ in 1...9 { game.recordPoint(for: .teamB) } // teamB climbs to 10
@@ -43,7 +43,7 @@ final class PickleballGameRallyTests: XCTestCase {
             winningScore: .eleven,
             winByTwo: true
         )
-        let game = PickleballGame(configuration: config, firstServingTeam: .teamA)
+        let game = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
         for _ in 1...9 { game.recordPoint(for: .teamA) } // 9-0, teamA serving
         game.recordPoint(for: .teamB) // 9-1, teamB now serving (took over)
         for _ in 1...8 { game.recordPoint(for: .teamB) } // 9-9, teamB serving throughout
@@ -63,7 +63,7 @@ final class PickleballGameRallyTests: XCTestCase {
             winningScore: .eleven,
             winByTwo: true
         )
-        let game = PickleballGame(configuration: config, firstServingTeam: .teamA)
+        let game = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
         for _ in 1...10 { game.recordPoint(for: .teamA) } // 10-0, teamA serving throughout
         for _ in 1...9 { game.recordPoint(for: .teamB) }  // teamB takes over serve and climbs to 9: 10-9, teamB serving
         XCTAssertEqual(game.state.teamAScore, 10)
@@ -79,6 +79,57 @@ final class PickleballGameRallyTests: XCTestCase {
         XCTAssertEqual(game.state.servingTeam, .teamA) // serve still passes to the rally winner as normal
 
         // teamA wins again, now already serving: 12-9, margin 3 -> legitimate win.
+        game.recordPoint(for: .teamA)
+        XCTAssertTrue(game.isGameOver)
+        XCTAssertEqual(game.gameWinner, .teamA)
+    }
+
+    // MARK: - Fix 1: a tie is never a win, regardless of winByTwo
+
+    func testTiedScoreAtOrAboveTargetIsNeverAWinWhenWinByTwoIsFalse() {
+        // Critical bug: gameWinner used to compute `leader: Team = a > b ?
+        // .teamA : .teamB`, which falls through to .teamB on a tie. With
+        // winByTwo false there was nothing blocking a tied score at/above
+        // the target from being returned as a teamB win.
+        //
+        // Natural sequential recordPoint() play can never actually reach a
+        // tie at the target once winByTwo is off, because the moment either
+        // team first reaches the target while strictly ahead the game
+        // freezes (recordPoint no-ops once isGameOver is true). So we use
+        // correctScore (which has no isGameOver guard) to construct the tie
+        // directly and exercise gameWinner's own tie-handling.
+        let config = GameConfiguration(
+            scoringFormat: .rally(freeze: false),
+            winningScore: .eleven,
+            winByTwo: false
+        )
+        let game = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        game.correctScore(team: .teamA, to: 11)
+        game.correctScore(team: .teamB, to: 11)
+
+        XCTAssertEqual(game.state.teamAScore, 11)
+        XCTAssertEqual(game.state.teamBScore, 11)
+        XCTAssertFalse(game.isGameOver)
+        XCTAssertNil(game.gameWinner)
+    }
+
+    func testReachingTargetWithAnyLeadWinsImmediatelyWhenWinByTwoIsFalse() {
+        let config = GameConfiguration(
+            scoringFormat: .rally(freeze: false),
+            winningScore: .eleven,
+            winByTwo: false
+        )
+        let game = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...10 {
+            game.recordPoint(for: .teamA)
+            game.recordPoint(for: .teamB)
+        }
+        XCTAssertEqual(game.state.teamAScore, 10)
+        XCTAssertEqual(game.state.teamBScore, 10)
+        XCTAssertFalse(game.isGameOver)
+
+        // teamA takes an 11-10 lead -- only a 1-point margin, which is
+        // sufficient to win immediately since winByTwo is off.
         game.recordPoint(for: .teamA)
         XCTAssertTrue(game.isGameOver)
         XCTAssertEqual(game.gameWinner, .teamA)

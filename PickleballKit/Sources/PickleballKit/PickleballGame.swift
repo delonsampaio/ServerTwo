@@ -12,8 +12,8 @@ public final class PickleballGame {
     public init(
         configuration: GameConfiguration,
         firstServingTeam: Team,
-        proUnlocked: Bool = true,
-        demoPointCap: Int? = nil
+        proUnlocked: Bool,
+        demoPointCap: Int?
     ) {
         self.configuration = configuration
         self.proUnlocked = proUnlocked
@@ -49,7 +49,7 @@ public final class PickleballGame {
         let a = state.teamAScore
         let b = state.teamBScore
         let target = configuration.winningScore.rawValue
-        guard max(a, b) >= target else { return nil }
+        guard max(a, b) >= target, a != b else { return nil }
         if configuration.winByTwo && abs(a - b) < 2 { return nil }
         let leader: Team = a > b ? .teamA : .teamB
         if case .rally(let freeze) = configuration.scoringFormat, freeze {
@@ -124,6 +124,7 @@ public final class PickleballGame {
 
     @discardableResult
     public func requestTimeout(for team: Team) -> Bool {
+        guard !isGameOver else { return false }
         let remaining = state.timeoutsRemaining(for: team)
         guard remaining > 0 else { return false }
         history.append(state)
@@ -143,9 +144,11 @@ public final class PickleballGame {
     public func correctScore(team: Team, to newScore: Int) {
         history.append(state)
         if team == .teamA {
-            state.teamAScore = newScore
+            state.teamAScore = max(0, newScore)
         } else {
-            state.teamBScore = newScore
+            state.teamBScore = max(0, newScore)
         }
+        checkSideSwitch()
+        state.lastPointWonWhileServing = true
     }
 }

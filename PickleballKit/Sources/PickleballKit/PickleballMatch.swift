@@ -12,8 +12,8 @@ public final class PickleballMatch {
         configuration: GameConfiguration,
         matchFormat: MatchFormat,
         firstServingTeam: Team,
-        proUnlocked: Bool = true,
-        demoPointCap: Int? = nil
+        proUnlocked: Bool,
+        demoPointCap: Int?
     ) {
         self.configuration = configuration
         self.matchFormat = matchFormat
@@ -77,5 +77,47 @@ public final class PickleballMatch {
         }
         currentGame = previousGame
         currentGame.undo()
+    }
+
+    public func correctScore(team: Team, to newScore: Int) {
+        let wasGameOver = currentGame.isGameOver
+        let previousWinner = currentGame.gameWinner
+        currentGame.correctScore(team: team, to: newScore)
+        let isGameOverNow = currentGame.isGameOver
+
+        if !wasGameOver, isGameOverNow, let winner = currentGame.gameWinner {
+            gamesWon[winner, default: 0] += 1
+            completedGames.append(currentGame)
+            if !isMatchOver {
+                currentGame = PickleballGame(
+                    configuration: configuration,
+                    firstServingTeam: winner,
+                    proUnlocked: currentGame.proUnlocked,
+                    demoPointCap: currentGame.demoPointCap
+                )
+            }
+        } else if wasGameOver, !isGameOverNow, let winner = previousWinner {
+            gamesWon[winner, default: 0] -= 1
+            if completedGames.last === currentGame {
+                completedGames.removeLast()
+            }
+        }
+    }
+
+    @discardableResult
+    public func requestTimeout(for team: Team) -> Bool {
+        currentGame.requestTimeout(for: team)
+    }
+
+    public var isPaywalled: Bool {
+        currentGame.isPaywalled
+    }
+
+    public func unlockPro() {
+        currentGame.unlockPro()
+    }
+
+    public func gamesWon(for team: Team) -> Int {
+        gamesWon[team, default: 0]
     }
 }

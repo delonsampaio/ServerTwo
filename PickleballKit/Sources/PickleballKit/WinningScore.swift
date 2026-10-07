@@ -5,8 +5,10 @@ public enum WinningScore: Int, Codable, Sendable, CaseIterable {
 
     /// Teams switch ends the first time either team reaches this score.
     /// Formula: ceil(winningScore / 2), which yields the standard 6/8/11
-    /// thresholds for games to 11/15/21.
+    /// thresholds for games to 11/15/21. Implemented with integer-only
+    /// ceiling division — exact for positive integers, no floating point
+    /// needed.
     public var sideSwitchThreshold: Int {
-        Int((Double(rawValue) / 2.0).rounded(.up))
+        (rawValue + 1) / 2
     }
 }

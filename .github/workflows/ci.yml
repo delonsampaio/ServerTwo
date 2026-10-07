@@ -11,6 +11,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
       - name: Run PickleballKit tests
         working-directory: PickleballKit
         run: swift test
