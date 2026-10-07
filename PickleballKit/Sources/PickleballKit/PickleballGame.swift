@@ -7,7 +7,7 @@ public final class PickleballGame {
     public private(set) var proUnlocked: Bool
     public let demoPointCap: Int?
 
-    private var history: [GameState] = []
+    public private(set) var history: [GameState] = []
 
     public init(
         configuration: GameConfiguration,
@@ -30,6 +30,23 @@ public final class PickleballGame {
             hasSideSwitched: false,
             lastPointWonWhileServing: true
         )
+    }
+
+    /// Reconstructs a game from a previously saved state and undo history —
+    /// used by the persistence layer to resume an in-progress game after a
+    /// crash or relaunch with its undo stack intact.
+    public init(
+        configuration: GameConfiguration,
+        state: GameState,
+        history: [GameState],
+        proUnlocked: Bool,
+        demoPointCap: Int?
+    ) {
+        self.configuration = configuration
+        self.state = state
+        self.history = history
+        self.proUnlocked = proUnlocked
+        self.demoPointCap = demoPointCap
     }
 
     public var canUndo: Bool { !history.isEmpty }
