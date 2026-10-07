@@ -36,6 +36,15 @@ public final class PickleballGame {
 
     public var isGameOver: Bool { gameWinner != nil }
 
+    public var isPaywalled: Bool {
+        guard !proUnlocked, let cap = demoPointCap else { return false }
+        return max(state.teamAScore, state.teamBScore) >= cap
+    }
+
+    public func unlockPro() {
+        proUnlocked = true
+    }
+
     public var gameWinner: Team? {
         let a = state.teamAScore
         let b = state.teamBScore
@@ -50,7 +59,7 @@ public final class PickleballGame {
     }
 
     public func recordPoint(for scoringTeam: Team) {
-        guard !isGameOver else { return }
+        guard !isGameOver, !isPaywalled else { return }
         history.append(state)
 
         let previousServingTeam = state.servingTeam
