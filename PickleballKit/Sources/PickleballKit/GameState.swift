@@ -46,4 +46,15 @@ public struct GameState: Codable, Sendable, Equatable {
     public func timeoutsRemaining(for team: Team) -> Int {
         team == .teamA ? teamATimeoutsRemaining : teamBTimeoutsRemaining
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case teamAScore
+        case teamBScore
+        case servingTeam
+        case serverNumber
+        case teamATimeoutsRemaining
+        case teamBTimeoutsRemaining
+        case hasSideSwitched
+        case lastPointWonWhileServing
+    }
 }

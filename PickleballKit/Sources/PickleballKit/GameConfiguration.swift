@@ -18,4 +18,12 @@ public struct GameConfiguration: Codable, Sendable, Equatable {
         self.winByTwo = winByTwo
         self.timeoutsPerTeam = timeoutsPerTeam
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case playMode
+        case scoringFormat
+        case winningScore
+        case winByTwo
+        case timeoutsPerTeam
+    }
 }
