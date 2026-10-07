@@ -53,11 +53,13 @@ public final class PickleballGame {
         guard !isGameOver else { return }
         history.append(state)
 
+        let previousServingTeam = state.servingTeam
+
         switch configuration.scoringFormat {
         case .sideOut:
             recordSideOutPoint(for: scoringTeam)
         case .rally:
-            break // implemented in Task 6
+            recordRallyPoint(for: scoringTeam, previousServingTeam: previousServingTeam)
         }
     }
 
@@ -84,6 +86,13 @@ public final class PickleballGame {
             state.servingTeam = scoringTeam
             state.serverNumber = .one
         }
+    }
+
+    private func recordRallyPoint(for scoringTeam: Team, previousServingTeam: Team) {
+        addScore(to: scoringTeam)
+        state.lastPointWonWhileServing = (scoringTeam == previousServingTeam)
+        state.servingTeam = scoringTeam
+        state.serverNumber = .one
     }
 
     private func addScore(to team: Team) {
