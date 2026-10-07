@@ -61,6 +61,8 @@ public final class PickleballGame {
         case .rally:
             recordRallyPoint(for: scoringTeam, previousServingTeam: previousServingTeam)
         }
+
+        checkSideSwitch()
     }
 
     private func recordSideOutPoint(for scoringTeam: Team) {
@@ -101,5 +103,26 @@ public final class PickleballGame {
         } else {
             state.teamBScore += 1
         }
+    }
+
+    private func checkSideSwitch() {
+        guard !state.hasSideSwitched else { return }
+        let threshold = configuration.winningScore.sideSwitchThreshold
+        if state.teamAScore >= threshold || state.teamBScore >= threshold {
+            state.hasSideSwitched = true
+        }
+    }
+
+    @discardableResult
+    public func requestTimeout(for team: Team) -> Bool {
+        let remaining = state.timeoutsRemaining(for: team)
+        guard remaining > 0 else { return false }
+        history.append(state)
+        if team == .teamA {
+            state.teamATimeoutsRemaining -= 1
+        } else {
+            state.teamBTimeoutsRemaining -= 1
+        }
+        return true
     }
 }
