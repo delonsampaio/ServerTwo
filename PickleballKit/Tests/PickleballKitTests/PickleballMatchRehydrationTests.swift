@@ -13,7 +13,8 @@ final class PickleballMatchRehydrationTests: XCTestCase {
             matchFormat: original.matchFormat,
             completedGames: original.completedGames,
             currentGame: original.currentGame,
-            gamesWon: [.teamA: original.gamesWon(for: .teamA), .teamB: original.gamesWon(for: .teamB)]
+            gamesWon: [.teamA: original.gamesWon(for: .teamA), .teamB: original.gamesWon(for: .teamB)],
+            currentGameIsCounted: false
         )
 
         // Game 2 starts with teamA serving (won game 1) at Server 2 (brand

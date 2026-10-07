@@ -4,10 +4,7 @@ import SwiftData
 
 final class PersistenceModelsTests: XCTestCase {
     private func makeInMemoryContext() throws -> ModelContext {
-        let schema = Schema([TeamSide.self, MatchRecord.self, GameRecord.self, PointEvent.self])
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: configuration)
-        return ModelContext(container)
+        try ModelContext(PersistenceContainer.makeInMemoryContainer())
     }
 
     func testMatchRecordWithRelationshipsPersistsAndReloads() throws {
@@ -33,7 +30,15 @@ final class PersistenceModelsTests: XCTestCase {
         game.points = [point]
         record.games = [game]
 
+        // Every object is inserted explicitly — this package's established
+        // pattern (see MatchRepository.saveCompletedMatch) is to never rely
+        // on SwiftData's relationship cascade-insert, which was found to
+        // nondeterministically drop rows from a larger nested graph.
         context.insert(record)
+        context.insert(teamA)
+        context.insert(teamB)
+        context.insert(game)
+        context.insert(point)
         try context.save()
 
         let fetched = try context.fetch(FetchDescriptor<MatchRecord>())

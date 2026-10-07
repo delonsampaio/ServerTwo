@@ -5,6 +5,14 @@ public enum MatchRepositoryError: Error, Equatable {
     case matchNotOver
 }
 
+/// A match reconstructed from a saved in-progress snapshot, paired with
+/// the match's original start time (the engine itself doesn't track
+/// wall-clock time, so the repository carries it alongside).
+public struct ResumedMatch {
+    public let match: PickleballMatch
+    public let startedAt: Date
+}
+
 /// Wraps all SwiftData access for match persistence. UI code should never
 /// touch `ModelContext` directly — it goes through this type instead.
 public final class MatchRepository {
@@ -16,19 +24,32 @@ public final class MatchRepository {
 
     // MARK: In-progress snapshot (crash recovery)
 
-    public func saveInProgressSnapshot(for match: PickleballMatch) throws {
-        let data = try JSONEncoder().encode(match.snapshot)
+    public func saveInProgressSnapshot(for match: PickleballMatch, startedAt: Date) throws {
+        let data = try JSONEncoder().encode(match.snapshot(startedAt: startedAt))
         try clearInProgressSnapshot()
         let record = InProgressGameState(updatedAt: Date(), snapshotData: data)
         modelContext.insert(record)
         try modelContext.save()
     }
 
-    public func loadInProgressMatch() throws -> PickleballMatch? {
-        let existing = try modelContext.fetch(FetchDescriptor<InProgressGameState>())
+    public func loadInProgressMatch(proUnlocked: Bool, demoPointCap: Int?) throws -> ResumedMatch? {
+        let descriptor = FetchDescriptor<InProgressGameState>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        let existing = try modelContext.fetch(descriptor)
         guard let record = existing.first else { return nil }
         let snapshot = try JSONDecoder().decode(MatchSnapshot.self, from: record.snapshotData)
-        return PickleballMatch(resuming: snapshot)
+        let match = PickleballMatch(resuming: snapshot, proUnlocked: proUnlocked, demoPointCap: demoPointCap)
+        guard !match.isMatchOver else {
+            // A snapshot can only reach "match over" if the app crashed or
+            // was force-quit after the match-deciding point but before
+            // saveCompletedMatch's clearInProgressSnapshot() ran. There's
+            // nothing useful to resume — clear it so it can't resurface
+            // and be mistaken for a live match (or saved to history twice).
+            try clearInProgressSnapshot()
+            return nil
+        }
+        return ResumedMatch(match: match, startedAt: snapshot.startedAt)
     }
 
     public func clearInProgressSnapshot() throws {
@@ -78,10 +99,12 @@ public final class MatchRepository {
         modelContext.insert(teamBSide)
 
         var gameRecords: [GameRecord] = []
-        for (index, game) in match.completedGames.enumerated() {
+        var gameNumber = 0
+        for game in match.completedGames {
             guard let gameWinner = game.gameWinner else { continue }
+            gameNumber += 1
             let gameRecord = GameRecord(
-                gameNumber: index + 1,
+                gameNumber: gameNumber,
                 teamAFinalScore: game.state.teamAScore,
                 teamBFinalScore: game.state.teamBScore,
                 winningTeam: gameWinner
@@ -106,12 +129,22 @@ public final class MatchRepository {
         record.games = gameRecords
 
         try modelContext.save()
+
+        // The match this just persisted to history can no longer be the
+        // "live in-progress match" — clear its crash-recovery snapshot so
+        // loadInProgressMatch can't resurface a finished match (which would
+        // both read as "currently playing" and risk being saved twice).
+        try clearInProgressSnapshot()
+
         return record
     }
 
     public func fetchMatchHistory() throws -> [MatchRecord] {
         let descriptor = FetchDescriptor<MatchRecord>(
-            sortBy: [SortDescriptor(\.completedAt, order: .reverse)]
+            sortBy: [
+                SortDescriptor(\.completedAt, order: .reverse),
+                SortDescriptor(\.id)
+            ]
         )
         return try modelContext.fetch(descriptor)
     }
