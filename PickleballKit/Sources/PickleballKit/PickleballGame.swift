@@ -67,9 +67,16 @@ public final class PickleballGame {
             state.lastPointWonWhileServing = true
             return
         }
-        // Side-out event (doubles): Server 1 losing advances to Server 2
-        // without changing the serving team; Server 2 losing fully sides
-        // out to the other team at Server 1.
+        // Side-out event.
+        guard configuration.playMode == .doubles else {
+            // Singles has only one server per team — any lost rally while
+            // receiving is an immediate side-out.
+            state.servingTeam = scoringTeam
+            state.serverNumber = .one
+            return
+        }
+        // Doubles: Server 1 losing advances to Server 2 without changing
+        // the serving team; Server 2 losing fully sides out.
         switch state.serverNumber {
         case .one:
             state.serverNumber = .two
