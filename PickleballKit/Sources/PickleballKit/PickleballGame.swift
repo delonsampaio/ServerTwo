@@ -125,4 +125,18 @@ public final class PickleballGame {
         }
         return true
     }
+
+    public func undo() {
+        guard let previous = history.popLast() else { return }
+        state = previous
+    }
+
+    public func correctScore(team: Team, to newScore: Int) {
+        history.append(state)
+        if team == .teamA {
+            state.teamAScore = newScore
+        } else {
+            state.teamBScore = newScore
+        }
+    }
 }
