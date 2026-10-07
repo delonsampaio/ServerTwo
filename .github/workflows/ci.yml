@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-pickleball-kit:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run PickleballKit tests
+        working-directory: PickleballKit
+        run: swift test
