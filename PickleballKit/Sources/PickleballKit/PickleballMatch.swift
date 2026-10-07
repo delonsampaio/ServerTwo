@@ -25,6 +25,23 @@ public final class PickleballMatch {
         )
     }
 
+    /// Reconstructs a match from its already-reconstructed games — used by
+    /// the persistence layer to resume a saved in-progress match after a
+    /// crash or relaunch.
+    public init(
+        configuration: GameConfiguration,
+        matchFormat: MatchFormat,
+        completedGames: [PickleballGame],
+        currentGame: PickleballGame,
+        gamesWon: [Team: Int]
+    ) {
+        self.configuration = configuration
+        self.matchFormat = matchFormat
+        self.completedGames = completedGames
+        self.currentGame = currentGame
+        self.gamesWon = gamesWon
+    }
+
     public var isMatchOver: Bool {
         gamesWon[.teamA, default: 0] >= matchFormat.gamesToWin
             || gamesWon[.teamB, default: 0] >= matchFormat.gamesToWin
