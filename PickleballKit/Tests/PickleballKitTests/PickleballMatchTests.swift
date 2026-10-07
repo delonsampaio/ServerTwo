@@ -134,6 +134,30 @@ final class PickleballMatchTests: XCTestCase {
         XCTAssertEqual(match.gamesWon[.teamA], 1)
     }
 
+    func testCorrectScoreChangingTheWinnerOfAnAlreadyOverGameUpdatesGamesWonCorrectly() {
+        // Critical: correcting the losing team's recorded score upward past
+        // the winner's (a realistic dispute-resolution scenario) leaves the
+        // game over both before and after the correction, but with a
+        // DIFFERENT winner. Neither the "not-over -> over" nor the
+        // "over -> not-over" transition fires here, so a transition-based
+        // implementation would miss this case entirely and keep crediting
+        // the original winner.
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+
+        XCTAssertTrue(match.isMatchOver)
+        XCTAssertEqual(match.gamesWon(for: .teamA), 1)
+        XCTAssertEqual(match.matchWinner, .teamA)
+
+        match.correctScore(team: .teamB, to: 20) // actually teamB had more points
+
+        XCTAssertEqual(match.gamesWon(for: .teamA), 0)
+        XCTAssertEqual(match.gamesWon(for: .teamB), 1)
+        XCTAssertEqual(match.matchWinner, .teamB)
+        XCTAssertEqual(match.completedGames.count, 1)
+    }
+
     func testMatchRequestTimeoutForwardsToCurrentGame() {
         let config = GameConfiguration(timeoutsPerTeam: 2)
         let match = PickleballMatch(configuration: config, matchFormat: .bestOfThree, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)

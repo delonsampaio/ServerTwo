@@ -80,26 +80,32 @@ public final class PickleballMatch {
     }
 
     public func correctScore(team: Team, to newScore: Int) {
-        let wasGameOver = currentGame.isGameOver
-        let previousWinner = currentGame.gameWinner
-        currentGame.correctScore(team: team, to: newScore)
-        let isGameOverNow = currentGame.isGameOver
+        let wasCounted = completedGames.last === currentGame
+        let previousWinner = wasCounted ? currentGame.gameWinner : nil
 
-        if !wasGameOver, isGameOverNow, let winner = currentGame.gameWinner {
-            gamesWon[winner, default: 0] += 1
+        currentGame.correctScore(team: team, to: newScore)
+
+        let newWinner = currentGame.gameWinner
+
+        guard previousWinner != newWinner else { return }
+
+        if let previousWinner {
+            gamesWon[previousWinner, default: 0] -= 1
+            if wasCounted {
+                completedGames.removeLast()
+            }
+        }
+
+        if let newWinner {
+            gamesWon[newWinner, default: 0] += 1
             completedGames.append(currentGame)
             if !isMatchOver {
                 currentGame = PickleballGame(
                     configuration: configuration,
-                    firstServingTeam: winner,
+                    firstServingTeam: newWinner,
                     proUnlocked: currentGame.proUnlocked,
                     demoPointCap: currentGame.demoPointCap
                 )
-            }
-        } else if wasGameOver, !isGameOverNow, let winner = previousWinner {
-            gamesWon[winner, default: 0] -= 1
-            if completedGames.last === currentGame {
-                completedGames.removeLast()
             }
         }
     }
