@@ -64,4 +64,25 @@ final class PickleballMatchTests: XCTestCase {
         XCTAssertEqual(match.currentGame.state.teamAScore, 10) // game 1's second-to-last state
         XCTAssertFalse(match.currentGame.isGameOver)
     }
+
+    func testUndoOnTheMatchDecidingPointReversesTheWinCount() {
+        // Critical bug fix: when a point finishes both the game AND the match,
+        // currentGame is aliased with completedGames.last (not reassigned).
+        // Undoing must reverse gamesWon, not just revert the score in-place.
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+
+        XCTAssertTrue(match.isMatchOver)
+        XCTAssertEqual(match.matchWinner, .teamA)
+        XCTAssertEqual(match.gamesWon[.teamA], 1)
+
+        match.undo()
+
+        XCTAssertFalse(match.isMatchOver)
+        XCTAssertNil(match.matchWinner)
+        XCTAssertEqual(match.gamesWon[.teamA], 0)
+        XCTAssertFalse(match.currentGame.isGameOver)
+        XCTAssertEqual(match.currentGame.state.teamAScore, 10)
+    }
 }

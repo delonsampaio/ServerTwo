@@ -55,13 +55,25 @@ public final class PickleballMatch {
     }
 
     public func undo() {
+        if let lastCompleted = completedGames.last, lastCompleted === currentGame {
+            // The match ended on this exact game, so currentGame was never
+            // reassigned to a new object (see recordPoint) and is aliased
+            // with completedGames.last. Undoing the match-deciding point
+            // must also reverse the win count, not just revert the score.
+            completedGames.removeLast()
+            if let winner = currentGame.gameWinner {
+                gamesWon[winner, default: 0] -= 1
+            }
+            currentGame.undo()
+            return
+        }
         if currentGame.canUndo {
             currentGame.undo()
             return
         }
         guard let previousGame = completedGames.popLast() else { return }
         if let winner = previousGame.gameWinner {
-            gamesWon[winner, default: 1] -= 1
+            gamesWon[winner, default: 0] -= 1
         }
         currentGame = previousGame
         currentGame.undo()
