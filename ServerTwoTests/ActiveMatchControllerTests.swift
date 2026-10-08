@@ -10,7 +10,7 @@ final class ActiveMatchControllerTests: XCTestCase {
     ) throws -> (ActiveMatchController, UserDefaults) {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: userDefaultsSuite)!
-        let controller = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         return (controller, defaults)
     }
 
@@ -46,7 +46,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
 
-        let first = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let first = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         first.startNewMatch(
             configuration: GameConfiguration(),
             matchFormat: .bestOfThree,
@@ -58,7 +58,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         first.recordPoint(for: .teamA)
 
         // A fresh controller against the same store/defaults simulates a relaunch.
-        let resumed = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let resumed = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         XCTAssertNotNil(resumed.match)
         XCTAssertEqual(resumed.match?.currentGame.state.teamAScore, 2)
         XCTAssertEqual(resumed.teamAName, "The Smashers")
@@ -83,11 +83,11 @@ final class ActiveMatchControllerTests: XCTestCase {
         let suite = UUID().uuidString
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
-        let controller = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         controller.startNewMatch(configuration: GameConfiguration(), matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
         controller.recordPoint(for: .teamA)
 
-        let reread = try MatchRepository(modelContext: container.mainContext)
+        let reread = try MatchRepository(modelContext: ModelContext(container))
             .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: controller.demoPointCap)
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 1)
     }
@@ -96,12 +96,12 @@ final class ActiveMatchControllerTests: XCTestCase {
         let suite = UUID().uuidString
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
-        let controller = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         controller.startNewMatch(configuration: GameConfiguration(), matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
         controller.recordPoint(for: .teamA)
         controller.undo()
 
-        let reread = try MatchRepository(modelContext: container.mainContext)
+        let reread = try MatchRepository(modelContext: ModelContext(container))
             .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: controller.demoPointCap)
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 0)
     }
@@ -110,11 +110,11 @@ final class ActiveMatchControllerTests: XCTestCase {
         let suite = UUID().uuidString
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
-        let controller = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         controller.startNewMatch(configuration: GameConfiguration(), matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
         controller.correctScore(team: .teamA, to: 7)
 
-        let reread = try MatchRepository(modelContext: container.mainContext)
+        let reread = try MatchRepository(modelContext: ModelContext(container))
             .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: controller.demoPointCap)
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 7)
     }
@@ -135,7 +135,8 @@ final class ActiveMatchControllerTests: XCTestCase {
         let suite = UUID().uuidString
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
-        let controller = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        controller.demoPointCap = 11
         let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
         controller.startNewMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
         for _ in 1...11 { controller.recordPoint(for: .teamA) }
@@ -144,11 +145,11 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertEqual(record.winningTeam, .teamA)
         XCTAssertNil(controller.match)
 
-        let history = try MatchRepository(modelContext: container.mainContext).fetchMatchHistory()
+        let history = try MatchRepository(modelContext: ModelContext(container)).fetchMatchHistory()
         XCTAssertEqual(history.count, 1)
 
         // A fresh controller must not think there's a match to resume.
-        let afterRelaunch = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let afterRelaunch = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         XCTAssertNil(afterRelaunch.match)
     }
 
@@ -180,10 +181,10 @@ final class ActiveMatchControllerTests: XCTestCase {
         let suite = UUID().uuidString
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
-        let first = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let first = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         first.unlockPro()
 
-        let second = ActiveMatchController(modelContext: container.mainContext, userDefaults: defaults)
+        let second = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         XCTAssertTrue(second.proUnlocked)
     }
 }
