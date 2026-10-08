@@ -34,7 +34,19 @@ struct ScoringView: View {
         .sheet(isPresented: Binding(
             get: { correctingTeam != nil },
             set: { isPresented in if !isPresented { correctingTeam = nil } }
-        )) {
+        ), onDismiss: {
+            // PickleballGame.correctScore doesn't respect the demo-cap paywall
+            // the way recordPoint does (that's existing PickleballKit behavior,
+            // out of scope for this plan to change) — a correction can push a
+            // score to/above the cap. Checking here, after the correction sheet
+            // has fully dismissed, is a second, race-free trigger alongside the
+            // onChange below: presenting the paywall sheet in the same
+            // transaction as dismissing the correction sheet is a known SwiftUI
+            // footgun that can silently fail to present.
+            if activeMatchController.match?.isPaywalled == true {
+                isShowingPaywall = true
+            }
+        }) {
             if let match = activeMatchController.match, let team = correctingTeam {
                 ScoreCorrectionSheet(
                     teamDisplayName: team == .teamA ? activeMatchController.teamAName : activeMatchController.teamBName,
@@ -47,6 +59,15 @@ struct ScoringView: View {
         }
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
+        }
+        .onChange(of: activeMatchController.match.map(ObjectIdentifier.init)) { _, _ in
+            // A new match (including a fresh one right after finishing the
+            // previous one) must re-arm the side-switch alert — without this,
+            // acknowledging the side switch in one match can suppress the
+            // alert for every subsequent match's first side switch, since
+            // completedGames.count restarts at 0 each time and would otherwise
+            // collide with a previously-acknowledged index.
+            sideSwitchAcknowledgedForGameIndex = -1
         }
         .onChange(of: activeMatchController.match?.currentGame.state.hasSideSwitched) { _, hasSideSwitched in
             guard let match = activeMatchController.match else { return }
