@@ -42,8 +42,10 @@ struct OnboardingView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if page == pages.count - 1 {
                         Button("Done") { dismiss() }
+                            .accessibilityIdentifier("Done")
                     } else {
                         Button("Skip") { dismiss() }
+                            .accessibilityIdentifier("Skip")
                     }
                 }
             }

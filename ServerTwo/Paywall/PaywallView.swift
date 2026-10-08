@@ -28,6 +28,7 @@ struct PaywallView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .accessibilityIdentifier("Unlock Pro — $1.99")
 
                 Button("Restore Purchases") {
                     // Stub: Phase 4 wires this to a real StoreKit restore call.
@@ -41,6 +42,7 @@ struct PaywallView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Not Now") { dismiss() }
+                        .accessibilityIdentifier("Not Now")
                 }
             }
         }

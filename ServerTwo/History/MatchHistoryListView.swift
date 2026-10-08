@@ -39,6 +39,7 @@ struct MatchHistoryListView: View {
         return VStack(alignment: .leading) {
             Text("\(teamAName) vs \(teamBName)")
                 .font(.headline)
+                .accessibilityIdentifier("\(teamAName) vs \(teamBName)")
             Text(match.completedAt, style: .date)
                 .font(.caption)
                 .foregroundStyle(.secondary)

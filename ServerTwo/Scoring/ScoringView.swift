@@ -91,6 +91,7 @@ struct ScoringView: View {
             Button("Confirm Finish") {
                 try? activeMatchController.finishMatch()
             }
+            .accessibilityIdentifier("Confirm Finish")
             Button("Cancel", role: .cancel) { }
         } message: {
             if let match = activeMatchController.match {
@@ -126,6 +127,7 @@ struct ScoringView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .padding(.horizontal)
+                .accessibilityIdentifier("Demo Limit Reached — Unlock to Continue")
             }
 
             if match.isMatchOver {
@@ -135,6 +137,7 @@ struct ScoringView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .padding(.horizontal)
+                .accessibilityIdentifier("Finish Match")
             }
         }
         .padding(.vertical)

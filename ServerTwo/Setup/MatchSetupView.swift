@@ -80,6 +80,11 @@ struct MatchSetupView: View {
                 Button(coinFlipResult == nil ? "Flip Coin" : "Flip Again") {
                     coinFlipResult = CoinFlip.flip()
                 }
+                // Identifier stays "Flip Coin" regardless of the label toggling to
+                // "Flip Again" — plain SwiftUI Button(String) doesn't set its
+                // accessibility identifier to match its label by default, so
+                // XCUITest lookups need an explicit, stable identifier.
+                .accessibilityIdentifier("Flip Coin")
                 if let coinFlipResult {
                     Text("\(teamDisplayName(for: coinFlipResult)) serves first")
                         .foregroundStyle(.secondary)
@@ -92,6 +97,7 @@ struct MatchSetupView: View {
                 }
                 .disabled(coinFlipResult == nil)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityIdentifier("Start Match")
             }
         }
         .navigationTitle("New Match")
