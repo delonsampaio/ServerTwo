@@ -8,6 +8,7 @@ struct ScoringView: View {
     @State private var correctingTeam: Team?
     @State private var showingSideSwitchAlert = false
     @State private var sideSwitchAcknowledgedForGameIndex = -1
+    @State private var sideSwitchAcknowledgedViaCorrectionForGameIndex = -1
     @State private var showingGameOverAlert = false
     @State private var gameOverAcknowledgedForGameIndex = -1
     @State private var gameOverMessage = ""
@@ -56,11 +57,17 @@ struct ScoringView: View {
             // `dismiss()`. The `.onChange(of: ...hasSideSwitched)` handler below
             // is kept as-is for the `recordPoint` path (which has no such race);
             // this is an ADDITIONAL, race-free trigger for the correction-sheet
-            // path only, and the shared `sideSwitchAcknowledgedForGameIndex`
-            // guard keeps the two from double-presenting.
+            // path only. It uses its OWN tracking variable, not the onChange
+            // handler's — `onChange` fires as part of the same transaction that
+            // triggers this race (before `onDismiss` runs), so if it shared the
+            // guard, it would already have consumed it by the time this check
+            // runs, defeating the fallback in exactly the scenario it exists
+            // for. A separate variable means this check still fires even when
+            // the onChange handler's own alert silently failed to present.
             if let match = activeMatchController.match {
                 let gameIndex = match.completedGames.count
-                if match.currentGame.state.hasSideSwitched, sideSwitchAcknowledgedForGameIndex != gameIndex {
+                if match.currentGame.state.hasSideSwitched, sideSwitchAcknowledgedViaCorrectionForGameIndex != gameIndex {
+                    sideSwitchAcknowledgedViaCorrectionForGameIndex = gameIndex
                     sideSwitchAcknowledgedForGameIndex = gameIndex
                     showingSideSwitchAlert = true
                 }
@@ -91,6 +98,7 @@ struct ScoringView: View {
             // completedGames.count restarts at 0 each time and would otherwise
             // collide with a previously-acknowledged index.
             sideSwitchAcknowledgedForGameIndex = -1
+            sideSwitchAcknowledgedViaCorrectionForGameIndex = -1
             gameOverAcknowledgedForGameIndex = -1
         }
         .onChange(of: activeMatchController.match?.completedGames.count) { _, newCount in
