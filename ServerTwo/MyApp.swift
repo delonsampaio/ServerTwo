@@ -49,7 +49,13 @@ struct MyApp: App {
     /// these specific launch arguments are present — never active in a
     /// normal launch, including TestFlight/App Store builds, since no real
     /// launch path passes them.
+    ///
+    /// The body is additionally wrapped in `#if DEBUG` so this monetization/
+    /// state bypass compiles out of Release builds entirely rather than
+    /// merely being unreachable in them. XCUITests run against a Debug
+    /// build, so `GoldenPathUITests`/`PaywallTriggerUITests` are unaffected.
     private func applyTestOverridesIfNeeded() {
+        #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         guard arguments.contains("-UITest-ResetState") else { return }
         activeMatchController.proUnlocked = false
@@ -59,5 +65,6 @@ struct MyApp: App {
            let cap = Int(arguments[capIndex + 1]) {
             activeMatchController.demoPointCap = cap
         }
+        #endif
     }
 }

@@ -56,25 +56,4 @@ final class GoldenPathUITests: XCTestCase {
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(app.staticTexts["Team A vs Team B"].waitForExistence(timeout: 2))
     }
-
-    private func dismissOnboardingIfPresented(_ app: XCUIApplication) {
-        let doneButton = app.buttons["Done"]
-        let skipButton = app.buttons["Skip"]
-        if doneButton.waitForExistence(timeout: 2) {
-            doneButton.tap()
-        } else if skipButton.waitForExistence(timeout: 1) {
-            skipButton.tap()
-        }
-    }
-
-    /// MatchSetupView's Form lazily renders off-screen rows, so an element
-    /// further down (e.g. "Flip Coin", "Start Match") may not exist in the
-    /// accessibility tree until scrolled into view.
-    private func scrollUntilVisible(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 6) {
-        var attempts = 0
-        while !element.exists && attempts < maxSwipes {
-            app.swipeUp()
-            attempts += 1
-        }
-    }
 }

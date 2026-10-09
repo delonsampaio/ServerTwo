@@ -17,20 +17,38 @@ struct MatchRecapCardView: View {
     private var teamBGamesWon: Int { orderedGames.filter { $0.winningTeam == .teamB }.count }
     private var winnerName: String { match.winningTeam == .teamA ? teamAName : teamBName }
 
+    /// For a single-game (best-of-1) match, games-won is always "1 – 0", which
+    /// hides the actual result — show that game's point score instead. Multi-
+    /// game matches keep games-won, which is their real match score.
+    private var displayScoreA: Int {
+        orderedGames.count == 1 ? (orderedGames.first?.teamAFinalScore ?? 0) : teamAGamesWon
+    }
+    private var displayScoreB: Int {
+        orderedGames.count == 1 ? (orderedGames.first?.teamBFinalScore ?? 0) : teamBGamesWon
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Text("🏆 \(winnerName) Wins")
                 .font(.title2.bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
 
             HStack(spacing: 32) {
                 VStack {
-                    Text(teamAName).font(.headline)
-                    Text("\(teamAGamesWon)").font(.system(size: 48, weight: .bold, design: .rounded))
+                    Text(teamAName)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text("\(displayScoreA)").font(.system(size: 48, weight: .bold, design: .rounded))
                 }
                 Text("-").font(.largeTitle)
                 VStack {
-                    Text(teamBName).font(.headline)
-                    Text("\(teamBGamesWon)").font(.system(size: 48, weight: .bold, design: .rounded))
+                    Text(teamBName)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text("\(displayScoreB)").font(.system(size: 48, weight: .bold, design: .rounded))
                 }
             }
 

@@ -22,8 +22,13 @@ struct MatchRecapShareButton: View {
 
     @MainActor
     private func renderCardImage() -> Image {
-        let renderer = ImageRenderer(content: MatchRecapCardView(match: match))
-        renderer.scale = UIScreen.main.scale
+        // Force light mode: the rendered card is shared outside the app, so its
+        // appearance must be deterministic rather than inheriting whatever
+        // theme the app happens to be in. `UIScreen.main` is soft-deprecated
+        // and there's no View context here to read an environment value from,
+        // so pin the scale at 3 instead.
+        let renderer = ImageRenderer(content: MatchRecapCardView(match: match).environment(\.colorScheme, .light))
+        renderer.scale = 3
         guard let uiImage = renderer.uiImage else {
             return Image(systemName: "photo")
         }

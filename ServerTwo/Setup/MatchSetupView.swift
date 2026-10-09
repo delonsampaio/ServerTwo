@@ -107,12 +107,18 @@ struct MatchSetupView: View {
         team == .teamA ? combinedName(teamAPlayer1, teamAPlayer2) : combinedName(teamBPlayer1, teamBPlayer2)
     }
 
+    /// Both names are trimmed, and EITHER being blank falls back to the other
+    /// alone — the previous version only checked `player2`, so a doubles team
+    /// with a blank Player 1 produced a leading " & ".
     private func combinedName(_ player1: String, _ player2: String) -> String {
-        let trimmed2 = player2.trimmingCharacters(in: .whitespacesAndNewlines)
-        if playMode == .doubles, !trimmed2.isEmpty {
-            return "\(player1) & \(player2)"
+        let p1 = player1.trimmingCharacters(in: .whitespacesAndNewlines)
+        let p2 = player2.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard playMode == .doubles else { return p1 }
+        switch (p1.isEmpty, p2.isEmpty) {
+        case (false, false): return "\(p1) & \(p2)"
+        case (true, false): return p2
+        default: return p1
         }
-        return player1
     }
 
     private func startMatch() {

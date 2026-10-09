@@ -5,6 +5,7 @@ import PickleballKit
 struct MatchHistoryListView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var matches: [MatchRecord] = []
+    @State private var loadError: Error?
 
     var body: some View {
         List {
@@ -14,7 +15,15 @@ struct MatchHistoryListView: View {
                 }
             }
             Section("Matches") {
-                if matches.isEmpty {
+                if matches.isEmpty, loadError != nil {
+                    // A swallowed fetch failure used to masquerade as a genuine
+                    // empty state, which reads as "your history was deleted."
+                    ContentUnavailableView(
+                        "Couldn't Load History",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text("Pull down to try again.")
+                    )
+                } else if matches.isEmpty {
                     ContentUnavailableView("No Matches Yet", systemImage: "sportscourt")
                 } else {
                     ForEach(matches) { match in
@@ -36,10 +45,16 @@ struct MatchHistoryListView: View {
     private func matchRow(_ match: MatchRecord) -> some View {
         let teamAName = (match.teamSides ?? []).first { $0.team == .teamA }?.displayName ?? "Team A"
         let teamBName = (match.teamSides ?? []).first { $0.team == .teamB }?.displayName ?? "Team B"
+        let games = (match.games ?? []).sorted { $0.gameNumber < $1.gameNumber }
+        let teamAGames = games.filter { $0.winningTeam == .teamA }.count
+        let teamBGames = games.filter { $0.winningTeam == .teamB }.count
         return VStack(alignment: .leading) {
             Text("\(teamAName) vs \(teamBName)")
                 .font(.headline)
                 .accessibilityIdentifier("\(teamAName) vs \(teamBName)")
+            Text("\(teamAGames) - \(teamBGames)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             Text(match.completedAt, style: .date)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -48,7 +63,13 @@ struct MatchHistoryListView: View {
 
     private func loadMatches() {
         let repository = MatchRepository(modelContext: modelContext)
-        matches = (try? repository.fetchMatchHistory()) ?? []
+        do {
+            matches = try repository.fetchMatchHistory()
+            loadError = nil
+        } catch {
+            matches = []
+            loadError = error
+        }
     }
 }
 
