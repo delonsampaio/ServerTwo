@@ -15,7 +15,7 @@ struct PaywallView: View {
                 Text("You've Reached the Free Demo Limit")
                     .font(.title2.bold())
                     .multilineTextAlignment(.center)
-                Text("The free version caps every game at \(activeMatchController.demoPointCap) points. Unlock Server Two Pro for a one-time $1.99 to play full games with no limit, forever.")
+                Text("The free version lets you play \(activeMatchController.demoMatchLimit) full match\(activeMatchController.demoMatchLimit == 1 ? "" : "es"), start to finish. Unlock Server Two Pro for a one-time $1.99 to play unlimited matches, forever.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
 

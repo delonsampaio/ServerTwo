@@ -15,6 +15,7 @@ struct MatchSetupView: View {
     @State private var teamBPlayer1 = ""
     @State private var teamBPlayer2 = ""
     @State private var coinFlipResult: Team?
+    @State private var isShowingPaywall = false
 
     private enum ScoringFormatKind: String, CaseIterable, Identifiable {
         case sideOut = "Side-Out"
@@ -93,7 +94,11 @@ struct MatchSetupView: View {
 
             Section {
                 Button("Start Match") {
-                    startMatch()
+                    if activeMatchController.canStartNewMatch {
+                        startMatch()
+                    } else {
+                        isShowingPaywall = true
+                    }
                 }
                 .disabled(coinFlipResult == nil)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -101,6 +106,9 @@ struct MatchSetupView: View {
             }
         }
         .navigationTitle("New Match")
+        .sheet(isPresented: $isShowingPaywall) {
+            PaywallView()
+        }
     }
 
     private func teamDisplayName(for team: Team) -> String {

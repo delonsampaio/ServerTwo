@@ -43,12 +43,13 @@ struct MyApp: App {
     }
 
     /// Test-only seam: lets XCUITests force a clean slate, a locked
-    /// entitlement, and a low demo cap, so a test doesn't depend on
-    /// whatever a previous run left in `UserDefaults`/the store, and
-    /// doesn't need 11 real taps to reach the cap. Only takes effect when
-    /// these specific launch arguments are present — never active in a
-    /// normal launch, including TestFlight/App Store builds, since no real
-    /// launch path passes them.
+    /// entitlement, and a low demo match limit, so a test doesn't depend on
+    /// whatever a previous run left in `UserDefaults`/the store — including
+    /// completed match history, which (unlike a mid-game point cap) now
+    /// directly determines whether `canStartNewMatch` is true. Only takes
+    /// effect when these specific launch arguments are present — never
+    /// active in a normal launch, including TestFlight/App Store builds,
+    /// since no real launch path passes them.
     ///
     /// The body is additionally wrapped in `#if DEBUG` so this monetization/
     /// state bypass compiles out of Release builds entirely rather than
@@ -60,10 +61,11 @@ struct MyApp: App {
         guard arguments.contains("-UITest-ResetState") else { return }
         activeMatchController.proUnlocked = false
         activeMatchController.clearAnyInProgressMatchForTesting()
-        if let capIndex = arguments.firstIndex(of: "-UITest-DemoPointCap"),
-           capIndex + 1 < arguments.count,
-           let cap = Int(arguments[capIndex + 1]) {
-            activeMatchController.demoPointCap = cap
+        activeMatchController.clearAllMatchHistoryForTesting()
+        if let limitIndex = arguments.firstIndex(of: "-UITest-DemoMatchLimit"),
+           limitIndex + 1 < arguments.count,
+           let limit = Int(arguments[limitIndex + 1]) {
+            activeMatchController.demoMatchLimit = limit
         }
         #endif
     }

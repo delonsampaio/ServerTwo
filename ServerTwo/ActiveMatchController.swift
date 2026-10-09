@@ -32,11 +32,22 @@ final class ActiveMatchController {
         didSet { userDefaults.set(proUnlocked, forKey: Keys.proUnlocked) }
     }
 
-    /// Not `let`: Phase 3's paywall is a stub pending Phase 4's real StoreKit
-    /// wiring, and XCUITests override this to a small number so a test
-    /// doesn't need 11 real taps to reach the cap (see `MyApp`'s
-    /// `applyTestOverridesIfNeeded`).
-    var demoPointCap: Int = 5
+    /// How many full matches a free user may complete before `canStartNewMatch`
+    /// turns false. Not `let`: XCUITests override this (see `MyApp`'s
+    /// `applyTestOverridesIfNeeded`). The demo gate lives entirely here, at
+    /// match-start — `PickleballMatch` is always given a `nil` point cap
+    /// (below), so a free user's match is never interrupted mid-game; they
+    /// play it all the way to a real finish, see it in History, and only
+    /// hit the paywall when trying to start another one.
+    var demoMatchLimit: Int = 1
+
+    /// True if the user may start a new match: either they're unlocked, or
+    /// they haven't yet used up `demoMatchLimit` completed matches.
+    var canStartNewMatch: Bool {
+        guard !proUnlocked else { return true }
+        let completedCount = (try? repository.fetchMatchHistory().count) ?? 0
+        return completedCount < demoMatchLimit
+    }
 
     init(modelContext: ModelContext, userDefaults: UserDefaults = .standard) {
         self.repository = MatchRepository(modelContext: modelContext)
@@ -47,7 +58,7 @@ final class ActiveMatchController {
 
     func resumeIfNeeded() {
         guard match == nil else { return }
-        guard let resumed = try? repository.loadInProgressMatch(proUnlocked: proUnlocked, demoPointCap: demoPointCap) else { return }
+        guard let resumed = try? repository.loadInProgressMatch(proUnlocked: proUnlocked, demoPointCap: nil) else { return }
         match = resumed.match
         startedAt = resumed.startedAt
         teamAName = userDefaults.string(forKey: Keys.activeTeamAName) ?? "Team A"
@@ -71,7 +82,7 @@ final class ActiveMatchController {
             matchFormat: matchFormat,
             firstServingTeam: firstServingTeam,
             proUnlocked: proUnlocked,
-            demoPointCap: demoPointCap
+            demoPointCap: nil
         )
         startedAt = Date()
         persistSnapshot()
@@ -131,6 +142,13 @@ final class ActiveMatchController {
         match = nil
         startedAt = nil
         try? repository.clearInProgressSnapshot()
+    }
+
+    /// Test-only: wipes completed match history, so `canStartNewMatch`'s
+    /// count against `demoMatchLimit` starts from zero on every UI test run
+    /// regardless of what previous runs saved to the real on-device store.
+    func clearAllMatchHistoryForTesting() {
+        try? repository.deleteAllMatchHistory()
     }
 
     private func persistSnapshot() {

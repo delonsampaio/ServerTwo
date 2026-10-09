@@ -148,4 +148,14 @@ public final class MatchRepository {
         )
         return try modelContext.fetch(descriptor)
     }
+
+    /// Deletes every completed match. Cascades to each match's `TeamSide`,
+    /// `GameRecord`, and `PointEvent` rows via their `.cascade` delete rules.
+    public func deleteAllMatchHistory() throws {
+        let existing = try modelContext.fetch(FetchDescriptor<MatchRecord>())
+        for record in existing {
+            modelContext.delete(record)
+        }
+        try modelContext.save()
+    }
 }

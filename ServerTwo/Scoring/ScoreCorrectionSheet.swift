@@ -4,12 +4,9 @@ import PickleballKit
 struct ScoreCorrectionSheet: View {
     let teamDisplayName: String
     let currentScore: Int
-    /// Upper bound for the stepper. Defaults to `99` so call sites that have
-    /// no cap concern are unaffected; `ScoringView` passes the demo cap for
-    /// locked users, because `PickleballGame.correctScore` doesn't enforce
-    /// the demo-cap paywall the way `recordPoint` does (existing
-    /// `PickleballKit` behavior) — without this bound a free user could
-    /// correct straight past the cap to a winning score.
+    /// Upper bound for the stepper. Defaults to `99`; no call site currently
+    /// needs a tighter cap, since the demo gate now lives at match-start
+    /// (`ActiveMatchController.canStartNewMatch`), not on in-game scores.
     let maxScore: Int
     let onCommit: (Int) -> Void
 

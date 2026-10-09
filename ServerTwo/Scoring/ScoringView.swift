@@ -13,7 +13,6 @@ struct ScoringView: View {
     @State private var gameOverAcknowledgedForGameIndex = -1
     @State private var gameOverMessage = ""
     @State private var showingFinishConfirmation = false
-    @State private var isShowingPaywall = false
     @State private var finishErrorMessage: String?
 
     var body: some View {
@@ -41,16 +40,7 @@ struct ScoringView: View {
             get: { correctingTeam != nil },
             set: { isPresented in if !isPresented { correctingTeam = nil } }
         ), onDismiss: {
-            // PickleballGame.correctScore doesn't respect the demo-cap paywall
-            // the way recordPoint does (that's existing PickleballKit behavior,
-            // out of scope for this plan to change) — a correction can push a
-            // score to/above the cap. Checking here, after the correction sheet
-            // has fully dismissed, is a second, race-free trigger alongside the
-            // onChange below: presenting the paywall sheet in the same
-            // transaction as dismissing the correction sheet is a known SwiftUI
-            // footgun that can silently fail to present.
-            //
-            // The side-switch check has the identical race:
+            // The side-switch check has a same-transaction presentation race:
             // `PickleballGame.correctScore` also calls `checkSideSwitch()`, so a
             // correction that crosses the threshold flips `hasSideSwitched`
             // inside the sheet's `onCommit`, immediately before its own
@@ -72,23 +62,16 @@ struct ScoringView: View {
                     showingSideSwitchAlert = true
                 }
             }
-            if activeMatchController.match?.isPaywalled == true {
-                isShowingPaywall = true
-            }
         }) {
             if let match = activeMatchController.match, let team = correctingTeam {
                 ScoreCorrectionSheet(
                     teamDisplayName: team == .teamA ? activeMatchController.teamAName : activeMatchController.teamBName,
                     currentScore: match.currentGame.state.score(for: team),
-                    maxScore: activeMatchController.proUnlocked ? 99 : max(0, activeMatchController.demoPointCap - 1),
                     onCommit: { newScore in
                         activeMatchController.correctScore(team: team, to: newScore)
                     }
                 )
             }
-        }
-        .sheet(isPresented: $isShowingPaywall) {
-            PaywallView()
         }
         .onChange(of: activeMatchController.match.map(ObjectIdentifier.init)) { _, _ in
             // A new match (including a fresh one right after finishing the
@@ -129,11 +112,6 @@ struct ScoringView: View {
             if hasSideSwitched == true, sideSwitchAcknowledgedForGameIndex != gameIndex {
                 sideSwitchAcknowledgedForGameIndex = gameIndex
                 showingSideSwitchAlert = true
-            }
-        }
-        .onChange(of: activeMatchController.match?.isPaywalled) { _, isPaywalled in
-            if isPaywalled == true {
-                isShowingPaywall = true
             }
         }
         .alert("Side Switch", isPresented: $showingSideSwitchAlert) {
@@ -202,15 +180,6 @@ struct ScoringView: View {
                 activeMatchController.requestTimeout(for: team)
             }
             .padding(.horizontal)
-
-            if match.isPaywalled {
-                Button("Demo Limit Reached — Unlock to Continue") {
-                    isShowingPaywall = true
-                }
-                .buttonStyle(.borderedProminent)
-                .padding(.horizontal)
-                .accessibilityIdentifier("Demo Limit Reached — Unlock to Continue")
-            }
 
             if match.isMatchOver {
                 Button("Finish Match") {

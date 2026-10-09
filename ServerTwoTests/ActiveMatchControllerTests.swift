@@ -32,7 +32,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         // The test name promises a persisted snapshot — assert it, don't just
         // assert the in-memory state.
         let reread = try MatchRepository(modelContext: ModelContext(container))
-            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: controller.demoPointCap)
+            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: nil)
         XCTAssertNotNil(reread, "startNewMatch should persist an in-progress snapshot immediately")
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 0)
         XCTAssertEqual(reread?.match.currentGame.state.teamBScore, 0)
@@ -99,7 +99,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         controller.recordPoint(for: .teamA)
 
         let reread = try MatchRepository(modelContext: ModelContext(container))
-            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: controller.demoPointCap)
+            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: nil)
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 1)
     }
 
@@ -113,7 +113,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         controller.undo()
 
         let reread = try MatchRepository(modelContext: ModelContext(container))
-            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: controller.demoPointCap)
+            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: nil)
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 0)
     }
 
@@ -126,7 +126,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         controller.correctScore(team: .teamA, to: 7)
 
         let reread = try MatchRepository(modelContext: ModelContext(container))
-            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: controller.demoPointCap)
+            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: nil)
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 7)
     }
 
@@ -157,7 +157,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertEqual(withTimeouts.match?.currentGame.state.teamATimeoutsRemaining, 1)
 
         let reread = try MatchRepository(modelContext: ModelContext(container))
-            .loadInProgressMatch(proUnlocked: withTimeouts.proUnlocked, demoPointCap: withTimeouts.demoPointCap)
+            .loadInProgressMatch(proUnlocked: withTimeouts.proUnlocked, demoPointCap: nil)
         XCTAssertEqual(
             reread?.match.currentGame.state.teamATimeoutsRemaining,
             1,
@@ -170,7 +170,6 @@ final class ActiveMatchControllerTests: XCTestCase {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        controller.demoPointCap = 11
         let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
         controller.startNewMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
         for _ in 1...11 { controller.recordPoint(for: .teamA) }
@@ -198,39 +197,41 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertNotNil(controller.match)
     }
 
-    func testUnlockProSetsFlagUnlocksLiveMatchAndPersistsSnapshot() throws {
+    func testCanStartNewMatchIsFalseOnlyAfterTheDemoMatchLimitIsUsedUp() throws {
+        let (controller, _) = try makeController()
+        controller.demoMatchLimit = 1
+        XCTAssertTrue(controller.canStartNewMatch, "A free user with no match history yet should be able to start one")
+
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+        controller.startNewMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        _ = try controller.finishMatch()
+
+        XCTAssertFalse(controller.canStartNewMatch, "The free demo limit should be used up after one completed match")
+    }
+
+    func testUnlockProLiftsTheDemoMatchLimitAndPersistsAcrossRelaunch() throws {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        controller.demoPointCap = 2
-        controller.startNewMatch(configuration: GameConfiguration(), matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
-        controller.recordPoint(for: .teamA)
-        controller.recordPoint(for: .teamA)
-        XCTAssertTrue(controller.match?.isPaywalled ?? false)
+        controller.demoMatchLimit = 1
+
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+        controller.startNewMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        _ = try controller.finishMatch()
+        XCTAssertFalse(controller.canStartNewMatch)
 
         controller.unlockPro()
         XCTAssertTrue(controller.proUnlocked)
-        XCTAssertFalse(controller.match?.isPaywalled ?? true)
+        XCTAssertTrue(controller.canStartNewMatch, "Unlocking Pro should lift the demo match limit immediately")
 
-        // unlockPro() persists a snapshot — confirm it's there and carries the
-        // at-cap score. Note the entitlement itself is NOT in the snapshot:
-        // loadInProgressMatch takes proUnlocked as a parameter (the controller
-        // sources it from UserDefaults), so what this asserts is that the
-        // snapshot survives and rehydrates unpaywalled under the now-unlocked
-        // entitlement — which is exactly the resume-after-purchase path.
-        let reread = try MatchRepository(modelContext: ModelContext(container))
-            .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: controller.demoPointCap)
-        XCTAssertNotNil(reread, "unlockPro should persist an in-progress snapshot")
-        XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 2)
-        XCTAssertEqual(reread?.match.isPaywalled, false)
-
-        // And a fresh controller against the same store/defaults (a relaunch)
-        // resumes that match already unlocked, rather than re-paywalling a
-        // user who has paid.
+        // A fresh controller against the same store/defaults (a relaunch)
+        // keeps both the entitlement and the lifted limit, rather than
+        // re-paywalling a user who has already paid.
         let afterRelaunch = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         XCTAssertTrue(afterRelaunch.proUnlocked)
-        XCTAssertEqual(afterRelaunch.match?.currentGame.state.teamAScore, 2)
-        XCTAssertFalse(afterRelaunch.match?.isPaywalled ?? true)
+        XCTAssertTrue(afterRelaunch.canStartNewMatch)
     }
 
     func testProUnlockedPersistsAcrossControllerInstances() throws {

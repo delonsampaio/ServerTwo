@@ -3,18 +3,14 @@ import XCTest
 final class GoldenPathUITests: XCTestCase {
     func testStartMatchScoreToWinAndAppearInHistory() throws {
         let app = XCUIApplication()
-        // This test plays a full, uncapped game to 11 points — it's testing
-        // the core gameplay loop, not paywall behavior (that's
-        // PaywallTriggerUITests' job), so the demo cap must be raised
-        // STRICTLY ABOVE 11, not merely to 11: isPaywalled checks score >=
-        // cap, so a cap of exactly 11 fires at the same instant the match's
-        // win score of 11 is reached, racing the paywall sheet against the
-        // finish-confirmation dialog for presentation. -UITest-ResetState
-        // alone only resets proUnlocked to false; demoPointCap stays at its
-        // production default of 5 unless -UITest-DemoPointCap is also
-        // passed, which would otherwise make this test deterministically
-        // hit the paywall at 5-0 every time regardless.
-        app.launchArguments = ["-UITest-ResetState", "-UITest-DemoPointCap", "15"]
+        // This test plays one full, uncapped game to 11 points — it's
+        // testing the core gameplay loop, not paywall behavior (that's
+        // PaywallTriggerUITests' job). The demo gate now lives at
+        // match-start (ActiveMatchController.canStartNewMatch), not on
+        // in-game scores, so no cap-related launch argument is needed here;
+        // -UITest-ResetState alone clears match history, so this test's one
+        // match is always within the default demoMatchLimit of 1.
+        app.launchArguments = ["-UITest-ResetState"]
         app.launch()
 
         dismissOnboardingIfPresented(app)
