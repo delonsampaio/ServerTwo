@@ -24,6 +24,8 @@ final class ActiveMatchController {
     private(set) var teamAName: String = "Team A"
     private(set) var teamBName: String = "Team B"
     private var startedAt: Date?
+    private var teamAPlayers: [SavedPlayer] = []
+    private var teamBPlayers: [SavedPlayer] = []
 
     private let repository: MatchRepository
     private let userDefaults: UserDefaults
@@ -70,10 +72,14 @@ final class ActiveMatchController {
         matchFormat: MatchFormat,
         firstServingTeam: Team,
         teamAName: String,
-        teamBName: String
+        teamBName: String,
+        teamAPlayers: [SavedPlayer] = [],
+        teamBPlayers: [SavedPlayer] = []
     ) {
         self.teamAName = teamAName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Team A" : teamAName
         self.teamBName = teamBName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Team B" : teamBName
+        self.teamAPlayers = teamAPlayers
+        self.teamBPlayers = teamBPlayers
         userDefaults.set(self.teamAName, forKey: Keys.activeTeamAName)
         userDefaults.set(self.teamBName, forKey: Keys.activeTeamBName)
 
@@ -126,10 +132,14 @@ final class ActiveMatchController {
             match,
             teamAName: teamAName,
             teamBName: teamBName,
-            startedAt: startedAt
+            startedAt: startedAt,
+            teamAPlayers: teamAPlayers,
+            teamBPlayers: teamBPlayers
         )
         self.match = nil
         self.startedAt = nil
+        self.teamAPlayers = []
+        self.teamBPlayers = []
         userDefaults.removeObject(forKey: Keys.activeTeamAName)
         userDefaults.removeObject(forKey: Keys.activeTeamBName)
         return record

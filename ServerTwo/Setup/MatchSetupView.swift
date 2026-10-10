@@ -1,8 +1,17 @@
 import SwiftUI
+import SwiftData
 import PickleballKit
 
 struct MatchSetupView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
+    @Environment(\.modelContext) private var modelContext
+    @State private var suggestions: [String: [SavedPlayer]] = [:] // keyed by the field's current text
+    // Bumped whenever a suggestion chip's player is deleted. Deleting a
+    // SavedPlayer via `repository.deleteSavedPlayer` mutates SwiftData
+    // directly and doesn't touch any @State the body reads, so without this,
+    // SwiftUI has no reason to re-run `suggestionChips` and the just-removed
+    // chip would keep showing (stale) until some unrelated state changed.
+    @State private var suggestionsVersion = 0
 
     @State private var playMode: PlayMode = .doubles
     @State private var scoringFormatKind: ScoringFormatKind = .sideOut
@@ -65,15 +74,23 @@ struct MatchSetupView: View {
 
             Section("Team A") {
                 TextField(playMode == .doubles ? "Player 1" : "Player Name", text: $teamAPlayer1)
+                    .accessibilityIdentifier("Team A Player Name")
+                suggestionChips(for: $teamAPlayer1, excluding: [])
                 if playMode == .doubles {
                     TextField("Player 2", text: $teamAPlayer2)
+                        .accessibilityIdentifier("Team A Player 2 Name")
+                    suggestionChips(for: $teamAPlayer2, excluding: [])
                 }
             }
 
             Section("Team B") {
                 TextField(playMode == .doubles ? "Player 1" : "Player Name", text: $teamBPlayer1)
+                    .accessibilityIdentifier("Team B Player Name")
+                suggestionChips(for: $teamBPlayer1, excluding: [])
                 if playMode == .doubles {
                     TextField("Player 2", text: $teamBPlayer2)
+                        .accessibilityIdentifier("Team B Player 2 Name")
+                    suggestionChips(for: $teamBPlayer2, excluding: [])
                 }
             }
 
@@ -138,12 +155,59 @@ struct MatchSetupView: View {
             winningScore: winningScore,
             winByTwo: winByTwo
         )
+        let repository = MatchRepository(modelContext: modelContext)
+        func upsertedPlayers(_ names: String...) -> [SavedPlayer] {
+            names.compactMap { try? repository.upsertSavedPlayer(name: $0) }.compactMap { $0 }
+        }
+        let teamAPlayers = playMode == .doubles
+            ? upsertedPlayers(teamAPlayer1, teamAPlayer2)
+            : upsertedPlayers(teamAPlayer1)
+        let teamBPlayers = playMode == .doubles
+            ? upsertedPlayers(teamBPlayer1, teamBPlayer2)
+            : upsertedPlayers(teamBPlayer1)
         activeMatchController.startNewMatch(
             configuration: configuration,
             matchFormat: matchFormat,
             firstServingTeam: firstServingTeam,
             teamAName: combinedName(teamAPlayer1, teamAPlayer2),
-            teamBName: combinedName(teamBPlayer1, teamBPlayer2)
+            teamBName: combinedName(teamBPlayer1, teamBPlayer2),
+            teamAPlayers: teamAPlayers,
+            teamBPlayers: teamBPlayers
         )
+    }
+
+    @ViewBuilder
+    private func suggestionChips(for field: Binding<String>, excluding: [String]) -> some View {
+        let query = field.wrappedValue
+        if !query.isEmpty {
+            let repository = MatchRepository(modelContext: modelContext)
+            let matches = (try? repository.suggestedPlayers(matching: query)) ?? []
+            if !matches.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(matches, id: \.id) { player in
+                            Button(player.name) {
+                                field.wrappedValue = player.name
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("PlayerSuggestion.\(player.name)")
+                            .swipeActions {
+                                Button("Remove", role: .destructive) {
+                                    try? repository.deleteSavedPlayer(player)
+                                    suggestionsVersion += 1
+                                }
+                            }
+                            .contextMenu {
+                                Button("Remove", role: .destructive) {
+                                    try? repository.deleteSavedPlayer(player)
+                                    suggestionsVersion += 1
+                                }
+                            }
+                        }
+                    }
+                }
+                .id(suggestionsVersion)
+            }
+        }
     }
 }
