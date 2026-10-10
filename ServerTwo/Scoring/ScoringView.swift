@@ -176,10 +176,17 @@ struct ScoringView: View {
                 scoreZone(for: .teamB, match: match)
             }
 
-            TimeoutControlsView(state: match.currentGame.state) { team in
-                activeMatchController.requestTimeout(for: team)
+            // Hidden once the match is decided — there's no more play left to
+            // pause, and showing them pushed the "Finish Match" button's
+            // position around every time a match ended. isMatchOver is
+            // computed live from the current score, so undoing the winning
+            // point un-finishes the match and these reappear automatically.
+            if !match.isMatchOver {
+                TimeoutControlsView(state: match.currentGame.state) { team in
+                    activeMatchController.requestTimeout(for: team)
+                }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
 
             if match.isMatchOver {
                 Button("Finish Match") {
