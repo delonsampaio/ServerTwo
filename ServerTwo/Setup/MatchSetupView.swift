@@ -160,6 +160,12 @@ struct MatchSetupView: View {
         Binding(
             get: { text.wrappedValue },
             set: { newValue in
+                // No-op guard: SwiftUI's TextField is not expected to echo
+                // a programmatic write (a chip tap sets the raw $teamXPlayerN
+                // binding directly, not this wrapper) back through its own
+                // binding, but if some future TextField/OS behavior ever did,
+                // this keeps that from silently clearing a just-set selectedID.
+                guard newValue != text.wrappedValue else { return }
                 text.wrappedValue = newValue
                 selectedID.wrappedValue = nil
             }

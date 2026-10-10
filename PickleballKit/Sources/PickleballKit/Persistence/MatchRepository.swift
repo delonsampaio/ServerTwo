@@ -178,7 +178,13 @@ public final class MatchRepository {
     /// whole-branch review, Critical #1/#2.
     public func fetchSavedPlayers(ids: [UUID]) throws -> [SavedPlayer] {
         guard !ids.isEmpty else { return [] }
-        let byID = Dictionary(uniqueKeysWithValues: try fetchAllSavedPlayers().map { ($0.id, $0) })
+        // `uniquingKeysWith:`, not `uniqueKeysWithValues:` — `id` carries no
+        // `@Attribute(.unique)` (this store is CloudKit-synced, where a
+        // uniqueness constraint can't be enforced across devices), so two
+        // rows sharing an id is exactly the kind of transient divergence
+        // this method exists to tolerate. `uniqueKeysWithValues:` would
+        // trap on that instead of degrading gracefully.
+        let byID = Dictionary(try fetchAllSavedPlayers().map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return ids.compactMap { byID[$0] }
     }
 
