@@ -106,4 +106,100 @@ final class SavedPlayersUITests: XCTestCase {
 
         XCTAssertFalse(app.buttons["PlayerSuggestion.Miek"].waitForExistence(timeout: 2), "Removed player should no longer appear as a suggestion")
     }
+
+    func testMarkingAPlayerAsMeInManagePlayersEnforcesExactlyOne() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITest-ResetState"]
+        app.launch()
+        dismissOnboardingIfPresented(app)
+
+        // Create two players via a match, then go manage them.
+        // NOTE: do NOT tap the "Singles" toggle here — this test needs two
+        // players (Team A + Team B), which requires staying in the default
+        // Doubles mode. Toggling to Singles removes the Team B field.
+        app.tabBars.buttons["Play"].tap()
+        let teamATextField = app.textFields.matching(identifier: "Team A Player Name").firstMatch
+        scrollUntilVisible(teamATextField, in: app)
+        teamATextField.tap()
+        teamATextField.typeText("Alice")
+        let teamBTextField = app.textFields.matching(identifier: "Team B Player Name").firstMatch
+        scrollUntilVisible(teamBTextField, in: app)
+        teamBTextField.tap()
+        teamBTextField.typeText("Bob")
+        let flipCoinButton = app.buttons["Flip Coin"]
+        scrollUntilVisible(flipCoinButton, in: app)
+        flipCoinButton.tap()
+        let startMatchButton = app.buttons["Start Match"]
+        scrollUntilVisible(startMatchButton, in: app)
+        startMatchButton.tap()
+        let teamAZone = app.buttons["scoreZone.teamA"]
+        XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
+        let finishButton = app.buttons["Finish Match"]
+        for _ in 0..<20 {
+            if finishButton.exists { break }
+            teamAZone.tap()
+        }
+        finishButton.tap()
+        app.buttons["Confirm Finish"].firstMatch.tap()
+
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["Manage Players"].tap()
+
+        let aliceMeButton = app.buttons["SetMe.Alice"]
+        XCTAssertTrue(aliceMeButton.waitForExistence(timeout: 2))
+        aliceMeButton.tap()
+        XCTAssertTrue(app.staticTexts["Me.Alice"].waitForExistence(timeout: 2))
+
+        let bobMeButton = app.buttons["SetMe.Bob"]
+        bobMeButton.tap()
+        XCTAssertTrue(app.staticTexts["Me.Bob"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.staticTexts["Me.Alice"].exists, "Only one player should be marked Me at a time")
+    }
+
+    func testRenamingAPlayerInManagePlayersUpdatesTheDisplayedName() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITest-ResetState"]
+        app.launch()
+        dismissOnboardingIfPresented(app)
+
+        app.tabBars.buttons["Play"].tap()
+        let teamATextField = app.textFields.matching(identifier: "Team A Player Name").firstMatch
+        scrollUntilVisible(teamATextField, in: app)
+        let singlesToggle = app.buttons["Singles"]
+        if singlesToggle.exists { singlesToggle.tap() }
+        teamATextField.tap()
+        teamATextField.typeText("Mike")
+        let flipCoinButton = app.buttons["Flip Coin"]
+        scrollUntilVisible(flipCoinButton, in: app)
+        flipCoinButton.tap()
+        let startMatchButton = app.buttons["Start Match"]
+        scrollUntilVisible(startMatchButton, in: app)
+        startMatchButton.tap()
+        let teamAZone = app.buttons["scoreZone.teamA"]
+        XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
+        let finishButton = app.buttons["Finish Match"]
+        for _ in 0..<20 {
+            if finishButton.exists { break }
+            teamAZone.tap()
+        }
+        finishButton.tap()
+        app.buttons["Confirm Finish"].firstMatch.tap()
+
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["Manage Players"].tap()
+
+        app.buttons["Rename.Mike"].tap()
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 2))
+        nameField.tap()
+        // The field is pre-filled with the current name ("Mike") — delete it
+        // before typing the replacement, since typeText only appends.
+        let existingValue = nameField.value as? String ?? ""
+        nameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existingValue.count))
+        nameField.typeText("Mike S.")
+        app.buttons["Save"].tap()
+
+        XCTAssertTrue(app.staticTexts["PlayerRow.Mike S."].waitForExistence(timeout: 2), "Renamed player should appear under the new name")
+        XCTAssertFalse(app.staticTexts["PlayerRow.Mike"].exists, "Old name should no longer be listed")
+    }
 }

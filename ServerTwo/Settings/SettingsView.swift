@@ -23,6 +23,9 @@ struct SettingsView: View {
                 NavigationLink("How to Play Pickleball") {
                     HowToPlayView()
                 }
+                NavigationLink("Manage Players") {
+                    ManagePlayersView()
+                }
             }
 
             Section {
