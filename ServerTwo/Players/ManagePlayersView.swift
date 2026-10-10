@@ -31,15 +31,22 @@ struct ManagePlayersView: View {
                             }
                         }
                         Spacer()
+                        // `.borderless` makes each button its own hit-test
+                        // target. Without it, two plain Buttons packed into
+                        // one List row get overlapping default tap regions
+                        // and a tap aimed at one can fire the other's action
+                        // (observed: tapping "Set as Me" opened "Rename").
                         Button("Rename") {
                             renameText = player.name
                             renamingPlayer = player
                         }
+                        .buttonStyle(.borderless)
                         .accessibilityIdentifier("Rename.\(player.name)")
                         if !player.isMe {
                             Button("Set as Me") {
                                 setMe(player)
                             }
+                            .buttonStyle(.borderless)
                             .accessibilityIdentifier("SetMe.\(player.name)")
                         }
                     }
