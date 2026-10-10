@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppSettings.self) private var appSettings
-    @State private var isShowingOnboarding = false
 
     var body: some View {
         @Bindable var appSettings = appSettings
@@ -21,8 +20,8 @@ struct SettingsView: View {
             }
 
             Section("Help") {
-                Button("How Scoring Works") {
-                    isShowingOnboarding = true
+                NavigationLink("How to Play Pickleball") {
+                    HowToPlayView()
                 }
             }
 
@@ -36,9 +35,6 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
-        .sheet(isPresented: $isShowingOnboarding) {
-            OnboardingView()
-        }
     }
 }
 
