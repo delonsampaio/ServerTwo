@@ -34,6 +34,6 @@ final class PersistenceContainerTests: XCTestCase {
 
         XCTAssertFalse(historyEntityNames.contains("InProgressGameState"))
         XCTAssertTrue(inProgressEntityNames.contains("InProgressGameState"))
-        XCTAssertEqual(historyEntityNames, ["TeamSide", "MatchRecord", "GameRecord", "PointEvent"])
+        XCTAssertEqual(historyEntityNames, ["TeamSide", "MatchRecord", "GameRecord", "PointEvent", "SavedPlayer"])
     }
 }

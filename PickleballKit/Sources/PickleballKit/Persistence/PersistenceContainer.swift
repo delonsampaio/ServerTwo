@@ -13,7 +13,7 @@ public enum PersistenceContainer {
     // is `[Schema.Entity]`, which no public initializer accepts back in),
     // so the de-duplication happens at the model-type-array level instead.
     private static let historyModelTypes: [any PersistentModel.Type] = [
-        TeamSide.self, MatchRecord.self, GameRecord.self, PointEvent.self
+        TeamSide.self, MatchRecord.self, GameRecord.self, PointEvent.self, SavedPlayer.self
     ]
 
     private static let inProgressModelTypes: [any PersistentModel.Type] = [

@@ -68,7 +68,9 @@ public final class MatchRepository {
         teamAName: String,
         teamBName: String,
         startedAt: Date,
-        completedAt: Date = Date()
+        completedAt: Date = Date(),
+        teamAPlayers: [SavedPlayer] = [],
+        teamBPlayers: [SavedPlayer] = []
     ) throws -> MatchRecord {
         guard let winner = match.matchWinner else {
             throw MatchRepositoryError.matchNotOver
@@ -94,6 +96,8 @@ public final class MatchRepository {
         let teamBSide = TeamSide(team: .teamB, displayName: teamBName)
         teamASide.match = record
         teamBSide.match = record
+        teamASide.players = teamAPlayers
+        teamBSide.players = teamBPlayers
         record.teamSides = [teamASide, teamBSide]
         modelContext.insert(teamASide)
         modelContext.insert(teamBSide)
@@ -147,6 +151,64 @@ public final class MatchRepository {
             ]
         )
         return try modelContext.fetch(descriptor)
+    }
+
+    // MARK: Saved Players
+
+    public func fetchAllSavedPlayers() throws -> [SavedPlayer] {
+        try modelContext.fetch(FetchDescriptor<SavedPlayer>())
+    }
+
+    public func fetchMePlayer() throws -> SavedPlayer? {
+        try fetchAllSavedPlayers().first { $0.isMe }
+    }
+
+    /// Finds-or-creates a `SavedPlayer` by exact, trimmed, case-sensitive
+    /// name match. Returns `nil` for blank/whitespace-only input without
+    /// creating anything — callers must never upsert an empty field.
+    @discardableResult
+    public func upsertSavedPlayer(name: String) throws -> SavedPlayer? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let existing = try fetchAllSavedPlayers().first(where: { $0.name == trimmed }) {
+            return existing
+        }
+        let player = SavedPlayer(name: trimmed)
+        modelContext.insert(player)
+        try modelContext.save()
+        return player
+    }
+
+    public func deleteSavedPlayer(_ player: SavedPlayer) throws {
+        modelContext.delete(player)
+        try modelContext.save()
+    }
+
+    /// Renames a `SavedPlayer` in place. Safe to do at any time, including
+    /// after the player has appeared in past matches — identity is the
+    /// stable `id`, not `name`, so this never breaks historical stats
+    /// attribution (see `personalRecord`, Task 5). Exists specifically so
+    /// a name collision (e.g. two different people both saved as "Mike")
+    /// can be disambiguated — e.g. renaming one to "Mike S." — without
+    /// losing anything.
+    public func renameSavedPlayer(_ player: SavedPlayer, to newName: String) throws {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        player.name = trimmed
+        try modelContext.save()
+    }
+
+    /// Clears `isMe` on whichever `SavedPlayer` currently holds it before
+    /// setting it on this one, so the exactly-one-"Me" invariant always
+    /// holds after this call. Only touches the one previous holder (not
+    /// every saved player) — safe because this function is the only writer
+    /// of `isMe`, so "at most one `true`" holds by induction.
+    public func setMePlayer(_ player: SavedPlayer) throws {
+        if let previousMe = try fetchMePlayer(), previousMe.id != player.id {
+            previousMe.isMe = false
+        }
+        player.isMe = true
+        try modelContext.save()
     }
 
     /// Deletes every completed match. Cascades to each match's `TeamSide`,
