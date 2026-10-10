@@ -132,21 +132,28 @@ struct ScoringView: View {
         } message: {
             Text(finishErrorMessage ?? "")
         }
-        .alert("Finish Match?", isPresented: $showingFinishConfirmation) {
-            Button("Confirm Finish") {
-                // A save failure used to be swallowed by `try?`, leaving the
-                // user stuck on a finished match with no feedback at all.
-                do {
-                    try activeMatchController.finishMatch()
-                } catch {
-                    finishErrorMessage = "Couldn't save this match. Please try again."
-                }
-            }
-            .accessibilityIdentifier("Confirm Finish")
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            if let match = activeMatchController.match {
-                Text(finishSummary(for: match))
+        .sheet(isPresented: $showingFinishConfirmation) {
+            if let match = activeMatchController.match, let winningTeam = match.matchWinner {
+                FinishMatchSheet(
+                    teamAName: activeMatchController.teamAName,
+                    teamBName: activeMatchController.teamBName,
+                    isBestOfOne: match.matchFormat == .bestOfOne,
+                    teamAScore: match.currentGame.state.teamAScore,
+                    teamBScore: match.currentGame.state.teamBScore,
+                    teamAGames: match.gamesWon(for: .teamA),
+                    teamBGames: match.gamesWon(for: .teamB),
+                    winningTeam: winningTeam,
+                    onConfirm: {
+                        // A save failure used to be swallowed by `try?`, leaving
+                        // the user stuck on a finished match with no feedback at
+                        // all.
+                        do {
+                            try activeMatchController.finishMatch()
+                        } catch {
+                            finishErrorMessage = "Couldn't save this match. Please try again."
+                        }
+                    }
+                )
             }
         }
     }
@@ -164,8 +171,7 @@ struct ScoringView: View {
             // indication that a game was banked.
             if match.matchFormat != .bestOfOne {
                 Text("Games: \(match.gamesWon(for: .teamA)) – \(match.gamesWon(for: .teamB))")
-                    .font(.subheadline.bold())
-                    .foregroundStyle(.secondary)
+                    .font(.title3.bold())
             }
 
             CourtDiagramView(state: match.currentGame.state)
@@ -181,7 +187,11 @@ struct ScoringView: View {
             // position around every time a match ended. isMatchOver is
             // computed live from the current score, so undoing the winning
             // point un-finishes the match and these reappear automatically.
-            if !match.isMatchOver {
+            // Also hidden entirely (not just disabled) when the match was
+            // set up with "Track Timeouts" off — two permanently-grayed-out
+            // buttons would just be clutter for a casual game that was
+            // explicitly opted out of tracking them.
+            if !match.isMatchOver, match.configuration.timeoutsPerTeam > 0 {
                 TimeoutControlsView(state: match.currentGame.state) { team in
                     activeMatchController.requestTimeout(for: team)
                 }
@@ -209,8 +219,9 @@ struct ScoringView: View {
         } label: {
             VStack(spacing: 8) {
                 Text(name)
-                    .font(.headline)
+                    .font(.title2.bold())
                     .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 Text("\(score)")
                     .font(.system(size: 72, weight: .bold, design: .rounded))
             }
@@ -233,17 +244,4 @@ struct ScoringView: View {
         .accessibilityLabel("\(name), \(score) points. Tap to score, double tap and hold to correct.")
     }
 
-    /// For best-of-1 the point score IS the match result; for multi-game
-    /// formats the last game's point score is misleading (it reports one game,
-    /// not the match), so report games-won instead.
-    private func finishSummary(for match: PickleballMatch) -> String {
-        if match.matchFormat == .bestOfOne {
-            let aScore = match.currentGame.state.teamAScore
-            let bScore = match.currentGame.state.teamBScore
-            return "Final score: \(activeMatchController.teamAName) \(aScore) - \(activeMatchController.teamBName) \(bScore)"
-        }
-        let aGames = match.gamesWon(for: .teamA)
-        let bGames = match.gamesWon(for: .teamB)
-        return "Final score: \(activeMatchController.teamAName) \(aGames) - \(activeMatchController.teamBName) \(bGames) games"
-    }
 }

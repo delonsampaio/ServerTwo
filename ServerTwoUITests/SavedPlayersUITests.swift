@@ -10,8 +10,6 @@ final class SavedPlayersUITests: XCTestCase {
         app.tabBars.buttons["Play"].tap()
 
         // First match: type a fresh name, nothing to suggest yet.
-        let flipCoinButton = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton, in: app)
         // NOTE: looked up by the stable identifier, not the "Player Name"
         // placeholder — playMode still defaults to .doubles at this point
         // (the Singles toggle below hasn't been tapped yet), so the
@@ -31,10 +29,17 @@ final class SavedPlayersUITests: XCTestCase {
         teamBTextField.tap()
         teamBTextField.typeText("Mike")
 
-        flipCoinButton.tap()
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
+
+        // Who serves first is decided on its own screen now, not in Setup.
+        let flipCoinButton = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton.waitForExistence(timeout: 2))
+        flipCoinButton.tap()
+        let beginMatchButton = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 2))
+        beginMatchButton.tap()
 
         let teamAZone = app.buttons["scoreZone.teamA"]
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
@@ -75,12 +80,15 @@ final class SavedPlayersUITests: XCTestCase {
         if singlesToggle.exists { singlesToggle.tap() }
         teamATextField.tap()
         teamATextField.typeText("Miek")
-        let flipCoinButton = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton, in: app)
-        flipCoinButton.tap()
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
+        let flipCoinButton = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton.waitForExistence(timeout: 2))
+        flipCoinButton.tap()
+        let beginMatchButton = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 2))
+        beginMatchButton.tap()
         let teamAZone = app.buttons["scoreZone.teamA"]
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
         let finishButton = app.buttons["Finish Match"]
@@ -126,12 +134,15 @@ final class SavedPlayersUITests: XCTestCase {
         scrollUntilVisible(teamBTextField, in: app)
         teamBTextField.tap()
         teamBTextField.typeText("Bob")
-        let flipCoinButton = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton, in: app)
-        flipCoinButton.tap()
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
+        let flipCoinButton = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton.waitForExistence(timeout: 2))
+        flipCoinButton.tap()
+        let beginMatchButton = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 2))
+        beginMatchButton.tap()
         let teamAZone = app.buttons["scoreZone.teamA"]
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
         let finishButton = app.buttons["Finish Match"]
@@ -169,12 +180,15 @@ final class SavedPlayersUITests: XCTestCase {
         if singlesToggle.exists { singlesToggle.tap() }
         teamATextField.tap()
         teamATextField.typeText("Mike")
-        let flipCoinButton = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton, in: app)
-        flipCoinButton.tap()
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
+        let flipCoinButton = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton.waitForExistence(timeout: 2))
+        flipCoinButton.tap()
+        let beginMatchButton = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 2))
+        beginMatchButton.tap()
         let teamAZone = app.buttons["scoreZone.teamA"]
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
         let finishButton = app.buttons["Finish Match"]
@@ -216,12 +230,15 @@ final class SavedPlayersUITests: XCTestCase {
         if singlesToggle.exists { singlesToggle.tap() }
         teamATextField.tap()
         teamATextField.typeText("Delon")
-        let flipCoinButton = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton, in: app)
-        flipCoinButton.tap()
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
+        let flipCoinButton = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton.waitForExistence(timeout: 2))
+        flipCoinButton.tap()
+        let beginMatchButton = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 2))
+        beginMatchButton.tap()
         let teamAZone = app.buttons["scoreZone.teamA"]
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
         let finishButton = app.buttons["Finish Match"]

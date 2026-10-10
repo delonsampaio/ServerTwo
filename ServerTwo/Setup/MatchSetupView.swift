@@ -5,6 +5,33 @@ import PickleballKit
 struct MatchSetupView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
     @Environment(\.modelContext) private var modelContext
+
+    /// Set by a "Rematch" button on Home or a match's History detail
+    /// screen, consumed once via `.onChange` below, which is what makes
+    /// this work even when `MatchSetupView` was already on screen (an
+    /// `.onAppear`/init-based one-shot wouldn't fire in that case, since
+    /// nothing recreates this view).
+    let pendingRematch: RematchRequest?
+    let onPrefillConsumed: () -> Void
+
+    /// Same one-shot mechanism as `pendingRematch`, but only ever touches
+    /// Team A's first player — everything else (rules, Team B, coin flip)
+    /// is left exactly as the user already had it.
+    let pendingQuickStart: QuickStartRequest?
+    let onQuickStartConsumed: () -> Void
+
+    init(
+        pendingRematch: RematchRequest? = nil,
+        onPrefillConsumed: @escaping () -> Void = {},
+        pendingQuickStart: QuickStartRequest? = nil,
+        onQuickStartConsumed: @escaping () -> Void = {}
+    ) {
+        self.pendingRematch = pendingRematch
+        self.onPrefillConsumed = onPrefillConsumed
+        self.pendingQuickStart = pendingQuickStart
+        self.onQuickStartConsumed = onQuickStartConsumed
+    }
+
     // Bumped whenever a suggestion chip's player is deleted. Deleting a
     // SavedPlayer via `repository.deleteSavedPlayer` mutates SwiftData
     // directly and doesn't touch any @State the body reads, so without this,
@@ -17,6 +44,7 @@ struct MatchSetupView: View {
     @State private var rallyFreeze = false
     @State private var winningScore: WinningScore = .eleven
     @State private var winByTwo = true
+    @State private var trackTimeouts = true
     @State private var matchFormat: MatchFormat = .bestOfOne
     @State private var teamAPlayer1 = ""
     @State private var teamAPlayer1ID: UUID?
@@ -26,13 +54,17 @@ struct MatchSetupView: View {
     @State private var teamBPlayer1ID: UUID?
     @State private var teamBPlayer2 = ""
     @State private var teamBPlayer2ID: UUID?
-    @State private var coinFlipResult: Team?
     @State private var isShowingPaywall = false
+    @FocusState private var focusedField: NameField?
 
     private enum ScoringFormatKind: String, CaseIterable, Identifiable {
         case sideOut = "Side-Out"
         case rally = "Rally"
         var id: String { rawValue }
+    }
+
+    private enum NameField: Hashable {
+        case teamAPlayer1, teamAPlayer2, teamBPlayer1, teamBPlayer2
     }
 
     var body: some View {
@@ -64,6 +96,11 @@ struct MatchSetupView: View {
                     }
                 }
                 Toggle("Win by 2", isOn: $winByTwo)
+                // A casual game among friends often doesn't bother with
+                // timeouts at all. On by default, but a one-tap opt-out
+                // rather than a 0/1/2/3 count picker, which would be
+                // clutter nobody but a tournament format actually needs.
+                Toggle("Track Timeouts", isOn: $trackTimeouts)
             }
 
             Section("Match Format") {
@@ -77,42 +114,38 @@ struct MatchSetupView: View {
 
             Section("Team A") {
                 TextField(playMode == .doubles ? "Player 1" : "Player Name", text: trackedTextBinding(text: $teamAPlayer1, selectedID: $teamAPlayer1ID))
+                    .focused($focusedField, equals: .teamAPlayer1)
                     .accessibilityIdentifier("Team A Player Name")
-                suggestionChips(for: $teamAPlayer1, selectedID: $teamAPlayer1ID)
+                suggestionChips(for: $teamAPlayer1, selectedID: $teamAPlayer1ID, isFocused: focusedField == .teamAPlayer1)
                 if playMode == .doubles {
                     TextField("Player 2", text: trackedTextBinding(text: $teamAPlayer2, selectedID: $teamAPlayer2ID))
+                        .focused($focusedField, equals: .teamAPlayer2)
                         .accessibilityIdentifier("Team A Player 2 Name")
-                    suggestionChips(for: $teamAPlayer2, selectedID: $teamAPlayer2ID)
+                    suggestionChips(for: $teamAPlayer2, selectedID: $teamAPlayer2ID, isFocused: focusedField == .teamAPlayer2)
                 }
             }
 
             Section("Team B") {
                 TextField(playMode == .doubles ? "Player 1" : "Player Name", text: trackedTextBinding(text: $teamBPlayer1, selectedID: $teamBPlayer1ID))
+                    .focused($focusedField, equals: .teamBPlayer1)
                     .accessibilityIdentifier("Team B Player Name")
-                suggestionChips(for: $teamBPlayer1, selectedID: $teamBPlayer1ID)
+                suggestionChips(for: $teamBPlayer1, selectedID: $teamBPlayer1ID, isFocused: focusedField == .teamBPlayer1)
                 if playMode == .doubles {
                     TextField("Player 2", text: trackedTextBinding(text: $teamBPlayer2, selectedID: $teamBPlayer2ID))
+                        .focused($focusedField, equals: .teamBPlayer2)
                         .accessibilityIdentifier("Team B Player 2 Name")
-                    suggestionChips(for: $teamBPlayer2, selectedID: $teamBPlayer2ID)
+                    suggestionChips(for: $teamBPlayer2, selectedID: $teamBPlayer2ID, isFocused: focusedField == .teamBPlayer2)
                 }
-            }
-
-            Section("First Serve") {
-                Button(coinFlipResult == nil ? "Flip Coin" : "Flip Again") {
-                    coinFlipResult = CoinFlip.flip()
+                Button("Swap Teams") {
+                    swapTeams()
                 }
-                // Identifier stays "Flip Coin" regardless of the label toggling to
-                // "Flip Again" — plain SwiftUI Button(String) doesn't set its
-                // accessibility identifier to match its label by default, so
-                // XCUITest lookups need an explicit, stable identifier.
-                .accessibilityIdentifier("Flip Coin")
-                if let coinFlipResult {
-                    Text("\(teamDisplayName(for: coinFlipResult)) serves first")
-                        .foregroundStyle(.secondary)
-                }
+                .accessibilityIdentifier("Swap Teams")
             }
 
             Section {
+                // Who serves first is decided on its own screen right
+                // before scoring starts, not here — see `CoinFlipView`.
+                // "Start Match" stages everything else and hands off to it.
                 Button("Start Match") {
                     if activeMatchController.canStartNewMatch {
                         startMatch()
@@ -120,7 +153,6 @@ struct MatchSetupView: View {
                         isShowingPaywall = true
                     }
                 }
-                .disabled(coinFlipResult == nil)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .accessibilityIdentifier("Start Match")
             }
@@ -129,10 +161,75 @@ struct MatchSetupView: View {
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
         }
+        .onChange(of: pendingRematch) { _, newValue in
+            guard let request = newValue else { return }
+            applyRematch(request)
+            onPrefillConsumed()
+        }
+        .onChange(of: pendingQuickStart) { _, newValue in
+            guard let request = newValue else { return }
+            applyQuickStart(request)
+            onQuickStartConsumed()
+        }
+        .onAppear {
+            // Covers the one case `.onChange` doesn't: a request that was
+            // already set before this exact view instance was first created
+            // (e.g. tapped "Rematch"/a Quick Start chip while a previous
+            // match was still being scored, so this fresh MatchSetupView
+            // only comes into existence once that match finishes and this
+            // view appears for the first time already holding a non-nil
+            // value — `.onChange` only fires on a value that CHANGES after
+            // this view starts observing it).
+            if let pendingRematch {
+                applyRematch(pendingRematch)
+                onPrefillConsumed()
+            }
+            if let pendingQuickStart {
+                applyQuickStart(pendingQuickStart)
+                onQuickStartConsumed()
+            }
+        }
     }
 
-    private func teamDisplayName(for team: Team) -> String {
-        team == .teamA ? combinedName(teamAPlayer1, teamAPlayer2) : combinedName(teamBPlayer1, teamBPlayer2)
+    private func applyRematch(_ request: RematchRequest) {
+        playMode = request.configuration.playMode
+        switch request.configuration.scoringFormat {
+        case .sideOut:
+            scoringFormatKind = .sideOut
+            rallyFreeze = false
+        case .rally(let freeze):
+            scoringFormatKind = .rally
+            rallyFreeze = freeze
+        }
+        winningScore = request.configuration.winningScore
+        winByTwo = request.configuration.winByTwo
+        trackTimeouts = request.configuration.timeoutsPerTeam > 0
+        matchFormat = request.matchFormat
+        teamAPlayer1 = request.teamAPlayer1.name
+        teamAPlayer1ID = request.teamAPlayer1.savedPlayerID
+        teamAPlayer2 = request.teamAPlayer2?.name ?? ""
+        teamAPlayer2ID = request.teamAPlayer2?.savedPlayerID
+        teamBPlayer1 = request.teamBPlayer1.name
+        teamBPlayer1ID = request.teamBPlayer1.savedPlayerID
+        teamBPlayer2 = request.teamBPlayer2?.name ?? ""
+        teamBPlayer2ID = request.teamBPlayer2?.savedPlayerID
+        // A rematch is a new match — the previous match's first-server
+        // result must never carry over invisibly. Since who serves first is
+        // now decided on its own screen after "Start Match" (see
+        // `CoinFlipView`), there's nothing to reset here to force that —
+        // every match, rematch or not, always goes through that screen.
+    }
+
+    private func swapTeams() {
+        swap(&teamAPlayer1, &teamBPlayer1)
+        swap(&teamAPlayer1ID, &teamBPlayer1ID)
+        swap(&teamAPlayer2, &teamBPlayer2)
+        swap(&teamAPlayer2ID, &teamBPlayer2ID)
+    }
+
+    private func applyQuickStart(_ request: QuickStartRequest) {
+        teamAPlayer1 = request.playerName
+        teamAPlayer1ID = request.savedPlayerID
     }
 
     /// Both names are trimmed, and EITHER being blank falls back to the other
@@ -173,13 +270,13 @@ struct MatchSetupView: View {
     }
 
     private func startMatch() {
-        guard let firstServingTeam = coinFlipResult else { return }
         let scoringFormat: ScoringFormat = scoringFormatKind == .sideOut ? .sideOut : .rally(freeze: rallyFreeze)
         let configuration = GameConfiguration(
             playMode: playMode,
             scoringFormat: scoringFormat,
             winningScore: winningScore,
-            winByTwo: winByTwo
+            winByTwo: winByTwo,
+            timeoutsPerTeam: trackTimeouts ? winningScore.standardTimeoutsPerTeam : 0
         )
         let repository = MatchRepository(modelContext: modelContext)
         // Prefers the exact SavedPlayer the user selected via a
@@ -211,21 +308,28 @@ struct MatchSetupView: View {
         let teamBPlayers = playMode == .doubles
             ? resolvedPlayers((teamBPlayer1, teamBPlayer1ID), (teamBPlayer2, teamBPlayer2ID))
             : resolvedPlayers((teamBPlayer1, teamBPlayer1ID))
-        activeMatchController.startNewMatch(
+        // Who serves first isn't decided yet — that happens on the
+        // coin-flip screen `RootTabView` shows next, once this is staged.
+        activeMatchController.stageMatch(PendingMatchSetup(
             configuration: configuration,
             matchFormat: matchFormat,
-            firstServingTeam: firstServingTeam,
             teamAName: combinedName(teamAPlayer1, teamAPlayer2),
             teamBName: combinedName(teamBPlayer1, teamBPlayer2),
-            teamAPlayers: teamAPlayers,
-            teamBPlayers: teamBPlayers
-        )
+            teamAPlayerIDs: teamAPlayers.map(\.id),
+            teamBPlayerIDs: teamBPlayers.map(\.id)
+        ))
     }
 
+    /// Shown while the field is focused (even empty, so tapping an empty
+    /// field surfaces everyone ranked most-recently-played first — see
+    /// `MatchRepository.suggestedPlayers`) or while it holds unselected
+    /// typed text. Hidden the instant a chip is actually selected
+    /// (`selectedID` non-nil) — otherwise the just-picked player's own
+    /// chip would keep showing, since their name still matches itself.
     @ViewBuilder
-    private func suggestionChips(for field: Binding<String>, selectedID: Binding<UUID?>) -> some View {
+    private func suggestionChips(for field: Binding<String>, selectedID: Binding<UUID?>, isFocused: Bool) -> some View {
         let query = field.wrappedValue
-        if !query.isEmpty {
+        if selectedID.wrappedValue == nil, isFocused || !query.isEmpty {
             let repository = MatchRepository(modelContext: modelContext)
             let matches = (try? repository.suggestedPlayers(matching: query)) ?? []
             if !matches.isEmpty {

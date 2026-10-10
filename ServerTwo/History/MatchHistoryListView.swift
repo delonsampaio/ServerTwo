@@ -4,6 +4,7 @@ import PickleballKit
 
 struct MatchHistoryListView: View {
     @Environment(\.modelContext) private var modelContext
+    let onRematch: (RematchRequest) -> Void
     @State private var matches: [MatchRecord] = []
     @State private var mePlayer: SavedPlayer?
     @State private var loadError: Error?
@@ -37,7 +38,7 @@ struct MatchHistoryListView: View {
         }
         .navigationTitle("History")
         .navigationDestination(for: MatchRecord.self) { match in
-            MatchDetailView(match: match)
+            MatchDetailView(match: match, onRematch: onRematch)
         }
         .task { loadMatches() }
         .refreshable { loadMatches() }
@@ -77,7 +78,7 @@ struct MatchHistoryListView: View {
 
 #Preview {
     NavigationStack {
-        MatchHistoryListView()
+        MatchHistoryListView(onRematch: { _ in })
     }
     .modelContainer(try! PersistenceContainer.makeInMemoryContainer())
 }

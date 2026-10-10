@@ -37,22 +37,16 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* ServerTwo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = ServerTwo;
 			sourceTree = "<group>";
 		};
 		14039D43307739FF007414B8 /* ServerTwoTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = ServerTwoTests;
 			sourceTree = "<group>";
 		};
 		14039D5030773A61007414B8 /* ServerTwoUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = ServerTwoUITests;
 			sourceTree = "<group>";
 		};
@@ -111,8 +105,6 @@
 				000000000000000140000000 /* Resources */,
 			);
 			buildRules = (
-			);
-			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* ServerTwo */,
@@ -267,7 +259,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		000000000000000011000000 /* Debug */ = {
+		000000000000000011000000 /* Debug configuration for PBXProject "ServerTwo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -337,7 +329,7 @@
 			};
 			name = Debug;
 		};
-		000000000000000012000000 /* Release */ = {
+		000000000000000012000000 /* Release configuration for PBXProject "ServerTwo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -399,7 +391,7 @@
 			};
 			name = Release;
 		};
-		000000000000000111000000 /* Debug */ = {
+		000000000000000111000000 /* Debug configuration for PBXNativeTarget "ServerTwo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ServerTwo/ServerTwo.entitlements;
@@ -440,7 +432,7 @@
 			};
 			name = Debug;
 		};
-		000000000000000112000000 /* Release */ = {
+		000000000000000112000000 /* Release configuration for PBXNativeTarget "ServerTwo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ServerTwo/ServerTwo.entitlements;
@@ -481,7 +473,7 @@
 			};
 			name = Release;
 		};
-		14039D49307739FF007414B8 /* Debug */ = {
+		14039D49307739FF007414B8 /* Debug configuration for PBXNativeTarget "ServerTwoTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -503,7 +495,7 @@
 			};
 			name = Debug;
 		};
-		14039D4A307739FF007414B8 /* Release */ = {
+		14039D4A307739FF007414B8 /* Release configuration for PBXNativeTarget "ServerTwoTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -526,7 +518,7 @@
 			};
 			name = Release;
 		};
-		14039D5630773A61007414B8 /* Debug */ = {
+		14039D5630773A61007414B8 /* Debug configuration for PBXNativeTarget "ServerTwoUITests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -547,7 +539,7 @@
 			};
 			name = Debug;
 		};
-		14039D5730773A61007414B8 /* Release */ = {
+		14039D5730773A61007414B8 /* Release configuration for PBXNativeTarget "ServerTwoUITests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -575,32 +567,32 @@
 		000000000000000010000000 /* Build configuration list for PBXProject "ServerTwo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				000000000000000011000000 /* Debug */,
-				000000000000000012000000 /* Release */,
+				000000000000000011000000 /* Debug configuration for PBXProject "ServerTwo" */,
+				000000000000000012000000 /* Release configuration for PBXProject "ServerTwo" */,
 			);
 			defaultConfigurationName = Release;
 		};
 		000000000000000110000000 /* Build configuration list for PBXNativeTarget "ServerTwo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				000000000000000111000000 /* Debug */,
-				000000000000000112000000 /* Release */,
+				000000000000000111000000 /* Debug configuration for PBXNativeTarget "ServerTwo" */,
+				000000000000000112000000 /* Release configuration for PBXNativeTarget "ServerTwo" */,
 			);
 			defaultConfigurationName = Release;
 		};
 		14039D48307739FF007414B8 /* Build configuration list for PBXNativeTarget "ServerTwoTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				14039D49307739FF007414B8 /* Debug */,
-				14039D4A307739FF007414B8 /* Release */,
+				14039D49307739FF007414B8 /* Debug configuration for PBXNativeTarget "ServerTwoTests" */,
+				14039D4A307739FF007414B8 /* Release configuration for PBXNativeTarget "ServerTwoTests" */,
 			);
 			defaultConfigurationName = Release;
 		};
 		14039D5530773A61007414B8 /* Build configuration list for PBXNativeTarget "ServerTwoUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				14039D5630773A61007414B8 /* Debug */,
-				14039D5730773A61007414B8 /* Release */,
+				14039D5630773A61007414B8 /* Debug configuration for PBXNativeTarget "ServerTwoUITests" */,
+				14039D5730773A61007414B8 /* Release configuration for PBXNativeTarget "ServerTwoUITests" */,
 			);
 			defaultConfigurationName = Release;
 		};

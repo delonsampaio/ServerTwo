@@ -13,9 +13,12 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ActiveMatchController.self) private var activeMatchController
     let onNewMatch: () -> Void
+    let onRematch: (RematchRequest) -> Void
+    let onQuickStart: (QuickStartRequest) -> Void
 
     @State private var matches: [MatchRecord] = []
     @State private var mePlayer: SavedPlayer?
+    @State private var frequentPlayers: [SavedPlayer] = []
     @State private var loadError: Error?
     @State private var isShowingPaywall = false
 
@@ -25,6 +28,7 @@ struct HomeView: View {
                 VStack(spacing: 16) {
                     if let lastMatch = matches.first {
                         lastMatchCard(lastMatch)
+                        quickStartRow
                         matchesPlayedCard
                         thirdSlot(lastMatch: lastMatch)
                     } else if loadError != nil {
@@ -70,13 +74,30 @@ struct HomeView: View {
         let teamAGames = games.filter { $0.winningTeam == .teamA }.count
         let teamBGames = games.filter { $0.winningTeam == .teamB }.count
         return VStack(alignment: .leading, spacing: 4) {
-            Text("Last Match")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text("\(teamAName) vs \(teamBName)")
-                .font(.headline)
-            Text("\(teamAGames) - \(teamBGames)")
-                .font(.title2.bold())
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Last Match")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(teamAName) vs \(teamBName)")
+                        .font(.headline)
+                    Text("\(teamAGames) - \(teamBGames)")
+                        .font(.title2.bold())
+                }
+                Spacer()
+                // Only offered when the match's stored rules can still be
+                // decoded and both sides are present — not expected to ever
+                // fail for a match this app itself just saved, but a failed
+                // decode should silently omit the button rather than offer
+                // a rematch that can't actually be built.
+                if let request = RematchRequest(match: match) {
+                    Button("Rematch") {
+                        onRematch(request)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("Rematch")
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -88,14 +109,40 @@ struct HomeView: View {
             if let mePlayer {
                 let repository = MatchRepository(modelContext: modelContext)
                 let record = repository.personalRecord(for: mePlayer, in: matches)
-                HStack {
-                    Text("Your Record")
-                        .font(.subheadline)
-                        .accessibilityIdentifier("Your Record")
-                    Spacer()
-                    Text("\(record.wins) - \(record.losses)")
-                        .font(.headline)
-                        .accessibilityIdentifier("YourRecordValue")
+                let streak = repository.winStreak(for: mePlayer, in: matches)
+                let form = repository.recentForm(for: mePlayer, in: matches)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Your Record")
+                            .font(.subheadline)
+                            .accessibilityIdentifier("Your Record")
+                        Spacer()
+                        // Only shown while it's actually something to be
+                        // proud of — a "streak" of 0 isn't a streak, it's
+                        // just noise right after a loss.
+                        if streak > 0 {
+                            Text("🔥 \(streak)")
+                                .font(.subheadline.bold())
+                                .accessibilityIdentifier("WinStreak")
+                        }
+                        Text("\(record.wins) - \(record.losses)")
+                            .font(.headline)
+                            .accessibilityIdentifier("YourRecordValue")
+                    }
+                    if !form.isEmpty {
+                        // Most-recent-first, matching how "how am I doing
+                        // lately" is naturally read.
+                        HStack(spacing: 4) {
+                            ForEach(Array(form.enumerated()), id: \.offset) { _, didWin in
+                                Text(didWin ? "W" : "L")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.white)
+                                    .frame(width: 20, height: 20)
+                                    .background(didWin ? Color.green : Color.red, in: Circle())
+                            }
+                        }
+                        .accessibilityIdentifier("RecentForm")
+                    }
                 }
             } else {
                 HStack {
@@ -109,6 +156,54 @@ struct HomeView: View {
         }
         .padding()
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// Top 3-4 most recently/frequently played saved players, reusing the
+    /// exact ranking `MatchSetupView`'s suggestion chips already use (an
+    /// empty query returns everyone, recency-then-frequency ranked).
+    /// Tapping one pre-fills Team A's first player on the setup screen —
+    /// saves retyping a known regular's name while standing on the court.
+    @ViewBuilder
+    private var quickStartRow: some View {
+        if !frequentPlayers.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Quick Start")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(Array(frequentPlayers.prefix(4)), id: \.id) { player in
+                            Button {
+                                onQuickStart(QuickStartRequest(playerName: player.name, savedPlayerID: player.id))
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Text(initials(for: player.name))
+                                        .font(.headline)
+                                        .foregroundStyle(.white)
+                                        .frame(width: 44, height: 44)
+                                        .background(Color.accentColor, in: Circle())
+                                    Text(player.name)
+                                        .font(.caption2)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                        .frame(width: 60)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("QuickStart.\(player.name)")
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func initials(for name: String) -> String {
+        let words = name.split(separator: " ")
+        let letters = words.prefix(2).compactMap { $0.first }
+        return letters.isEmpty ? "?" : String(letters).uppercased()
     }
 
     /// Pro upsell if locked (consistent with every other paywall trigger in
@@ -148,6 +243,7 @@ struct HomeView: View {
         do {
             matches = try repository.fetchMatchHistory()
             mePlayer = try repository.fetchMePlayer()
+            frequentPlayers = (try? repository.suggestedPlayers(matching: "")) ?? []
             loadError = nil
         } catch {
             matches = []
@@ -158,7 +254,7 @@ struct HomeView: View {
 
 #Preview {
     NavigationStack {
-        HomeView(onNewMatch: {})
+        HomeView(onNewMatch: {}, onRematch: { _ in }, onQuickStart: { _ in })
     }
     .environment(try! ActiveMatchController(modelContext: ModelContext(PersistenceContainer.makeInMemoryContainer())))
     .modelContainer(try! PersistenceContainer.makeInMemoryContainer())

@@ -26,14 +26,24 @@ struct ManagePlayersView: View {
             } else {
                 ForEach(players, id: \.id) { player in
                     HStack {
-                        VStack(alignment: .leading) {
-                            Text(player.name)
-                                .accessibilityIdentifier("PlayerRow.\(player.name)")
-                            if player.isMe {
-                                Text("Me")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityIdentifier("Me.\(player.name)")
+                        // `.borderless` on the buttons below is what keeps
+                        // this NavigationLink from swallowing their taps —
+                        // the same mechanism (own hit-test region) already
+                        // used to fix Rename/Set as Me interfering with
+                        // each other; a NavigationLink's row-wide tap
+                        // target respects it the same way.
+                        NavigationLink {
+                            PlayerDetailView(player: player)
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(player.name)
+                                    .accessibilityIdentifier("PlayerRow.\(player.name)")
+                                if player.isMe {
+                                    Text("Me")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityIdentifier("Me.\(player.name)")
+                                }
                             }
                         }
                         Spacer()

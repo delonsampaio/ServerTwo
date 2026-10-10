@@ -20,15 +20,19 @@ final class GoldenPathUITests: XCTestCase {
         app.tabBars.buttons["Play"].tap()
 
         // MatchSetupView is a Form (List-backed), which lazily renders rows —
-        // "Flip Coin"/"Start Match" are below the fold on first layout and
-        // genuinely not yet in the accessibility tree until scrolled into view.
-        let flipCoinButton = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton, in: app)
-        flipCoinButton.tap()
-
+        // "Start Match" is below the fold on first layout and genuinely not
+        // yet in the accessibility tree until scrolled into view.
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
+
+        // Who serves first is decided on its own screen now, not in Setup.
+        let flipCoinButton = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton.waitForExistence(timeout: 2))
+        flipCoinButton.tap()
+        let beginMatchButton = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 2))
+        beginMatchButton.tap()
 
         let teamAZone = app.buttons["scoreZone.teamA"]
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))

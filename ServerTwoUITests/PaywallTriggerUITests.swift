@@ -1,9 +1,9 @@
 import XCTest
 
 final class PaywallTriggerUITests: XCTestCase {
-    /// Plays and finishes one full match (flip coin → start → score to an
-    /// 11-point win → confirm finish) from a fresh MatchSetupView, leaving
-    /// the app back at MatchSetupView with `match == nil`. Mirrors
+    /// Plays and finishes one full match (start → flip coin → begin → score
+    /// to an 11-point win → confirm finish) from a fresh MatchSetupView,
+    /// leaving the app back at MatchSetupView with `match == nil`. Mirrors
     /// GoldenPathUITests' sequence; not shared via a helper since the two
     /// files' existing minor duplication is already a tracked, deferred
     /// finding — adding a third copy here doesn't change that calculus.
@@ -14,13 +14,16 @@ final class PaywallTriggerUITests: XCTestCase {
         // tab, only MatchSetupView's own @State resets.
         app.tabBars.buttons["Play"].tap()
 
-        let flipCoinButton = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton, in: app)
-        flipCoinButton.tap()
-
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
+
+        let flipCoinButton = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton.waitForExistence(timeout: 2))
+        flipCoinButton.tap()
+        let beginMatchButton = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 2))
+        beginMatchButton.tap()
 
         let teamAZone = app.buttons["scoreZone.teamA"]
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
@@ -51,27 +54,32 @@ final class PaywallTriggerUITests: XCTestCase {
         playAndFinishOneMatch(in: app)
 
         // Back at a fresh MatchSetupView (match cleared by finishMatch()).
-        // Flipping again is required: MatchSetupView's @State resets when
-        // RootTabView swaps it back in after ScoringView tears down.
-        let flipCoinButton2 = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton2, in: app)
-        flipCoinButton2.tap()
-
+        // The paywall gate lives entirely in Setup's "Start Match" handler
+        // (`canStartNewMatch`), before anything is ever staged — so a
+        // blocked attempt never reaches the coin-flip screen at all.
         let startMatchButton2 = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton2, in: app)
         startMatchButton2.tap()
 
         let unlockButton = app.buttons["Unlock Pro — $1.99"]
         XCTAssertTrue(unlockButton.waitForExistence(timeout: 2), "Starting a second match should show the paywall once the free demo match is used up")
+        XCTAssertFalse(app.buttons["Flip Coin"].exists, "The paywall should block the match from ever staging, so the coin-flip screen should never appear")
         XCTAssertFalse(app.buttons["scoreZone.teamA"].exists, "The paywall should block the match from actually starting")
 
         unlockButton.tap()
 
         // Unlocking dismisses the paywall sheet but doesn't auto-start the
-        // match — tapping "Start Match" again should now succeed.
+        // match — tapping "Start Match" again should now succeed and reach
+        // the coin-flip screen.
         scrollUntilVisible(startMatchButton2, in: app)
         startMatchButton2.tap()
-        XCTAssertTrue(app.buttons["scoreZone.teamA"].waitForExistence(timeout: 2), "Start Match should succeed once Pro is unlocked")
+        let flipCoinButton2 = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton2.waitForExistence(timeout: 2), "Start Match should succeed once Pro is unlocked")
+        flipCoinButton2.tap()
+        let beginMatchButton2 = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton2.waitForExistence(timeout: 2))
+        beginMatchButton2.tap()
+        XCTAssertTrue(app.buttons["scoreZone.teamA"].waitForExistence(timeout: 2))
     }
 
     func testDismissingPaywallWithoutUnlockingLeavesMatchSetupUsableAndReshowsThePaywallOnRetry() throws {
@@ -82,10 +90,6 @@ final class PaywallTriggerUITests: XCTestCase {
         dismissOnboardingIfPresented(app)
 
         playAndFinishOneMatch(in: app)
-
-        let flipCoinButton2 = app.buttons["Flip Coin"]
-        scrollUntilVisible(flipCoinButton2, in: app)
-        flipCoinButton2.tap()
 
         let startMatchButton2 = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton2, in: app)

@@ -1,4 +1,6 @@
 import SwiftUI
+import SwiftData
+import PickleballKit
 
 /// Shown once at first launch. Deliberately a single screen, not a paged
 /// flow — of the three original onboarding pages, only this rule carried
@@ -6,8 +8,17 @@ import SwiftUI
 /// were pure friction). The full rulebook lives in Settings' "How to Play
 /// Pickleball" instead, which is a comprehensive reference rather than a
 /// one-time interruption.
+///
+/// The optional name field below is the one addition to that minimal
+/// philosophy: without it, the only way to get personal stats working is
+/// to type your name into a match, then separately discover Settings →
+/// Manage Players → "Set as Me." Leaving it blank costs nothing — "Done"
+/// behaves exactly as before — so it doesn't reintroduce the friction
+/// this screen was trimmed to avoid.
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var yourName: String = ""
 
     var body: some View {
         NavigationStack {
@@ -28,19 +39,42 @@ struct OnboardingView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
                 Spacer()
+                VStack(spacing: 8) {
+                    TextField("Your Name (Optional)", text: $yourName)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("Your Name")
+                    Text("Set this once so your personal win/loss record starts tracking automatically.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal)
                 Spacer()
             }
             .padding()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityIdentifier("Done")
+                    Button("Done") {
+                        saveYourNameIfProvided()
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("Done")
                 }
             }
         }
+    }
+
+    private func saveYourNameIfProvided() {
+        let trimmed = yourName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let repository = MatchRepository(modelContext: modelContext)
+        guard let player = try? repository.upsertSavedPlayer(name: trimmed) else { return }
+        try? repository.setMePlayer(player)
     }
 }
 
 #Preview {
     OnboardingView()
+        .modelContainer(try! PersistenceContainer.makeInMemoryContainer())
 }

@@ -7,6 +7,8 @@ enum AppTab: Hashable {
 struct RootTabView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
     @State private var selectedTab: AppTab
+    @State private var pendingRematch: RematchRequest?
+    @State private var pendingQuickStart: QuickStartRequest?
 
     /// `initialTab` is computed once by `MyApp` (which already holds
     /// `ActiveMatchController` directly, not via `@Environment`) and passed
@@ -21,7 +23,7 @@ struct RootTabView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
-                HomeView(onNewMatch: { selectedTab = .play })
+                HomeView(onNewMatch: { selectedTab = .play }, onRematch: startRematch, onQuickStart: startQuickStart)
             }
             .tabItem { Label("Home", systemImage: "house.fill") }
             .tag(AppTab.home)
@@ -33,7 +35,7 @@ struct RootTabView: View {
             .tag(AppTab.play)
 
             NavigationStack {
-                MatchHistoryListView()
+                MatchHistoryListView(onRematch: startRematch)
             }
             .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
             .tag(AppTab.history)
@@ -50,8 +52,27 @@ struct RootTabView: View {
     private var playTabContent: some View {
         if activeMatchController.match != nil {
             ScoringView()
+        } else if let setup = activeMatchController.pendingMatchSetup {
+            // "Start Match" was tapped, but who serves first isn't decided
+            // yet — `PickleballMatch` can't be created without that.
+            CoinFlipView(setup: setup)
         } else {
-            MatchSetupView()
+            MatchSetupView(
+                pendingRematch: pendingRematch,
+                onPrefillConsumed: { pendingRematch = nil },
+                pendingQuickStart: pendingQuickStart,
+                onQuickStartConsumed: { pendingQuickStart = nil }
+            )
         }
+    }
+
+    private func startRematch(_ request: RematchRequest) {
+        pendingRematch = request
+        selectedTab = .play
+    }
+
+    private func startQuickStart(_ request: QuickStartRequest) {
+        pendingQuickStart = request
+        selectedTab = .play
     }
 }

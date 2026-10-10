@@ -11,4 +11,10 @@ public enum WinningScore: Int, Codable, Sendable, CaseIterable {
     public var sideSwitchThreshold: Int {
         (rawValue + 1) / 2
     }
+
+    /// Per USA Pickleball Rule 10.A: two 1-minute timeouts per team for
+    /// games to 11 or 15, three for games to 21.
+    public var standardTimeoutsPerTeam: Int {
+        self == .twentyOne ? 3 : 2
+    }
 }

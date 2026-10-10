@@ -334,6 +334,38 @@ public final class MatchRepository {
         return (wins, losses, pointsFor, pointsAgainst)
     }
 
+    /// Consecutive wins for `player`, counting backward from the most
+    /// recent match they appear in and stopping at the first loss. `matches`
+    /// must already be sorted most-recent-first, as `fetchMatchHistory()`
+    /// returns them — a pure computation over already-fetched data, same as
+    /// `personalRecord`.
+    public func winStreak(for player: SavedPlayer, in matches: [MatchRecord]) -> Int {
+        var streak = 0
+        for match in matches {
+            guard let mySide = (match.teamSides ?? []).first(where: { side in
+                (side.players ?? []).contains { $0.id == player.id }
+            }) else { continue }
+            guard mySide.team == match.winningTeam else { break }
+            streak += 1
+        }
+        return streak
+    }
+
+    /// `player`'s most-recent-first win/loss results, capped at `limit`
+    /// matches (fewer if they haven't played that many). `true` = win.
+    /// `matches` must already be sorted most-recent-first.
+    public func recentForm(for player: SavedPlayer, in matches: [MatchRecord], limit: Int = 5) -> [Bool] {
+        var results: [Bool] = []
+        for match in matches {
+            guard results.count < limit else { break }
+            guard let mySide = (match.teamSides ?? []).first(where: { side in
+                (side.players ?? []).contains { $0.id == player.id }
+            }) else { continue }
+            results.append(mySide.team == match.winningTeam)
+        }
+        return results
+    }
+
     /// Deletes every completed match. Cascades to each match's `TeamSide`,
     /// `GameRecord`, and `PointEvent` rows via their `.cascade` delete rules.
     public func deleteAllMatchHistory() throws {

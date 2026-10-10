@@ -17,8 +17,8 @@ extension XCTestCase {
     }
 
     /// `MatchSetupView`'s Form lazily renders off-screen rows, so an element
-    /// further down (e.g. "Flip Coin", "Start Match") may not exist in the
-    /// accessibility tree until scrolled into view.
+    /// further down (e.g. "Start Match") may not exist in the accessibility
+    /// tree until scrolled into view.
     ///
     /// Asserts on the way out: a genuinely-missing element otherwise surfaced
     /// as a confusing failure at the caller's later `.tap()` rather than here.

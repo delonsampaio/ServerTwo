@@ -7,6 +7,33 @@ enum ActiveMatchControllerError: Error, Equatable {
     case noActiveMatch
 }
 
+/// A live match's full in-memory state — bundled together (rather than kept
+/// as separate optional properties on the controller) so `finishMatch()` and
+/// `persistSnapshot()` can't observe a half-populated combination, e.g. a
+/// `match` with no `startedAt`.
+private struct ActiveMatchInfo {
+    let match: PickleballMatch
+    let startedAt: Date
+    let teamAName: String
+    let teamBName: String
+    /// Ids, never `SavedPlayer` objects — see `PendingMatchSetup`'s doc
+    /// comment for why.
+    let teamAPlayerIDs: [UUID]
+    let teamBPlayerIDs: [UUID]
+}
+
+/// The match lifecycle end to end: nothing going on, a setup staged but
+/// awaiting the first-serve coin flip, or a live scoring match. Modeled as
+/// one enum rather than independent optionals (`match: PickleballMatch?`
+/// alongside `pendingSetup: PendingMatchSetup?`) so an impossible
+/// combination — both set at once, or a match with no start time — simply
+/// can't be represented.
+private enum MatchLifecycleState {
+    case idle
+    case staged(PendingMatchSetup)
+    case active(ActiveMatchInfo)
+}
+
 /// Owns the one live `PickleballMatch`, wraps `MatchRepository`, and is the
 /// single place that persists an in-progress snapshot after every mutation.
 /// `@MainActor` because this is the first real UI call site for
@@ -20,18 +47,31 @@ final class ActiveMatchController {
         static let activeTeamBName = "activeMatchTeamBName"
     }
 
-    private(set) var match: PickleballMatch?
-    private(set) var teamAName: String = "Team A"
-    private(set) var teamBName: String = "Team B"
-    private var startedAt: Date?
-    /// Ids, never `SavedPlayer` objects: this controller's `ModelContext`
-    /// is NOT the one `.modelContainer(_:)` injects into views (see
-    /// `MyApp.init`), so holding a view-context object here and relating it
-    /// into a `TeamSide` inserted in this context would be a cross-context
-    /// relationship assignment. A `UUID` is a plain value with no context
-    /// affinity; `finishMatch()` re-resolves it in this context instead.
-    private var teamAPlayerIDs: [UUID] = []
-    private var teamBPlayerIDs: [UUID] = []
+    private var lifecycleState: MatchLifecycleState = .idle
+
+    var match: PickleballMatch? {
+        if case .active(let info) = lifecycleState { return info.match }
+        return nil
+    }
+
+    /// Non-nil exactly when a match has been staged (Setup's "Start Match"
+    /// was tapped) but the first-serve coin flip hasn't resolved yet — the
+    /// signal `RootTabView` uses to show the coin-flip screen instead of
+    /// either Setup or live scoring.
+    var pendingMatchSetup: PendingMatchSetup? {
+        if case .staged(let setup) = lifecycleState { return setup }
+        return nil
+    }
+
+    var teamAName: String {
+        if case .active(let info) = lifecycleState { return info.teamAName }
+        return "Team A"
+    }
+
+    var teamBName: String {
+        if case .active(let info) = lifecycleState { return info.teamBName }
+        return "Team B"
+    }
 
     private let repository: MatchRepository
     private let userDefaults: UserDefaults
@@ -65,38 +105,63 @@ final class ActiveMatchController {
     }
 
     func resumeIfNeeded() {
-        guard match == nil else { return }
+        guard case .idle = lifecycleState else { return }
         guard let resumed = try? repository.loadInProgressMatch(proUnlocked: proUnlocked, demoPointCap: nil) else { return }
-        match = resumed.match
-        startedAt = resumed.startedAt
-        teamAName = userDefaults.string(forKey: Keys.activeTeamAName) ?? "Team A"
-        teamBName = userDefaults.string(forKey: Keys.activeTeamBName) ?? "Team B"
+        // A crash/relaunch during the coin-flip screen (staged, not yet
+        // active) loses that staged setup — only an active match's snapshot
+        // is ever persisted, same accepted trade-off as this feature's
+        // design. Player attribution is similarly not recoverable across a
+        // resume — matches `teamAPlayerIDs`/`teamBPlayerIDs`' pre-existing
+        // crash-resume limitation.
+        lifecycleState = .active(ActiveMatchInfo(
+            match: resumed.match,
+            startedAt: resumed.startedAt,
+            teamAName: userDefaults.string(forKey: Keys.activeTeamAName) ?? "Team A",
+            teamBName: userDefaults.string(forKey: Keys.activeTeamBName) ?? "Team B",
+            teamAPlayerIDs: [],
+            teamBPlayerIDs: []
+        ))
     }
 
-    func startNewMatch(
-        configuration: GameConfiguration,
-        matchFormat: MatchFormat,
-        firstServingTeam: Team,
-        teamAName: String,
-        teamBName: String,
-        teamAPlayers: [SavedPlayer] = [],
-        teamBPlayers: [SavedPlayer] = []
-    ) {
-        self.teamAName = teamAName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Team A" : teamAName
-        self.teamBName = teamBName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Team B" : teamBName
-        self.teamAPlayerIDs = teamAPlayers.map(\.id)
-        self.teamBPlayerIDs = teamBPlayers.map(\.id)
-        userDefaults.set(self.teamAName, forKey: Keys.activeTeamAName)
-        userDefaults.set(self.teamBName, forKey: Keys.activeTeamBName)
+    /// Captures everything Setup decided except who serves first —
+    /// `PickleballMatch` can't be created without that. `RootTabView` shows
+    /// the coin-flip screen whenever `pendingMatchSetup` is non-nil; that
+    /// screen calls `confirmFirstServe` once a result is in.
+    func stageMatch(_ setup: PendingMatchSetup) {
+        lifecycleState = .staged(setup)
+    }
 
-        match = PickleballMatch(
-            configuration: configuration,
-            matchFormat: matchFormat,
+    /// Backs out of a staged (not-yet-flipped) match, e.g. the user wants
+    /// to go back and change something in Setup. Nothing was ever
+    /// persisted at this point, so this is a pure in-memory reset.
+    func cancelPendingMatch() {
+        guard case .staged = lifecycleState else { return }
+        lifecycleState = .idle
+    }
+
+    /// Turns a staged setup into a real, scoring `PickleballMatch` — called
+    /// once the coin flip (or a manual "Team A/B Won Spin" override)
+    /// determines who serves first. A no-op if nothing is staged.
+    func confirmFirstServe(_ firstServingTeam: Team) {
+        guard case .staged(let setup) = lifecycleState else { return }
+        userDefaults.set(setup.resolvedTeamAName, forKey: Keys.activeTeamAName)
+        userDefaults.set(setup.resolvedTeamBName, forKey: Keys.activeTeamBName)
+
+        let match = PickleballMatch(
+            configuration: setup.configuration,
+            matchFormat: setup.matchFormat,
             firstServingTeam: firstServingTeam,
             proUnlocked: proUnlocked,
             demoPointCap: nil
         )
-        startedAt = Date()
+        lifecycleState = .active(ActiveMatchInfo(
+            match: match,
+            startedAt: Date(),
+            teamAName: setup.resolvedTeamAName,
+            teamBName: setup.resolvedTeamBName,
+            teamAPlayerIDs: setup.teamAPlayerIDs,
+            teamBPlayerIDs: setup.teamBPlayerIDs
+        ))
         persistSnapshot()
     }
 
@@ -131,34 +196,31 @@ final class ActiveMatchController {
 
     @discardableResult
     func finishMatch() throws -> MatchRecord {
-        guard let match, let startedAt else {
+        guard case .active(let info) = lifecycleState else {
             throw ActiveMatchControllerError.noActiveMatch
         }
-        let teamAPlayers = try repository.fetchSavedPlayers(ids: teamAPlayerIDs)
-        let teamBPlayers = try repository.fetchSavedPlayers(ids: teamBPlayerIDs)
+        let teamAPlayers = try repository.fetchSavedPlayers(ids: info.teamAPlayerIDs)
+        let teamBPlayers = try repository.fetchSavedPlayers(ids: info.teamBPlayerIDs)
         let record = try repository.saveCompletedMatch(
-            match,
-            teamAName: teamAName,
-            teamBName: teamBName,
-            startedAt: startedAt,
+            info.match,
+            teamAName: info.teamAName,
+            teamBName: info.teamBName,
+            startedAt: info.startedAt,
             teamAPlayers: teamAPlayers,
             teamBPlayers: teamBPlayers
         )
-        self.match = nil
-        self.startedAt = nil
-        self.teamAPlayerIDs = []
-        self.teamBPlayerIDs = []
+        lifecycleState = .idle
         userDefaults.removeObject(forKey: Keys.activeTeamAName)
         userDefaults.removeObject(forKey: Keys.activeTeamBName)
         return record
     }
 
-    /// Test-only: discards any live/resumed match and its persisted
-    /// snapshot, so a UI test starts from a guaranteed-clean slate
-    /// regardless of what a previous run or app session left behind.
+    /// Test-only: discards any live/resumed match or staged-but-unflipped
+    /// setup, plus any persisted snapshot, so a UI test starts from a
+    /// guaranteed-clean slate regardless of what a previous run or app
+    /// session left behind.
     func clearAnyInProgressMatchForTesting() {
-        match = nil
-        startedAt = nil
+        lifecycleState = .idle
         try? repository.clearInProgressSnapshot()
     }
 
@@ -170,7 +232,7 @@ final class ActiveMatchController {
     }
 
     private func persistSnapshot() {
-        guard let match, let startedAt else { return }
-        try? repository.saveInProgressSnapshot(for: match, startedAt: startedAt)
+        guard case .active(let info) = lifecycleState else { return }
+        try? repository.saveInProgressSnapshot(for: info.match, startedAt: info.startedAt)
     }
 }

@@ -14,17 +14,36 @@ final class ActiveMatchControllerTests: XCTestCase {
         return (controller, defaults)
     }
 
+    /// Mirrors the real flow (Setup stages, the coin-flip screen confirms)
+    /// in one call, since most of these tests care about the end state, not
+    /// the two-step sequence itself — that sequence has its own dedicated
+    /// tests below.
+    private func start(
+        _ controller: ActiveMatchController,
+        configuration: GameConfiguration = GameConfiguration(),
+        matchFormat: MatchFormat = .bestOfOne,
+        firstServingTeam: Team = .teamA,
+        teamAName: String,
+        teamBName: String,
+        teamAPlayers: [SavedPlayer] = [],
+        teamBPlayers: [SavedPlayer] = []
+    ) {
+        controller.stageMatch(PendingMatchSetup(
+            configuration: configuration,
+            matchFormat: matchFormat,
+            teamAName: teamAName,
+            teamBName: teamBName,
+            teamAPlayerIDs: teamAPlayers.map(\.id),
+            teamBPlayerIDs: teamBPlayers.map(\.id)
+        ))
+        controller.confirmFirstServe(firstServingTeam)
+    }
+
     func testStartNewMatchCreatesLiveMatchWithGivenNamesAndPersistsSnapshot() throws {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        controller.startNewMatch(
-            configuration: GameConfiguration(),
-            matchFormat: .bestOfOne,
-            firstServingTeam: .teamA,
-            teamAName: "The Smashers",
-            teamBName: "Net Ninjas"
-        )
+        start(controller, teamAName: "The Smashers", teamBName: "Net Ninjas")
         XCTAssertNotNil(controller.match)
         XCTAssertEqual(controller.teamAName, "The Smashers")
         XCTAssertEqual(controller.teamBName, "Net Ninjas")
@@ -33,7 +52,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         // assert the in-memory state.
         let reread = try MatchRepository(modelContext: ModelContext(container))
             .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: nil)
-        XCTAssertNotNil(reread, "startNewMatch should persist an in-progress snapshot immediately")
+        XCTAssertNotNil(reread, "confirmFirstServe should persist an in-progress snapshot immediately")
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 0)
         XCTAssertEqual(reread?.match.currentGame.state.teamBScore, 0)
         XCTAssertEqual(reread?.match.currentGame.state.servingTeam, .teamA)
@@ -41,15 +60,60 @@ final class ActiveMatchControllerTests: XCTestCase {
 
     func testStartNewMatchFallsBackToDefaultNamesWhenBlank() throws {
         let (controller, _) = try makeController()
-        controller.startNewMatch(
-            configuration: GameConfiguration(),
-            matchFormat: .bestOfOne,
-            firstServingTeam: .teamA,
-            teamAName: "   ",
-            teamBName: ""
-        )
+        start(controller, teamAName: "   ", teamBName: "")
         XCTAssertEqual(controller.teamAName, "Team A")
         XCTAssertEqual(controller.teamBName, "Team B")
+    }
+
+    func testStageMatchSetsPendingMatchSetupWithoutCreatingAMatch() throws {
+        let (controller, _) = try makeController()
+        controller.stageMatch(PendingMatchSetup(
+            configuration: GameConfiguration(),
+            matchFormat: .bestOfOne,
+            teamAName: "A",
+            teamBName: "B",
+            teamAPlayerIDs: [],
+            teamBPlayerIDs: []
+        ))
+        XCTAssertNotNil(controller.pendingMatchSetup, "stageMatch should make the coin-flip screen appear")
+        XCTAssertNil(controller.match, "PickleballMatch can't exist yet — firstServingTeam isn't decided")
+    }
+
+    func testConfirmFirstServeTurnsAStagedSetupIntoALiveMatch() throws {
+        let (controller, _) = try makeController()
+        controller.stageMatch(PendingMatchSetup(
+            configuration: GameConfiguration(),
+            matchFormat: .bestOfOne,
+            teamAName: "A",
+            teamBName: "B",
+            teamAPlayerIDs: [],
+            teamBPlayerIDs: []
+        ))
+        controller.confirmFirstServe(.teamB)
+        XCTAssertNil(controller.pendingMatchSetup, "The staged setup should be consumed")
+        XCTAssertNotNil(controller.match)
+        XCTAssertEqual(controller.match?.currentGame.state.servingTeam, .teamB)
+    }
+
+    func testConfirmFirstServeIsANoOpWithNothingStaged() throws {
+        let (controller, _) = try makeController()
+        controller.confirmFirstServe(.teamA)
+        XCTAssertNil(controller.match, "Confirming with nothing staged must not conjure a match out of nowhere")
+    }
+
+    func testCancelPendingMatchDiscardsTheStagedSetup() throws {
+        let (controller, _) = try makeController()
+        controller.stageMatch(PendingMatchSetup(
+            configuration: GameConfiguration(),
+            matchFormat: .bestOfOne,
+            teamAName: "A",
+            teamBName: "B",
+            teamAPlayerIDs: [],
+            teamBPlayerIDs: []
+        ))
+        controller.cancelPendingMatch()
+        XCTAssertNil(controller.pendingMatchSetup)
+        XCTAssertNil(controller.match)
     }
 
     func testResumeIfNeededRestoresMatchStartedAtAndNames() throws {
@@ -58,13 +122,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
 
         let first = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        first.startNewMatch(
-            configuration: GameConfiguration(),
-            matchFormat: .bestOfThree,
-            firstServingTeam: .teamA,
-            teamAName: "The Smashers",
-            teamBName: "Net Ninjas"
-        )
+        start(first, matchFormat: .bestOfThree, teamAName: "The Smashers", teamBName: "Net Ninjas")
         first.recordPoint(for: .teamA)
         first.recordPoint(for: .teamA)
 
@@ -76,15 +134,33 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertEqual(resumed.teamBName, "Net Ninjas")
     }
 
-    func testResumeIfNeededDoesNothingWhenAlreadyHasALiveMatch() throws {
-        let (controller, _) = try makeController()
-        controller.startNewMatch(
+    /// A staged-but-not-yet-flipped match is never persisted — only an
+    /// active match's snapshot is. Accepted trade-off: a crash/relaunch
+    /// during the coin-flip screen loses that staged setup, same as it
+    /// always lost player attribution across a resume.
+    func testResumeIfNeededDoesNotRestoreAStagedButUnconfirmedMatch() throws {
+        let suite = UUID().uuidString
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let defaults = UserDefaults(suiteName: suite)!
+
+        let first = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        first.stageMatch(PendingMatchSetup(
             configuration: GameConfiguration(),
             matchFormat: .bestOfOne,
-            firstServingTeam: .teamA,
             teamAName: "A",
-            teamBName: "B"
-        )
+            teamBName: "B",
+            teamAPlayerIDs: [],
+            teamBPlayerIDs: []
+        ))
+
+        let resumed = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        XCTAssertNil(resumed.match)
+        XCTAssertNil(resumed.pendingMatchSetup, "A staged setup is in-memory only and must not resurface after a relaunch")
+    }
+
+    func testResumeIfNeededDoesNothingWhenAlreadyHasALiveMatch() throws {
+        let (controller, _) = try makeController()
+        start(controller, teamAName: "A", teamBName: "B")
         let matchBeforeResume = controller.match
         controller.resumeIfNeeded()
         XCTAssertTrue(controller.match === matchBeforeResume)
@@ -95,7 +171,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        controller.startNewMatch(configuration: GameConfiguration(), matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        start(controller, teamAName: "A", teamBName: "B")
         controller.recordPoint(for: .teamA)
 
         let reread = try MatchRepository(modelContext: ModelContext(container))
@@ -108,7 +184,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        controller.startNewMatch(configuration: GameConfiguration(), matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        start(controller, teamAName: "A", teamBName: "B")
         controller.recordPoint(for: .teamA)
         controller.undo()
 
@@ -122,7 +198,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        controller.startNewMatch(configuration: GameConfiguration(), matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        start(controller, teamAName: "A", teamBName: "B")
         controller.correctScore(team: .teamA, to: 7)
 
         let reread = try MatchRepository(modelContext: ModelContext(container))
@@ -133,26 +209,14 @@ final class ActiveMatchControllerTests: XCTestCase {
     func testRequestTimeoutPersistsSnapshotOnlyWhenTimeoutActuallyStarts() throws {
         // Negative path: no timeouts available, so nothing starts.
         let (controller, _) = try makeController()
-        controller.startNewMatch(
-            configuration: GameConfiguration(timeoutsPerTeam: 0),
-            matchFormat: .bestOfOne,
-            firstServingTeam: .teamA,
-            teamAName: "A",
-            teamBName: "B"
-        )
+        start(controller, configuration: GameConfiguration(timeoutsPerTeam: 0), teamAName: "A", teamBName: "B")
         XCTAssertFalse(controller.requestTimeout(for: .teamA))
 
         // Positive path: a timeout that actually starts must be persisted.
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let withTimeouts = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        withTimeouts.startNewMatch(
-            configuration: GameConfiguration(timeoutsPerTeam: 2),
-            matchFormat: .bestOfOne,
-            firstServingTeam: .teamA,
-            teamAName: "A",
-            teamBName: "B"
-        )
+        start(withTimeouts, configuration: GameConfiguration(timeoutsPerTeam: 2), teamAName: "A", teamBName: "B")
         XCTAssertTrue(withTimeouts.requestTimeout(for: .teamA))
         XCTAssertEqual(withTimeouts.match?.currentGame.state.teamATimeoutsRemaining, 1)
 
@@ -171,7 +235,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
-        controller.startNewMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        start(controller, configuration: config, teamAName: "A", teamBName: "B")
         for _ in 1...11 { controller.recordPoint(for: .teamA) }
 
         let record = try controller.finishMatch()
@@ -188,7 +252,7 @@ final class ActiveMatchControllerTests: XCTestCase {
 
     func testFinishMatchThrowsAndLeavesMatchIntactWhenMatchNotOver() throws {
         let (controller, _) = try makeController()
-        controller.startNewMatch(configuration: GameConfiguration(), matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        start(controller, teamAName: "A", teamBName: "B")
         controller.recordPoint(for: .teamA)
 
         XCTAssertThrowsError(try controller.finishMatch()) { error in
@@ -203,7 +267,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertTrue(controller.canStartNewMatch, "A free user with no match history yet should be able to start one")
 
         let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
-        controller.startNewMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        start(controller, configuration: config, teamAName: "A", teamBName: "B")
         for _ in 1...11 { controller.recordPoint(for: .teamA) }
         _ = try controller.finishMatch()
 
@@ -217,7 +281,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         controller.demoMatchLimit = 1
 
         let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
-        controller.startNewMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, teamAName: "A", teamBName: "B")
+        start(controller, configuration: config, teamAName: "A", teamBName: "B")
         for _ in 1...11 { controller.recordPoint(for: .teamA) }
         _ = try controller.finishMatch()
         XCTAssertFalse(controller.canStartNewMatch)
@@ -246,14 +310,7 @@ final class ActiveMatchControllerTests: XCTestCase {
             modelContext: ModelContext(container),
             userDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
-        controller.startNewMatch(
-            configuration: GameConfiguration(),
-            matchFormat: .bestOfOne,
-            firstServingTeam: .teamA,
-            teamAName: "Alice",
-            teamBName: "Opponent",
-            teamAPlayers: [alice]
-        )
+        start(controller, teamAName: "Alice", teamBName: "Opponent", teamAPlayers: [alice])
         for _ in 1...11 { controller.recordPoint(for: .teamA) }
         let record = try controller.finishMatch()
 
@@ -275,14 +332,7 @@ final class ActiveMatchControllerTests: XCTestCase {
             modelContext: ModelContext(container),
             userDefaults: UserDefaults(suiteName: UUID().uuidString)!
         )
-        controller.startNewMatch(
-            configuration: GameConfiguration(),
-            matchFormat: .bestOfOne,
-            firstServingTeam: .teamA,
-            teamAName: "Alice",
-            teamBName: "Opponent",
-            teamAPlayers: [alice]
-        )
+        start(controller, teamAName: "Alice", teamBName: "Opponent", teamAPlayers: [alice])
 
         // Alice is deleted (e.g. via Manage Players) while the match is
         // still in progress, through the SAME context that created her —
