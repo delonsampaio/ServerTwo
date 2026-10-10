@@ -15,6 +15,10 @@ final class GoldenPathUITests: XCTestCase {
 
         dismissOnboardingIfPresented(app)
 
+        // Home is now the default landing tab (with no active match); switch
+        // to Play to reach MatchSetupView.
+        app.tabBars.buttons["Play"].tap()
+
         // MatchSetupView is a Form (List-backed), which lazily renders rows —
         // "Flip Coin"/"Start Match" are below the fold on first layout and
         // genuinely not yet in the accessibility tree until scrolled into view.

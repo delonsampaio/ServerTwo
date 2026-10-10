@@ -8,6 +8,12 @@ final class PaywallTriggerUITests: XCTestCase {
     /// files' existing minor duplication is already a tracked, deferred
     /// finding — adding a third copy here doesn't change that calculus.
     private func playAndFinishOneMatch(in app: XCUIApplication) {
+        // Home is the default landing tab (with no active match); switch to
+        // Play to reach MatchSetupView. Only needed here, not after this
+        // match finishes — finishing doesn't change RootTabView's selected
+        // tab, only MatchSetupView's own @State resets.
+        app.tabBars.buttons["Play"].tap()
+
         let flipCoinButton = app.buttons["Flip Coin"]
         scrollUntilVisible(flipCoinButton, in: app)
         flipCoinButton.tap()

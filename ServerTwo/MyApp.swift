@@ -23,7 +23,7 @@ struct MyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootTabView()
+            RootTabView(initialTab: activeMatchController.match != nil ? .play : .home)
                 .environment(activeMatchController)
                 .environment(appSettings)
                 .modelContainer(modelContainer)

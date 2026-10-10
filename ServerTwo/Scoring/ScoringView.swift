@@ -132,7 +132,7 @@ struct ScoringView: View {
         } message: {
             Text(finishErrorMessage ?? "")
         }
-        .confirmationDialog("Finish Match?", isPresented: $showingFinishConfirmation, titleVisibility: .visible) {
+        .alert("Finish Match?", isPresented: $showingFinishConfirmation) {
             Button("Confirm Finish") {
                 // A save failure used to be swallowed by `try?`, leaving the
                 // user stuck on a finished match with no feedback at all.
