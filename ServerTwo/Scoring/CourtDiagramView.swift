@@ -33,8 +33,10 @@ struct CourtDiagramView: View {
             )
             .overlay {
                 if isServingHalf {
-                    Circle()
-                        .fill(Color.accentColor)
+                    Image("ServeIndicator")
+                        .resizable()
+                        .renderingMode(.template)
+                        .foregroundStyle(Color.accentColor)
                         .frame(width: 14, height: 14)
                 }
             }
