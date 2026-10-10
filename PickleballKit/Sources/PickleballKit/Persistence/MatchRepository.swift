@@ -159,18 +159,47 @@ public final class MatchRepository {
         try modelContext.fetch(FetchDescriptor<SavedPlayer>())
     }
 
+    /// Deterministic even if more than one row has `isMe == true` — e.g.
+    /// transiently, between a CloudKit sync and the next `setMePlayer`
+    /// call that self-heals it. Ties break by `id` so two reads of the
+    /// same (even if momentarily inconsistent) data always agree.
     public func fetchMePlayer() throws -> SavedPlayer? {
-        try fetchAllSavedPlayers().first { $0.isMe }
+        try fetchAllSavedPlayers()
+            .filter { $0.isMe }
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+            .first
     }
 
-    /// Finds-or-creates a `SavedPlayer` by exact, trimmed, case-sensitive
-    /// name match. Returns `nil` for blank/whitespace-only input without
+    /// Re-resolves `SavedPlayer`s by id in THIS repository's own context,
+    /// silently dropping any id that no longer resolves (e.g. the player
+    /// was deleted from Manage Players while a match was in progress).
+    /// Exists so `ActiveMatchController` never carries a `SavedPlayer`
+    /// object across a `ModelContext` boundary — see the final
+    /// whole-branch review, Critical #1/#2.
+    public func fetchSavedPlayers(ids: [UUID]) throws -> [SavedPlayer] {
+        guard !ids.isEmpty else { return [] }
+        let byID = Dictionary(uniqueKeysWithValues: try fetchAllSavedPlayers().map { ($0.id, $0) })
+        return ids.compactMap { byID[$0] }
+    }
+
+    /// Finds-or-creates a `SavedPlayer` by trimmed, case-INSENSITIVE name
+    /// match (typing "mike" must find the existing "Mike" — otherwise a
+    /// lowercase habit silently creates a second identity and, worst
+    /// case, a match never counts toward "Your Record" if the real "Me"
+    /// player was the one typed in the wrong case). The first-saved
+    /// casing is canonical; later upserts that only differ by case reuse
+    /// the existing row's `name` as-is. Different real people who happen
+    /// to share a name are a separate, accepted non-goal (see spec §3) —
+    /// this only collapses case variants of what is meant to be the same
+    /// string. Returns `nil` for blank/whitespace-only input without
     /// creating anything — callers must never upsert an empty field.
     @discardableResult
     public func upsertSavedPlayer(name: String) throws -> SavedPlayer? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if let existing = try fetchAllSavedPlayers().first(where: { $0.name == trimmed }) {
+        if let existing = try fetchAllSavedPlayers().first(where: {
+            $0.name.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) {
             return existing
         }
         let player = SavedPlayer(name: trimmed)
@@ -198,14 +227,17 @@ public final class MatchRepository {
         try modelContext.save()
     }
 
-    /// Clears `isMe` on whichever `SavedPlayer` currently holds it before
-    /// setting it on this one, so the exactly-one-"Me" invariant always
-    /// holds after this call. Only touches the one previous holder (not
-    /// every saved player) — safe because this function is the only writer
-    /// of `isMe`, so "at most one `true`" holds by induction.
+    /// Clears `isMe` on every `SavedPlayer` that currently has it (not
+    /// just the one `fetchMePlayer()` would return) before setting it on
+    /// this one. The store is CloudKit-synced, so two devices can each
+    /// independently mark a different player "Me" while offline; clearing
+    /// every holder here — rather than trusting "at most one `true`"
+    /// as an invariant maintained purely by this function being the only
+    /// writer — makes the next call on either device self-heal the store
+    /// back to exactly one, instead of compounding the divergence.
     public func setMePlayer(_ player: SavedPlayer) throws {
-        if let previousMe = try fetchMePlayer(), previousMe.id != player.id {
-            previousMe.isMe = false
+        for other in try fetchAllSavedPlayers() where other.isMe && other.id != player.id {
+            other.isMe = false
         }
         player.isMe = true
         try modelContext.save()
@@ -251,7 +283,13 @@ public final class MatchRepository {
             if lhsStats.mostRecent != rhsStats.mostRecent {
                 return lhsStats.mostRecent > rhsStats.mostRecent
             }
-            return lhsStats.timesPlayed > rhsStats.timesPlayed
+            if lhsStats.timesPlayed != rhsStats.timesPlayed {
+                return lhsStats.timesPlayed > rhsStats.timesPlayed
+            }
+            // Final tiebreak so players with identical (never-played)
+            // stats don't reshuffle between keystrokes — `sorted` is not
+            // guaranteed stable.
+            return lhs.name < rhs.name
         }
     }
 
@@ -274,10 +312,15 @@ public final class MatchRepository {
                 losses += 1
             }
 
-            let finalGame = (match.games ?? []).max(by: { $0.gameNumber < $1.gameNumber })
-            if let finalGame {
-                let myScore = mySide.team == .teamA ? finalGame.teamAFinalScore : finalGame.teamBFinalScore
-                let theirScore = mySide.team == .teamA ? finalGame.teamBFinalScore : finalGame.teamAFinalScore
+            // Sum every game in the match, not just the deciding one — a
+            // best-of-3 that went 2-1 counts all three games' points, not
+            // only the last one played. (The previous "final game only"
+            // version silently dropped 2/3 of a best-of-3's points under a
+            // label still claiming to be "Points For/Against" — found in
+            // the final whole-branch review, Important #3.)
+            for game in match.games ?? [] {
+                let myScore = mySide.team == .teamA ? game.teamAFinalScore : game.teamBFinalScore
+                let theirScore = mySide.team == .teamA ? game.teamBFinalScore : game.teamAFinalScore
                 pointsFor += myScore
                 pointsAgainst += theirScore
             }

@@ -5,7 +5,6 @@ import PickleballKit
 struct MatchSetupView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
     @Environment(\.modelContext) private var modelContext
-    @State private var suggestions: [String: [SavedPlayer]] = [:] // keyed by the field's current text
     // Bumped whenever a suggestion chip's player is deleted. Deleting a
     // SavedPlayer via `repository.deleteSavedPlayer` mutates SwiftData
     // directly and doesn't touch any @State the body reads, so without this,
@@ -20,9 +19,13 @@ struct MatchSetupView: View {
     @State private var winByTwo = true
     @State private var matchFormat: MatchFormat = .bestOfOne
     @State private var teamAPlayer1 = ""
+    @State private var teamAPlayer1ID: UUID?
     @State private var teamAPlayer2 = ""
+    @State private var teamAPlayer2ID: UUID?
     @State private var teamBPlayer1 = ""
+    @State private var teamBPlayer1ID: UUID?
     @State private var teamBPlayer2 = ""
+    @State private var teamBPlayer2ID: UUID?
     @State private var coinFlipResult: Team?
     @State private var isShowingPaywall = false
 
@@ -73,24 +76,24 @@ struct MatchSetupView: View {
             }
 
             Section("Team A") {
-                TextField(playMode == .doubles ? "Player 1" : "Player Name", text: $teamAPlayer1)
+                TextField(playMode == .doubles ? "Player 1" : "Player Name", text: trackedTextBinding(text: $teamAPlayer1, selectedID: $teamAPlayer1ID))
                     .accessibilityIdentifier("Team A Player Name")
-                suggestionChips(for: $teamAPlayer1, excluding: [])
+                suggestionChips(for: $teamAPlayer1, selectedID: $teamAPlayer1ID)
                 if playMode == .doubles {
-                    TextField("Player 2", text: $teamAPlayer2)
+                    TextField("Player 2", text: trackedTextBinding(text: $teamAPlayer2, selectedID: $teamAPlayer2ID))
                         .accessibilityIdentifier("Team A Player 2 Name")
-                    suggestionChips(for: $teamAPlayer2, excluding: [])
+                    suggestionChips(for: $teamAPlayer2, selectedID: $teamAPlayer2ID)
                 }
             }
 
             Section("Team B") {
-                TextField(playMode == .doubles ? "Player 1" : "Player Name", text: $teamBPlayer1)
+                TextField(playMode == .doubles ? "Player 1" : "Player Name", text: trackedTextBinding(text: $teamBPlayer1, selectedID: $teamBPlayer1ID))
                     .accessibilityIdentifier("Team B Player Name")
-                suggestionChips(for: $teamBPlayer1, excluding: [])
+                suggestionChips(for: $teamBPlayer1, selectedID: $teamBPlayer1ID)
                 if playMode == .doubles {
-                    TextField("Player 2", text: $teamBPlayer2)
+                    TextField("Player 2", text: trackedTextBinding(text: $teamBPlayer2, selectedID: $teamBPlayer2ID))
                         .accessibilityIdentifier("Team B Player 2 Name")
-                    suggestionChips(for: $teamBPlayer2, excluding: [])
+                    suggestionChips(for: $teamBPlayer2, selectedID: $teamBPlayer2ID)
                 }
             }
 
@@ -146,6 +149,23 @@ struct MatchSetupView: View {
         }
     }
 
+    /// Wraps a name field's binding so that any edit the user TYPES (as
+    /// opposed to a suggestion-chip tap, which writes the underlying
+    /// `$teamXPlayerN` binding directly together with `selectedID`)
+    /// clears `selectedID`. This is what lets `startMatch()` trust
+    /// "selectedID is non-nil" to mean "the text still exactly matches a
+    /// specific SavedPlayer the user selected," not merely "the text
+    /// happens to match some saved name."
+    private func trackedTextBinding(text: Binding<String>, selectedID: Binding<UUID?>) -> Binding<String> {
+        Binding(
+            get: { text.wrappedValue },
+            set: { newValue in
+                text.wrappedValue = newValue
+                selectedID.wrappedValue = nil
+            }
+        )
+    }
+
     private func startMatch() {
         guard let firstServingTeam = coinFlipResult else { return }
         let scoringFormat: ScoringFormat = scoringFormatKind == .sideOut ? .sideOut : .rally(freeze: rallyFreeze)
@@ -156,15 +176,35 @@ struct MatchSetupView: View {
             winByTwo: winByTwo
         )
         let repository = MatchRepository(modelContext: modelContext)
-        func upsertedPlayers(_ names: String...) -> [SavedPlayer] {
-            names.compactMap { try? repository.upsertSavedPlayer(name: $0) }.compactMap { $0 }
+        // Prefers the exact SavedPlayer the user selected via a
+        // suggestion chip (re-verified against the current text, in case
+        // anything slipped past `trackedTextBinding`'s invalidation) over
+        // a fresh name-based upsert — this is what correctly disambiguates
+        // two different SavedPlayers that happen to share a name (the
+        // spec's "Two Mikes" case), instead of an arbitrary name lookup.
+        func resolvedPlayer(name: String, selectedID: UUID?) -> SavedPlayer? {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let selectedID,
+               let existing = try? repository.fetchAllSavedPlayers().first(where: { $0.id == selectedID }),
+               existing.name.caseInsensitiveCompare(trimmed) == .orderedSame {
+                return existing
+            }
+            return try? repository.upsertSavedPlayer(name: name)
+        }
+        func resolvedPlayers(_ pairs: (String, UUID?)...) -> [SavedPlayer] {
+            // Dedupe by id: a doubles side with the same name typed into
+            // both fields must not double-count that one player in
+            // `timesPlayed`/stats attribution.
+            var seen = Set<UUID>()
+            return pairs.compactMap { resolvedPlayer(name: $0.0, selectedID: $0.1) }
+                .filter { seen.insert($0.id).inserted }
         }
         let teamAPlayers = playMode == .doubles
-            ? upsertedPlayers(teamAPlayer1, teamAPlayer2)
-            : upsertedPlayers(teamAPlayer1)
+            ? resolvedPlayers((teamAPlayer1, teamAPlayer1ID), (teamAPlayer2, teamAPlayer2ID))
+            : resolvedPlayers((teamAPlayer1, teamAPlayer1ID))
         let teamBPlayers = playMode == .doubles
-            ? upsertedPlayers(teamBPlayer1, teamBPlayer2)
-            : upsertedPlayers(teamBPlayer1)
+            ? resolvedPlayers((teamBPlayer1, teamBPlayer1ID), (teamBPlayer2, teamBPlayer2ID))
+            : resolvedPlayers((teamBPlayer1, teamBPlayer1ID))
         activeMatchController.startNewMatch(
             configuration: configuration,
             matchFormat: matchFormat,
@@ -177,7 +217,7 @@ struct MatchSetupView: View {
     }
 
     @ViewBuilder
-    private func suggestionChips(for field: Binding<String>, excluding: [String]) -> some View {
+    private func suggestionChips(for field: Binding<String>, selectedID: Binding<UUID?>) -> some View {
         let query = field.wrappedValue
         if !query.isEmpty {
             let repository = MatchRepository(modelContext: modelContext)
@@ -188,20 +228,16 @@ struct MatchSetupView: View {
                         ForEach(matches, id: \.id) { player in
                             Button(player.name) {
                                 field.wrappedValue = player.name
+                                selectedID.wrappedValue = player.id
                             }
                             .buttonStyle(.bordered)
                             .accessibilityIdentifier("PlayerSuggestion.\(player.name)")
-                            .swipeActions {
-                                Button("Remove", role: .destructive) {
-                                    try? repository.deleteSavedPlayer(player)
-                                    suggestionsVersion += 1
-                                }
-                            }
                             .contextMenu {
                                 Button("Remove", role: .destructive) {
                                     try? repository.deleteSavedPlayer(player)
                                     suggestionsVersion += 1
                                 }
+                                .accessibilityIdentifier("Remove")
                             }
                         }
                     }

@@ -26,6 +26,7 @@ struct SettingsView: View {
                 NavigationLink("Manage Players") {
                     ManagePlayersView()
                 }
+                .accessibilityIdentifier("Manage Players")
             }
 
             Section {

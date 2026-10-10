@@ -91,9 +91,11 @@ struct HomeView: View {
                 HStack {
                     Text("Your Record")
                         .font(.subheadline)
+                        .accessibilityIdentifier("Your Record")
                     Spacer()
                     Text("\(record.wins) - \(record.losses)")
                         .font(.headline)
+                        .accessibilityIdentifier("YourRecordValue")
                 }
             } else {
                 HStack {

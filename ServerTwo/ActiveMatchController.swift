@@ -24,8 +24,14 @@ final class ActiveMatchController {
     private(set) var teamAName: String = "Team A"
     private(set) var teamBName: String = "Team B"
     private var startedAt: Date?
-    private var teamAPlayers: [SavedPlayer] = []
-    private var teamBPlayers: [SavedPlayer] = []
+    /// Ids, never `SavedPlayer` objects: this controller's `ModelContext`
+    /// is NOT the one `.modelContainer(_:)` injects into views (see
+    /// `MyApp.init`), so holding a view-context object here and relating it
+    /// into a `TeamSide` inserted in this context would be a cross-context
+    /// relationship assignment. A `UUID` is a plain value with no context
+    /// affinity; `finishMatch()` re-resolves it in this context instead.
+    private var teamAPlayerIDs: [UUID] = []
+    private var teamBPlayerIDs: [UUID] = []
 
     private let repository: MatchRepository
     private let userDefaults: UserDefaults
@@ -78,8 +84,8 @@ final class ActiveMatchController {
     ) {
         self.teamAName = teamAName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Team A" : teamAName
         self.teamBName = teamBName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Team B" : teamBName
-        self.teamAPlayers = teamAPlayers
-        self.teamBPlayers = teamBPlayers
+        self.teamAPlayerIDs = teamAPlayers.map(\.id)
+        self.teamBPlayerIDs = teamBPlayers.map(\.id)
         userDefaults.set(self.teamAName, forKey: Keys.activeTeamAName)
         userDefaults.set(self.teamBName, forKey: Keys.activeTeamBName)
 
@@ -128,6 +134,8 @@ final class ActiveMatchController {
         guard let match, let startedAt else {
             throw ActiveMatchControllerError.noActiveMatch
         }
+        let teamAPlayers = try repository.fetchSavedPlayers(ids: teamAPlayerIDs)
+        let teamBPlayers = try repository.fetchSavedPlayers(ids: teamBPlayerIDs)
         let record = try repository.saveCompletedMatch(
             match,
             teamAName: teamAName,
@@ -138,8 +146,8 @@ final class ActiveMatchController {
         )
         self.match = nil
         self.startedAt = nil
-        self.teamAPlayers = []
-        self.teamBPlayers = []
+        self.teamAPlayerIDs = []
+        self.teamBPlayerIDs = []
         userDefaults.removeObject(forKey: Keys.activeTeamAName)
         userDefaults.removeObject(forKey: Keys.activeTeamBName)
         return record

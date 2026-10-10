@@ -234,6 +234,68 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertTrue(afterRelaunch.canStartNewMatch)
     }
 
+    func testFinishMatchAttributesSavedPlayersByIDAcrossContexts() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let viewContext = ModelContext(container)
+        let viewRepository = MatchRepository(modelContext: viewContext)
+        let alice = try XCTUnwrap(try viewRepository.upsertSavedPlayer(name: "Alice"))
+
+        // A SEPARATE context, exactly as `MyApp.init` builds it — the
+        // controller must not carry `alice` (a view-context object) into it.
+        let controller = ActiveMatchController(
+            modelContext: ModelContext(container),
+            userDefaults: UserDefaults(suiteName: UUID().uuidString)!
+        )
+        controller.startNewMatch(
+            configuration: GameConfiguration(),
+            matchFormat: .bestOfOne,
+            firstServingTeam: .teamA,
+            teamAName: "Alice",
+            teamBName: "Opponent",
+            teamAPlayers: [alice]
+        )
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        let record = try controller.finishMatch()
+
+        let rereadContext = ModelContext(container)
+        let savedAlice = try XCTUnwrap(
+            try MatchRepository(modelContext: rereadContext).fetchAllSavedPlayers().first { $0.name == "Alice" }
+        )
+        let teamASide = try XCTUnwrap(record.teamSides?.first { $0.team == .teamA })
+        XCTAssertEqual(teamASide.players?.map(\.id), [savedAlice.id], "The player attributed to team A must be the same identity created via the view's context")
+    }
+
+    func testFinishMatchDropsAPlayerDeletedWhileTheMatchWasInProgress() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let viewContext = ModelContext(container)
+        let viewRepository = MatchRepository(modelContext: viewContext)
+        let alice = try XCTUnwrap(try viewRepository.upsertSavedPlayer(name: "Alice"))
+
+        let controller = ActiveMatchController(
+            modelContext: ModelContext(container),
+            userDefaults: UserDefaults(suiteName: UUID().uuidString)!
+        )
+        controller.startNewMatch(
+            configuration: GameConfiguration(),
+            matchFormat: .bestOfOne,
+            firstServingTeam: .teamA,
+            teamAName: "Alice",
+            teamBName: "Opponent",
+            teamAPlayers: [alice]
+        )
+
+        // Alice is deleted (e.g. via Manage Players) while the match is
+        // still in progress, through the SAME context that created her —
+        // this must not prevent the match from being saved.
+        try viewRepository.deleteSavedPlayer(alice)
+
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        let record = try controller.finishMatch()
+
+        let teamASide = try XCTUnwrap(record.teamSides?.first { $0.team == .teamA })
+        XCTAssertEqual(teamASide.players?.count ?? 0, 0, "A player deleted mid-match must be silently dropped, not block the save or resurrect the deleted row")
+    }
+
     func testProUnlockedPersistsAcrossControllerInstances() throws {
         let suite = UUID().uuidString
         let container = try PersistenceContainer.makeInMemoryContainer()

@@ -11,7 +11,13 @@ struct ManagePlayersView: View {
 
     var body: some View {
         List {
-            if players.isEmpty, loadError == nil {
+            if players.isEmpty, loadError != nil {
+                ContentUnavailableView(
+                    "Couldn't Load Players",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text("Pull down to try again.")
+                )
+            } else if players.isEmpty {
                 ContentUnavailableView(
                     "No Saved Players Yet",
                     systemImage: "person.crop.circle.badge.questionmark",
@@ -71,24 +77,30 @@ struct ManagePlayersView: View {
                 set: { isPresented in if !isPresented { renamingPlayer = nil } }
             )
         ) {
-            // Captured once, when the sheet is built, so it stays valid
-            // for the lifetime of this presentation regardless of when
-            // `renamingPlayer` itself gets cleared during dismissal.
+            // `renamingPlayer` is read fresh here, so this `if let` DOES
+            // re-evaluate (and would fail) the instant `renamingPlayer`
+            // becomes nil. It works anyway because dismissal animates the
+            // sheet out over time — by the time this closure would next
+            // run with a nil `renamingPlayer`, the sheet is already gone.
+            // This is not a capture; don't rely on this timing elsewhere.
             if let player = renamingPlayer {
                 VStack(spacing: 16) {
                     Text("Rename Player")
                         .font(.headline)
                     TextField("Name", text: $renameText)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("RenameField")
                     HStack {
                         Button("Cancel", role: .cancel) {
                             renamingPlayer = nil
                         }
+                        .accessibilityIdentifier("Cancel")
                         Spacer()
                         Button("Save") {
                             rename(player, to: renameText)
                             renamingPlayer = nil
                         }
+                        .accessibilityIdentifier("Save")
                     }
                 }
                 .padding()
