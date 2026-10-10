@@ -220,19 +220,25 @@ public final class MatchRepository {
         let players = try fetchAllSavedPlayers()
         let matches = try fetchMatchHistory()
 
-        func stats(for player: SavedPlayer) -> (mostRecent: Date, timesPlayed: Int) {
-            var mostRecent = Date.distantPast
-            var count = 0
-            for match in matches {
-                let appeared = (match.teamSides ?? []).contains { side in
-                    (side.players ?? []).contains { $0.id == player.id }
-                }
-                if appeared {
-                    count += 1
-                    if match.completedAt > mostRecent { mostRecent = match.completedAt }
+        // Build stats dictionary once, keyed by player ID. Initialize every player
+        // (even those with no matches) to (Date.distantPast, 0), then update from
+        // match history. This avoids O(N*M*log(N)) closure calls during sort.
+        var statsDict: [UUID: (mostRecent: Date, timesPlayed: Int)] = [:]
+        for player in players {
+            statsDict[player.id] = (Date.distantPast, 0)
+        }
+        for match in matches {
+            for side in match.teamSides ?? [] {
+                for player in side.players ?? [] {
+                    if var current = statsDict[player.id] {
+                        current.timesPlayed += 1
+                        if match.completedAt > current.mostRecent {
+                            current.mostRecent = match.completedAt
+                        }
+                        statsDict[player.id] = current
+                    }
                 }
             }
-            return (mostRecent, count)
         }
 
         let filtered = trimmedQuery.isEmpty
@@ -240,8 +246,8 @@ public final class MatchRepository {
             : players.filter { $0.name.localizedCaseInsensitiveContains(trimmedQuery) }
 
         return filtered.sorted { lhs, rhs in
-            let lhsStats = stats(for: lhs)
-            let rhsStats = stats(for: rhs)
+            let lhsStats = statsDict[lhs.id] ?? (Date.distantPast, 0)
+            let rhsStats = statsDict[rhs.id] ?? (Date.distantPast, 0)
             if lhsStats.mostRecent != rhsStats.mostRecent {
                 return lhsStats.mostRecent > rhsStats.mostRecent
             }
