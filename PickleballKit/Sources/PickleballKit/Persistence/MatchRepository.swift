@@ -211,6 +211,44 @@ public final class MatchRepository {
         try modelContext.save()
     }
 
+    /// Suggestion chips for `MatchSetupView`'s name fields. Empty `query`
+    /// returns everyone. Ranking is derived fresh from match history on
+    /// every call, not cached — see this plan's Task 1 rationale against
+    /// stored counters.
+    public func suggestedPlayers(matching query: String) throws -> [SavedPlayer] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let players = try fetchAllSavedPlayers()
+        let matches = try fetchMatchHistory()
+
+        func stats(for player: SavedPlayer) -> (mostRecent: Date, timesPlayed: Int) {
+            var mostRecent = Date.distantPast
+            var count = 0
+            for match in matches {
+                let appeared = (match.teamSides ?? []).contains { side in
+                    (side.players ?? []).contains { $0.id == player.id }
+                }
+                if appeared {
+                    count += 1
+                    if match.completedAt > mostRecent { mostRecent = match.completedAt }
+                }
+            }
+            return (mostRecent, count)
+        }
+
+        let filtered = trimmedQuery.isEmpty
+            ? players
+            : players.filter { $0.name.localizedCaseInsensitiveContains(trimmedQuery) }
+
+        return filtered.sorted { lhs, rhs in
+            let lhsStats = stats(for: lhs)
+            let rhsStats = stats(for: rhs)
+            if lhsStats.mostRecent != rhsStats.mostRecent {
+                return lhsStats.mostRecent > rhsStats.mostRecent
+            }
+            return lhsStats.timesPlayed > rhsStats.timesPlayed
+        }
+    }
+
     /// Deletes every completed match. Cascades to each match's `TeamSide`,
     /// `GameRecord`, and `PointEvent` rows via their `.cascade` delete rules.
     public func deleteAllMatchHistory() throws {

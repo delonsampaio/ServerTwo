@@ -104,4 +104,32 @@ final class SavedPlayerRepositoryTests: XCTestCase {
         let teamA = saved.teamSides?.first { $0.team == .teamA }
         XCTAssertEqual(teamA?.players?.count ?? 0, 0)
     }
+
+    func testSuggestedPlayersFiltersAndRanksByRecencyThenFrequency() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+
+        let alice = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Alice"))
+        let abby = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Abby"))
+        _ = try repository.upsertSavedPlayer(name: "Bob") // never played, should sort last and be excluded by the "Al" query
+
+        func playMatch(players: [SavedPlayer], at date: Date) throws {
+            let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+            for _ in 1...11 { match.recordPoint(for: .teamA) }
+            _ = try repository.saveCompletedMatch(match, teamAName: "A", teamBName: "B", startedAt: date, completedAt: date, teamAPlayers: players)
+        }
+
+        // Abby: 2 matches, most recent is older than Alice's most recent.
+        try playMatch(players: [abby], at: Date(timeIntervalSince1970: 1000))
+        try playMatch(players: [abby], at: Date(timeIntervalSince1970: 2000))
+        // Alice: 1 match, but more recent than either of Abby's.
+        try playMatch(players: [alice], at: Date(timeIntervalSince1970: 3000))
+
+        let results = try repository.suggestedPlayers(matching: "Al")
+        XCTAssertEqual(results.map(\.name), ["Alice"]) // "Bob" and "Abby" don't contain "Al"
+
+        let allMatchingA = try repository.suggestedPlayers(matching: "A")
+        XCTAssertEqual(allMatchingA.map(\.name), ["Alice", "Abby"]) // Alice ranks first: more recent match
+    }
 }
