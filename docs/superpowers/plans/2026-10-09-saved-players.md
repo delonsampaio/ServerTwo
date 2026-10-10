@@ -39,7 +39,7 @@
 - Test: `PickleballKit/Tests/PickleballKitTests/SavedPlayerRepositoryTests.swift` (new file)
 
 **Interfaces:**
-- Produces: `SavedPlayer` (public final class, `@Model`: `id: UUID`, `name: String`, `isMe: Bool`, `teamSides: [TeamSide]?`); `TeamSide.players: [SavedPlayer]?`; `MatchRepository.fetchAllSavedPlayers() throws -> [SavedPlayer]`; `MatchRepository.upsertSavedPlayer(name: String) throws -> SavedPlayer?` (returns `nil` for blank/whitespace-only input, never creates a blank-name record); `MatchRepository.deleteSavedPlayer(_ player: SavedPlayer) throws`; `MatchRepository.setMePlayer(_ player: SavedPlayer) throws` (clears `isMe` on every other `SavedPlayer` first); `MatchRepository.fetchMePlayer() throws -> SavedPlayer?`; extends `MatchRepository.saveCompletedMatch(_:teamAName:teamBName:startedAt:completedAt:teamAPlayers:teamBPlayers:)` with two new parameters, each defaulting to `[]`, used to populate the newly-created `TeamSide.players`.
+- Produces: `SavedPlayer` (public final class, `@Model`: `id: UUID`, `name: String`, `isMe: Bool`, `teamSides: [TeamSide]?`); `TeamSide.players: [SavedPlayer]?`; `MatchRepository.fetchAllSavedPlayers() throws -> [SavedPlayer]`; `MatchRepository.upsertSavedPlayer(name: String) throws -> SavedPlayer?` (returns `nil` for blank/whitespace-only input, never creates a blank-name record); `MatchRepository.deleteSavedPlayer(_ player: SavedPlayer) throws`; `MatchRepository.setMePlayer(_ player: SavedPlayer) throws` (clears `isMe` on whichever player previously held it, sets it on this one); `MatchRepository.renameSavedPlayer(_ player: SavedPlayer, to newName: String) throws` (no-op on blank input); `MatchRepository.fetchMePlayer() throws -> SavedPlayer?`; extends `MatchRepository.saveCompletedMatch(_:teamAName:teamBName:startedAt:completedAt:teamAPlayers:teamBPlayers:)` with two new parameters, each defaulting to `[]`, used to populate the newly-created `TeamSide.players`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -121,6 +121,21 @@ final class SavedPlayerRepositoryTests: XCTestCase {
         let teamA = history[0].teamSides?.first { $0.team == .teamA }
         XCTAssertEqual(teamA?.displayName, "Delon & Mike")
         XCTAssertEqual(teamA?.players?.count ?? 0, 0)
+    }
+
+    func testRenameSavedPlayerUpdatesNameAndIgnoresBlankInput() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+
+        let mike = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Mike"))
+        let mikeID = mike.id
+
+        try repository.renameSavedPlayer(mike, to: "Mike S.")
+        XCTAssertEqual(mike.name, "Mike S.")
+        XCTAssertEqual(mike.id, mikeID, "Rename must not change identity")
+
+        try repository.renameSavedPlayer(mike, to: "   ")
+        XCTAssertEqual(mike.name, "Mike S.", "A blank rename must be a no-op, not clear the name")
     }
 
     func testSaveCompletedMatchWithNoPlayersLeavesTeamSidePlayersEmpty() throws {
@@ -264,11 +279,28 @@ Modify `PickleballKit/Sources/PickleballKit/Persistence/MatchRepository.swift` �
         try modelContext.save()
     }
 
-    /// Clears `isMe` on every other `SavedPlayer` before setting it on this
-    /// one, so the exactly-one-"Me" invariant always holds after this call.
+    /// Renames a `SavedPlayer` in place. Safe to do at any time, including
+    /// after the player has appeared in past matches — identity is the
+    /// stable `id`, not `name`, so this never breaks historical stats
+    /// attribution (see `personalRecord`, Task 5). Exists specifically so
+    /// a name collision (e.g. two different people both saved as "Mike")
+    /// can be disambiguated — e.g. renaming one to "Mike S." — without
+    /// losing anything.
+    public func renameSavedPlayer(_ player: SavedPlayer, to newName: String) throws {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        player.name = trimmed
+        try modelContext.save()
+    }
+
+    /// Clears `isMe` on whichever `SavedPlayer` currently holds it before
+    /// setting it on this one, so the exactly-one-"Me" invariant always
+    /// holds after this call. Only touches the one previous holder (not
+    /// every saved player) — safe because this function is the only writer
+    /// of `isMe`, so "at most one `true`" holds by induction.
     public func setMePlayer(_ player: SavedPlayer) throws {
-        for existing in try fetchAllSavedPlayers() where existing.id != player.id {
-            existing.isMe = false
+        if let previousMe = try fetchMePlayer(), previousMe.id != player.id {
+            previousMe.isMe = false
         }
         player.isMe = true
         try modelContext.save()
@@ -321,12 +353,12 @@ Modify the existing `saveCompletedMatch` signature and body in `MatchRepository.
 - [ ] **Step 8: Run tests to verify they pass**
 
 Run: `cd PickleballKit && swift test --filter SavedPlayerRepositoryTests`
-Expected: PASS, all 6 tests.
+Expected: PASS, all 7 tests.
 
 - [ ] **Step 9: Run the full PickleballKit suite to confirm nothing regressed**
 
 Run: `cd PickleballKit && swift test`
-Expected: PASS, all tests (85+ from before this task, plus the 6 new ones).
+Expected: PASS, all tests (85+ from before this task, plus the 7 new ones).
 
 - [ ] **Step 10: Commit**
 
@@ -431,7 +463,7 @@ Add to `MatchRepository.swift`, after the CRUD methods from Task 1:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd PickleballKit && swift test --filter SavedPlayerRepositoryTests`
-Expected: PASS, all 7 tests (6 from Task 1 + this one).
+Expected: PASS, all 8 tests (7 from Task 1 + this one).
 
 - [ ] **Step 5: Commit**
 
@@ -775,7 +807,7 @@ git commit -m "feat: add player suggestion chips and upsert-on-start to MatchSet
 - Test: `ServerTwoUITests/SavedPlayersUITests.swift`
 
 **Interfaces:**
-- Consumes: `MatchRepository.fetchAllSavedPlayers()`, `.setMePlayer(_:)`, `.deleteSavedPlayer(_:)` from Task 1.
+- Consumes: `MatchRepository.fetchAllSavedPlayers()`, `.setMePlayer(_:)`, `.deleteSavedPlayer(_:)`, `.renameSavedPlayer(_:to:)` from Task 1.
 - Produces: `ManagePlayersView` (no init parameters beyond the implicit `modelContext` environment), reachable via a new `NavigationLink` in `SettingsView`.
 
 - [ ] **Step 1: Write the failing test**
@@ -827,6 +859,53 @@ git commit -m "feat: add player suggestion chips and upsert-on-start to MatchSet
         XCTAssertTrue(app.staticTexts["Me.Bob"].waitForExistence(timeout: 2))
         XCTAssertFalse(app.staticTexts["Me.Alice"].exists, "Only one player should be marked Me at a time")
     }
+
+    func testRenamingAPlayerInManagePlayersUpdatesTheDisplayedName() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITest-ResetState"]
+        app.launch()
+        dismissOnboardingIfPresented(app)
+
+        app.tabBars.buttons["Play"].tap()
+        let teamATextField = app.textFields.matching(identifier: "Team A Player Name").firstMatch
+        scrollUntilVisible(teamATextField, in: app)
+        let singlesToggle = app.buttons["Singles"]
+        if singlesToggle.exists { singlesToggle.tap() }
+        teamATextField.tap()
+        teamATextField.typeText("Mike")
+        let flipCoinButton = app.buttons["Flip Coin"]
+        scrollUntilVisible(flipCoinButton, in: app)
+        flipCoinButton.tap()
+        let startMatchButton = app.buttons["Start Match"]
+        scrollUntilVisible(startMatchButton, in: app)
+        startMatchButton.tap()
+        let teamAZone = app.buttons["scoreZone.teamA"]
+        XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
+        let finishButton = app.buttons["Finish Match"]
+        for _ in 0..<20 {
+            if finishButton.exists { break }
+            teamAZone.tap()
+        }
+        finishButton.tap()
+        app.buttons["Confirm Finish"].firstMatch.tap()
+
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["Manage Players"].tap()
+
+        app.buttons["Rename.Mike"].tap()
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 2))
+        nameField.tap()
+        // The field is pre-filled with the current name ("Mike") — delete it
+        // before typing the replacement, since typeText only appends.
+        let existingValue = nameField.value as? String ?? ""
+        nameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existingValue.count))
+        nameField.typeText("Mike S.")
+        app.buttons["Save"].tap()
+
+        XCTAssertTrue(app.staticTexts["PlayerRow.Mike S."].waitForExistence(timeout: 2), "Renamed player should appear under the new name")
+        XCTAssertFalse(app.staticTexts["PlayerRow.Mike"].exists, "Old name should no longer be listed")
+    }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -846,6 +925,8 @@ struct ManagePlayersView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var players: [SavedPlayer] = []
     @State private var loadError: Error?
+    @State private var renamingPlayer: SavedPlayer?
+    @State private var renameText: String = ""
 
     var body: some View {
         List {
@@ -860,6 +941,7 @@ struct ManagePlayersView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(player.name)
+                                .accessibilityIdentifier("PlayerRow.\(player.name)")
                             if player.isMe {
                                 Text("Me")
                                     .font(.caption)
@@ -868,6 +950,11 @@ struct ManagePlayersView: View {
                             }
                         }
                         Spacer()
+                        Button("Rename") {
+                            renameText = player.name
+                            renamingPlayer = player
+                        }
+                        .accessibilityIdentifier("Rename.\(player.name)")
                         if !player.isMe {
                             Button("Set as Me") {
                                 setMe(player)
@@ -881,6 +968,21 @@ struct ManagePlayersView: View {
         }
         .navigationTitle("Manage Players")
         .task { loadPlayers() }
+        .alert(
+            "Rename Player",
+            isPresented: Binding(
+                get: { renamingPlayer != nil },
+                set: { isPresented in if !isPresented { renamingPlayer = nil } }
+            )
+        ) {
+            TextField("Name", text: $renameText)
+            Button("Save") {
+                if let renamingPlayer {
+                    rename(renamingPlayer, to: renameText)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        }
     }
 
     private func loadPlayers() {
@@ -897,6 +999,12 @@ struct ManagePlayersView: View {
     private func setMe(_ player: SavedPlayer) {
         let repository = MatchRepository(modelContext: modelContext)
         try? repository.setMePlayer(player)
+        loadPlayers()
+    }
+
+    private func rename(_ player: SavedPlayer, to newName: String) {
+        let repository = MatchRepository(modelContext: modelContext)
+        try? repository.renameSavedPlayer(player, to: newName)
         loadPlayers()
     }
 
@@ -935,13 +1043,13 @@ Modify `ServerTwo/Settings/SettingsView.swift`:
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `xcodebuild test -scheme ServerTwo -destination 'id=<simulator-id>' -only-testing:ServerTwoUITests/SavedPlayersUITests`
-Expected: PASS, both tests in this file.
+Expected: PASS, all 4 tests in this file (2 from Task 3 + the 2 added in this task).
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add ServerTwo/Players/ManagePlayersView.swift ServerTwo/Settings/SettingsView.swift ServerTwoUITests/SavedPlayersUITests.swift
-git commit -m "feat: add Manage Players settings screen"
+git commit -m "feat: add Manage Players settings screen with rename support"
 ```
 
 ---
@@ -993,6 +1101,23 @@ git commit -m "feat: add Manage Players settings screen"
         XCTAssertEqual(record.pointsFor, 11 + 0) // match1: 11 (team A), match2: 0 (team B's final score)
         XCTAssertEqual(record.pointsAgainst, 7 + 11)
     }
+
+    func testPersonalRecordSurvivesRenamingThePlayer() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+
+        let mike = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Mike"))
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(match, teamAName: "Mike & Delon", teamBName: "Opponents", startedAt: Date(), teamAPlayers: [mike])
+
+        try repository.renameSavedPlayer(mike, to: "Mike S.")
+
+        let allMatches = try repository.fetchMatchHistory()
+        let record = repository.personalRecord(for: mike, in: allMatches)
+        XCTAssertEqual(record.wins, 1, "Renaming must not sever the relationship to past matches — identity is the stable id, not the name")
+    }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1039,7 +1164,7 @@ Add to `MatchRepository.swift`, after `suggestedPlayers`:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd PickleballKit && swift test --filter SavedPlayerRepositoryTests`
-Expected: PASS, all tests in this file (8 total across Tasks 1, 2, and this one).
+Expected: PASS, all tests in this file (10 total across Tasks 1, 2, and this one).
 
 - [ ] **Step 5: Update `StatsSummaryView`**
 
@@ -1203,7 +1328,7 @@ Replace `matchesPlayedCard`:
 ```
 
 Run: `xcodebuild test -scheme ServerTwo -destination 'id=<simulator-id>' -only-testing:ServerTwoUITests/SavedPlayersUITests`
-Expected: PASS, all tests in this file.
+Expected: PASS, all 5 tests in this file (2 from Task 3 + 2 from Task 4 + the 1 added in this task).
 
 - [ ] **Step 8: Run the full project test suite**
 
