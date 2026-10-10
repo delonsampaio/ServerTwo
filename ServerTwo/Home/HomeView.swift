@@ -56,7 +56,6 @@ struct HomeView: View {
             .accessibilityIdentifier("New Match")
         }
         .navigationTitle("Server Two")
-        .navigationBarTitleDisplayMode(.inline)
         .task { loadMatches() }
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
