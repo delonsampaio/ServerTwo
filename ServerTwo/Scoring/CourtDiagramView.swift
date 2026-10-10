@@ -37,7 +37,7 @@ struct CourtDiagramView: View {
                         .resizable()
                         .renderingMode(.template)
                         .foregroundStyle(Color.accentColor)
-                        .frame(width: 14, height: 14)
+                        .frame(width: 53, height: 53)
                 }
             }
     }
