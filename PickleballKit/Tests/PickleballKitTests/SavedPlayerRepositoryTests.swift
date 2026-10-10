@@ -132,4 +132,58 @@ final class SavedPlayerRepositoryTests: XCTestCase {
         let allMatchingA = try repository.suggestedPlayers(matching: "A")
         XCTAssertEqual(allMatchingA.map(\.name), ["Alice", "Abby"]) // Alice ranks first: more recent match
     }
+
+    func testPersonalRecordCountsOnlyMatchesIncludingThePlayerOnEitherSide() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        // Rally scoring (not the default sideOut) so every `recordPoint`
+        // call unconditionally adds to the named team's score — sideOut's
+        // server-rotation rules would otherwise turn some of these mixed-
+        // team calls below into non-scoring side-outs, making the literal
+        // final scores asserted below (and in the comments) incorrect.
+        let config = GameConfiguration(scoringFormat: .rally(freeze: false), winningScore: .eleven, winByTwo: true)
+
+        let me = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Delon"))
+
+        // Match 1: "Delon" on team A, team A wins 11-7.
+        let match1 = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...7 { match1.recordPoint(for: .teamB) }
+        for _ in 1...11 { match1.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(match1, teamAName: "Delon & Mike", teamBName: "Opponents", startedAt: Date(), teamAPlayers: [me])
+
+        // Match 2: "Delon" on team B, team A wins (so Delon loses).
+        let match2 = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match2.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(match2, teamAName: "Opponents", teamBName: "Delon & Mike", startedAt: Date(), teamBPlayers: [me])
+
+        // Match 3: Delon not involved at all (scorekeeping for others).
+        let match3 = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match3.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(match3, teamAName: "Strangers", teamBName: "Others", startedAt: Date())
+
+        let allMatches = try repository.fetchMatchHistory()
+        let record = repository.personalRecord(for: me, in: allMatches)
+
+        XCTAssertEqual(record.wins, 1)
+        XCTAssertEqual(record.losses, 1)
+        XCTAssertEqual(record.pointsFor, 11 + 0) // match1: 11 (team A), match2: 0 (team B's final score)
+        XCTAssertEqual(record.pointsAgainst, 7 + 11)
+    }
+
+    func testPersonalRecordSurvivesRenamingThePlayer() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+
+        let mike = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Mike"))
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(match, teamAName: "Mike & Delon", teamBName: "Opponents", startedAt: Date(), teamAPlayers: [mike])
+
+        try repository.renameSavedPlayer(mike, to: "Mike S.")
+
+        let allMatches = try repository.fetchMatchHistory()
+        let record = repository.personalRecord(for: mike, in: allMatches)
+        XCTAssertEqual(record.wins, 1, "Renaming must not sever the relationship to past matches — identity is the stable id, not the name")
+    }
 }

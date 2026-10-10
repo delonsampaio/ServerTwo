@@ -15,6 +15,7 @@ struct HomeView: View {
     let onNewMatch: () -> Void
 
     @State private var matches: [MatchRecord] = []
+    @State private var mePlayer: SavedPlayer?
     @State private var loadError: Error?
     @State private var isShowingPaywall = false
 
@@ -83,12 +84,26 @@ struct HomeView: View {
     }
 
     private var matchesPlayedCard: some View {
-        HStack {
-            Text("Matches Played")
-                .font(.subheadline)
-            Spacer()
-            Text("\(matches.count)")
-                .font(.headline)
+        Group {
+            if let mePlayer {
+                let repository = MatchRepository(modelContext: modelContext)
+                let record = repository.personalRecord(for: mePlayer, in: matches)
+                HStack {
+                    Text("Your Record")
+                        .font(.subheadline)
+                    Spacer()
+                    Text("\(record.wins) - \(record.losses)")
+                        .font(.headline)
+                }
+            } else {
+                HStack {
+                    Text("Matches Played")
+                        .font(.subheadline)
+                    Spacer()
+                    Text("\(matches.count)")
+                        .font(.headline)
+                }
+            }
         }
         .padding()
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -130,6 +145,7 @@ struct HomeView: View {
         let repository = MatchRepository(modelContext: modelContext)
         do {
             matches = try repository.fetchMatchHistory()
+            mePlayer = try repository.fetchMePlayer()
             loadError = nil
         } catch {
             matches = []

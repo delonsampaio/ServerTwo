@@ -5,13 +5,14 @@ import PickleballKit
 struct MatchHistoryListView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var matches: [MatchRecord] = []
+    @State private var mePlayer: SavedPlayer?
     @State private var loadError: Error?
 
     var body: some View {
         List {
             if !matches.isEmpty {
                 Section {
-                    StatsSummaryView(matches: matches)
+                    StatsSummaryView(matches: matches, mePlayer: mePlayer, repository: MatchRepository(modelContext: modelContext))
                 }
             }
             Section("Matches") {
@@ -65,6 +66,7 @@ struct MatchHistoryListView: View {
         let repository = MatchRepository(modelContext: modelContext)
         do {
             matches = try repository.fetchMatchHistory()
+            mePlayer = try repository.fetchMePlayer()
             loadError = nil
         } catch {
             matches = []

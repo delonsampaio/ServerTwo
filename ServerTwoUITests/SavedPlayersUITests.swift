@@ -202,4 +202,42 @@ final class SavedPlayersUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["PlayerRow.Mike S."].waitForExistence(timeout: 2), "Renamed player should appear under the new name")
         XCTAssertFalse(app.staticTexts["PlayerRow.Mike"].exists, "Old name should no longer be listed")
     }
+
+    func testHomeShowsPersonalRecordOnceMeIsSet() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITest-ResetState"]
+        app.launch()
+        dismissOnboardingIfPresented(app)
+
+        app.tabBars.buttons["Play"].tap()
+        let teamATextField = app.textFields.matching(identifier: "Team A Player Name").firstMatch
+        scrollUntilVisible(teamATextField, in: app)
+        let singlesToggle = app.buttons["Singles"]
+        if singlesToggle.exists { singlesToggle.tap() }
+        teamATextField.tap()
+        teamATextField.typeText("Delon")
+        let flipCoinButton = app.buttons["Flip Coin"]
+        scrollUntilVisible(flipCoinButton, in: app)
+        flipCoinButton.tap()
+        let startMatchButton = app.buttons["Start Match"]
+        scrollUntilVisible(startMatchButton, in: app)
+        startMatchButton.tap()
+        let teamAZone = app.buttons["scoreZone.teamA"]
+        XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
+        let finishButton = app.buttons["Finish Match"]
+        for _ in 0..<20 {
+            if finishButton.exists { break }
+            teamAZone.tap()
+        }
+        finishButton.tap()
+        app.buttons["Confirm Finish"].firstMatch.tap()
+
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["Manage Players"].tap()
+        app.buttons["SetMe.Delon"].tap()
+
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.staticTexts["Your Record"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["1 - 0"].waitForExistence(timeout: 2))
+    }
 }

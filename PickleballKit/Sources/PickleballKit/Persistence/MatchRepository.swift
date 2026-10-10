@@ -255,6 +255,36 @@ public final class MatchRepository {
         }
     }
 
+    /// A pure computation over already-fetched match history — no I/O, so
+    /// callers that already hold `[MatchRecord]` (e.g. a loaded History
+    /// screen) can call this directly without a redundant fetch.
+    public func personalRecord(
+        for player: SavedPlayer,
+        in matches: [MatchRecord]
+    ) -> (wins: Int, losses: Int, pointsFor: Int, pointsAgainst: Int) {
+        var wins = 0, losses = 0, pointsFor = 0, pointsAgainst = 0
+        for match in matches {
+            guard let mySide = (match.teamSides ?? []).first(where: { side in
+                (side.players ?? []).contains { $0.id == player.id }
+            }) else { continue }
+
+            if mySide.team == match.winningTeam {
+                wins += 1
+            } else {
+                losses += 1
+            }
+
+            let finalGame = (match.games ?? []).max(by: { $0.gameNumber < $1.gameNumber })
+            if let finalGame {
+                let myScore = mySide.team == .teamA ? finalGame.teamAFinalScore : finalGame.teamBFinalScore
+                let theirScore = mySide.team == .teamA ? finalGame.teamBFinalScore : finalGame.teamAFinalScore
+                pointsFor += myScore
+                pointsAgainst += theirScore
+            }
+        }
+        return (wins, losses, pointsFor, pointsAgainst)
+    }
+
     /// Deletes every completed match. Cascades to each match's `TeamSide`,
     /// `GameRecord`, and `PointEvent` rows via their `.cascade` delete rules.
     public func deleteAllMatchHistory() throws {

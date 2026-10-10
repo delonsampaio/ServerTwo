@@ -1,30 +1,22 @@
 import SwiftUI
+import SwiftData
 import PickleballKit
 
 struct StatsSummaryView: View {
     let matches: [MatchRecord]
-
-    // "Team A"/"Team B" wins is an honest, simple convention: PickleballKit
-    // doesn't track a persistent "my team" identity across matches (each
-    // match's teams are independently named), so this reports Team A's
-    // record literally rather than guessing which side the viewer was on.
-    private var teamAWins: Int { matches.filter { $0.winningTeam == .teamA }.count }
-    private var teamBWins: Int { matches.filter { $0.winningTeam == .teamB }.count }
-
-    private var totalPointsForA: Int {
-        matches.flatMap { $0.games ?? [] }.reduce(0) { $0 + $1.teamAFinalScore }
-    }
-    private var totalPointsForB: Int {
-        matches.flatMap { $0.games ?? [] }.reduce(0) { $0 + $1.teamBFinalScore }
-    }
+    let mePlayer: SavedPlayer?
+    let repository: MatchRepository
 
     var body: some View {
         HStack {
             statColumn(title: "Matches", value: "\(matches.count)")
-            Divider()
-            statColumn(title: "Team A / Team B Wins", value: "\(teamAWins) - \(teamBWins)")
-            Divider()
-            statColumn(title: "Points For/Against", value: "\(totalPointsForA) - \(totalPointsForB)")
+            if let mePlayer {
+                let record = repository.personalRecord(for: mePlayer, in: matches)
+                Divider()
+                statColumn(title: "Your Record", value: "\(record.wins) - \(record.losses)")
+                Divider()
+                statColumn(title: "Points For/Against", value: "\(record.pointsFor) - \(record.pointsAgainst)")
+            }
         }
         .padding(.vertical, 8)
     }
@@ -39,5 +31,5 @@ struct StatsSummaryView: View {
 }
 
 #Preview {
-    StatsSummaryView(matches: [])
+    StatsSummaryView(matches: [], mePlayer: nil, repository: MatchRepository(modelContext: ModelContext(try! PersistenceContainer.makeInMemoryContainer())))
 }
