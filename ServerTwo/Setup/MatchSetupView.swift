@@ -140,6 +140,18 @@ struct MatchSetupView: View {
                     swapTeams()
                 }
                 .accessibilityIdentifier("Swap Teams")
+                // "Swap Teams" only flips which side an existing pair is
+                // on — it can't recombine players across pairs. This is
+                // the one other degree of freedom that's missing: round-
+                // robin doubles rotates partners, not just sides. Only
+                // meaningful with two players per side, so doubles-only;
+                // Player 1s stay put, only the Player 2s trade places.
+                if playMode == .doubles {
+                    Button("Swap Partners") {
+                        swapPartners()
+                    }
+                    .accessibilityIdentifier("Swap Partners")
+                }
             }
 
             Section {
@@ -227,9 +239,39 @@ struct MatchSetupView: View {
         swap(&teamAPlayer2ID, &teamBPlayer2ID)
     }
 
+    /// Recombines pairs across teams (round-robin partner rotation) rather
+    /// than moving a pair as a unit — Player 1s stay on their current
+    /// side, only the Player 2s trade places.
+    private func swapPartners() {
+        swap(&teamAPlayer2, &teamBPlayer2)
+        swap(&teamAPlayer2ID, &teamBPlayer2ID)
+    }
+
+    /// Fills slots in order (Team A Player 1, Team A Player 2, Team B
+    /// Player 1, Team B Player 2) with whichever 1-4 players were selected
+    /// on Home before navigating here — a single trip, not one per player.
     private func applyQuickStart(_ request: QuickStartRequest) {
-        teamAPlayer1 = request.playerName
-        teamAPlayer1ID = request.savedPlayerID
+        var remaining = request.players.prefix(4).map { $0 }
+        if !remaining.isEmpty {
+            let player = remaining.removeFirst()
+            teamAPlayer1 = player.name
+            teamAPlayer1ID = player.savedPlayerID
+        }
+        if !remaining.isEmpty {
+            let player = remaining.removeFirst()
+            teamAPlayer2 = player.name
+            teamAPlayer2ID = player.savedPlayerID
+        }
+        if !remaining.isEmpty {
+            let player = remaining.removeFirst()
+            teamBPlayer1 = player.name
+            teamBPlayer1ID = player.savedPlayerID
+        }
+        if !remaining.isEmpty {
+            let player = remaining.removeFirst()
+            teamBPlayer2 = player.name
+            teamBPlayer2ID = player.savedPlayerID
+        }
     }
 
     /// Both names are trimmed, and EITHER being blank falls back to the other

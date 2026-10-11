@@ -20,6 +20,12 @@ struct CoinFlipView: View {
     @State private var isFlipping = false
     @State private var coinRotation: Double = 0
     @State private var result: Team?
+    /// Which team's letter the coin currently shows. A flat SwiftUI view
+    /// rotated in 3D has no true "back face" to reveal mid-spin — this
+    /// fakes a real flip by swapping the displayed letter a few times
+    /// while `coinRotation` animates, landing on the actual outcome
+    /// exactly when the spin stops.
+    @State private var displayedTeam: Team = .teamA
 
     var body: some View {
         VStack(spacing: 32) {
@@ -88,14 +94,19 @@ struct CoinFlipView: View {
             Circle()
                 .fill(Color.accentColor)
                 .frame(width: 100, height: 100)
-            Image(systemName: "circle.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(.white.opacity(0.9))
+            Text(letter(for: displayedTeam))
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
         }
         .rotation3DEffect(.degrees(coinRotation), axis: (x: 0, y: 1, z: 0))
         .sensoryFeedback(.impact, trigger: result) { oldValue, newValue in
             newValue != nil
         }
+    }
+
+    private func letter(for team: Team) -> String {
+        let name = team == .teamA ? setup.resolvedTeamAName : setup.resolvedTeamBName
+        return String(name.prefix(1)).uppercased()
     }
 
     private func flip() {
@@ -108,6 +119,16 @@ struct CoinFlipView: View {
         withAnimation(.easeOut(duration: 0.7)) {
             coinRotation += 360 * 3
         }
+        // Toggles the displayed letter a few times while the spin
+        // animates, so it actually reads as alternating between the two
+        // teams rather than one static letter just distorting in place.
+        let toggleInterval = 0.1
+        let toggleCount = 6
+        for step in 0..<toggleCount {
+            DispatchQueue.main.asyncAfter(deadline: .now() + toggleInterval * Double(step)) {
+                displayedTeam = displayedTeam == .teamA ? .teamB : .teamA
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             isFlipping = false
             settle(on: outcome)
@@ -116,6 +137,7 @@ struct CoinFlipView: View {
 
     private func settle(on team: Team) {
         result = team
+        displayedTeam = team
     }
 }
 

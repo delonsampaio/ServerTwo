@@ -215,6 +215,21 @@ final class ActiveMatchController {
         return record
     }
 
+    /// Discards the live match entirely — nothing is saved to history, and
+    /// its persisted snapshot is cleared so a relaunch doesn't resurrect
+    /// it. A no-op if there's no active match. The only way out of a match
+    /// before `finishMatch()` is otherwise possible; unlike
+    /// `cancelPendingMatch()` (which backs out of an undecided coin flip
+    /// that was never persisted), this has to actively clear real,
+    /// already-persisted progress.
+    func cancelActiveMatch() {
+        guard case .active = lifecycleState else { return }
+        lifecycleState = .idle
+        userDefaults.removeObject(forKey: Keys.activeTeamAName)
+        userDefaults.removeObject(forKey: Keys.activeTeamBName)
+        try? repository.clearInProgressSnapshot()
+    }
+
     /// Test-only: discards any live/resumed match or staged-but-unflipped
     /// setup, plus any persisted snapshot, so a UI test starts from a
     /// guaranteed-clean slate regardless of what a previous run or app
@@ -224,11 +239,16 @@ final class ActiveMatchController {
         try? repository.clearInProgressSnapshot()
     }
 
-    /// Test-only: wipes completed match history, so `canStartNewMatch`'s
-    /// count against `demoMatchLimit` starts from zero on every UI test run
-    /// regardless of what previous runs saved to the real on-device store.
+    /// Test-only: wipes completed match history AND every saved player
+    /// (including whichever one is "Me"), so both `canStartNewMatch`'s
+    /// count against `demoMatchLimit` and the player roster/suggestion
+    /// chips start from zero on every UI test run — regardless of what
+    /// previous runs left in the real on-device store. Without clearing
+    /// players too, a "Me" flag set by an earlier run could silently
+    /// persist and make a later run's own "mark as Me" step a no-op.
     func clearAllMatchHistoryForTesting() {
         try? repository.deleteAllMatchHistory()
+        try? repository.deleteAllSavedPlayers()
     }
 
     private func persistSnapshot() {

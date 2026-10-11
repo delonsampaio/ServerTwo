@@ -46,10 +46,13 @@ struct MyApp: App {
     /// entitlement, and a low demo match limit, so a test doesn't depend on
     /// whatever a previous run left in `UserDefaults`/the store — including
     /// completed match history, which (unlike a mid-game point cap) now
-    /// directly determines whether `canStartNewMatch` is true. Only takes
-    /// effect when these specific launch arguments are present — never
-    /// active in a normal launch, including TestFlight/App Store builds,
-    /// since no real launch path passes them.
+    /// directly determines whether `canStartNewMatch` is true, and every
+    /// saved player (including whichever one is "Me" — without this, a
+    /// `isMe` flag set by an earlier run could silently survive and make a
+    /// later run's own "mark as Me" step a no-op). Only takes effect when
+    /// these specific launch arguments are present — never active in a
+    /// normal launch, including TestFlight/App Store builds, since no real
+    /// launch path passes them.
     ///
     /// The body is additionally wrapped in `#if DEBUG` so this monetization/
     /// state bypass compiles out of Release builds entirely rather than

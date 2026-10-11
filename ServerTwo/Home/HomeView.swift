@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var matches: [MatchRecord] = []
     @State private var mePlayer: SavedPlayer?
     @State private var frequentPlayers: [SavedPlayer] = []
+    @State private var selectedQuickStartPlayers: [SavedPlayer] = []
     @State private var loadError: Error?
     @State private var isShowingPaywall = false
 
@@ -161,27 +162,52 @@ struct HomeView: View {
     /// Top 3-4 most recently/frequently played saved players, reusing the
     /// exact ranking `MatchSetupView`'s suggestion chips already use (an
     /// empty query returns everyone, recency-then-frequency ranked).
-    /// Tapping one pre-fills Team A's first player on the setup screen —
-    /// saves retyping a known regular's name while standing on the court.
+    /// Tapping toggles selection rather than navigating immediately, so
+    /// picking 2-4 known regulars takes one trip to Setup, not one
+    /// navigation per player. "Start" only appears once something's
+    /// selected.
     @ViewBuilder
     private var quickStartRow: some View {
         if !frequentPlayers.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Quick Start")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack {
+                    Text("Quick Start")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if !selectedQuickStartPlayers.isEmpty {
+                        Button("Start (\(selectedQuickStartPlayers.count))") {
+                            let players = selectedQuickStartPlayers.map {
+                                QuickStartRequest.PlayerSlot(name: $0.name, savedPlayerID: $0.id)
+                            }
+                            selectedQuickStartPlayers = []
+                            onQuickStart(QuickStartRequest(players: players))
+                        }
+                        .font(.caption.bold())
+                        .accessibilityIdentifier("Start Quick Start Selection")
+                    }
+                }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 16) {
                         ForEach(Array(frequentPlayers.prefix(4)), id: \.id) { player in
+                            let isSelected = selectedQuickStartPlayers.contains { $0.id == player.id }
                             Button {
-                                onQuickStart(QuickStartRequest(playerName: player.name, savedPlayerID: player.id))
+                                toggleQuickStartSelection(player)
                             } label: {
                                 VStack(spacing: 4) {
-                                    Text(initials(for: player.name))
-                                        .font(.headline)
-                                        .foregroundStyle(.white)
-                                        .frame(width: 44, height: 44)
-                                        .background(Color.accentColor, in: Circle())
+                                    ZStack(alignment: .topTrailing) {
+                                        Text(initials(for: player.name))
+                                            .font(.headline)
+                                            .foregroundStyle(.white)
+                                            .frame(width: 44, height: 44)
+                                            .background(isSelected ? Color.green : Color.accentColor, in: Circle())
+                                        if isSelected {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .symbolRenderingMode(.palette)
+                                                .foregroundStyle(.green, .white)
+                                                .offset(x: 4, y: -4)
+                                        }
+                                    }
                                     Text(player.name)
                                         .font(.caption2)
                                         .foregroundStyle(.primary)
@@ -190,6 +216,10 @@ struct HomeView: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            // Only 4 player slots exist in Setup (doubles'
+                            // max) — once 4 are selected, further taps on
+                            // an unselected chip would have nowhere to go.
+                            .disabled(!isSelected && selectedQuickStartPlayers.count >= 4)
                             .accessibilityIdentifier("QuickStart.\(player.name)")
                         }
                     }
@@ -197,6 +227,14 @@ struct HomeView: View {
             }
             .padding()
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func toggleQuickStartSelection(_ player: SavedPlayer) {
+        if let index = selectedQuickStartPlayers.firstIndex(where: { $0.id == player.id }) {
+            selectedQuickStartPlayers.remove(at: index)
+        } else if selectedQuickStartPlayers.count < 4 {
+            selectedQuickStartPlayers.append(player)
         }
     }
 

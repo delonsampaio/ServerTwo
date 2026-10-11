@@ -375,4 +375,16 @@ public final class MatchRepository {
         }
         try modelContext.save()
     }
+
+    /// Deletes every saved player, including whichever one is "Me". Exists
+    /// for a genuine full-reset (e.g. `-UITest-ResetState`) — `SavedPlayer`
+    /// rows outlive `deleteAllMatchHistory()`, since the two are otherwise
+    /// independent, so a caller that wants a truly clean slate needs both.
+    public func deleteAllSavedPlayers() throws {
+        let existing = try fetchAllSavedPlayers()
+        for player in existing {
+            modelContext.delete(player)
+        }
+        try modelContext.save()
+    }
 }

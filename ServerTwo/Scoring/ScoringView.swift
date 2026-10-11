@@ -14,6 +14,7 @@ struct ScoringView: View {
     @State private var gameOverMessage = ""
     @State private var showingFinishConfirmation = false
     @State private var finishErrorMessage: String?
+    @State private var showingCancelConfirmation = false
 
     var body: some View {
         Group {
@@ -26,6 +27,16 @@ struct ScoringView: View {
         .navigationTitle("\(activeMatchController.teamAName) vs \(activeMatchController.teamBName)")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // The only way out of a match before finishing it — ScoringView
+            // is the root of the Play tab's content while a match is live,
+            // not pushed via NavigationLink, so there's no back button to
+            // fall back on otherwise.
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Cancel Match", role: .destructive) {
+                    showingCancelConfirmation = true
+                }
+                .accessibilityIdentifier("Cancel Match")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     activeMatchController.undo()
@@ -35,6 +46,15 @@ struct ScoringView: View {
                 .disabled(!canUndo)
                 .accessibilityLabel("Undo")
             }
+        }
+        .alert("Cancel Match?", isPresented: $showingCancelConfirmation) {
+            Button("Cancel Match", role: .destructive) {
+                activeMatchController.cancelActiveMatch()
+            }
+            .accessibilityIdentifier("Confirm Cancel Match")
+            Button("Keep Playing", role: .cancel) { }
+        } message: {
+            Text("The score so far will be lost. This can't be undone.")
         }
         .sheet(isPresented: Binding(
             get: { correctingTeam != nil },
