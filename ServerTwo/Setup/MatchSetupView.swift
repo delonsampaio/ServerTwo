@@ -247,30 +247,45 @@ struct MatchSetupView: View {
         swap(&teamAPlayer2ID, &teamBPlayer2ID)
     }
 
-    /// Fills slots in order (Team A Player 1, Team A Player 2, Team B
-    /// Player 1, Team B Player 2) with whichever 1-4 players were selected
-    /// on Home before navigating here — a single trip, not one per player.
+    /// Distributes whichever 1-4 players were selected on Home across
+    /// teams and sides — a single trip to Setup, not one per player. The
+    /// distribution (not just a sequential slot fill) and mode switch both
+    /// matter: for exactly 2 players, the obvious intent is "these two are
+    /// playing each other" (singles, one per side), not "these two are my
+    /// doubles partners" — stacking both onto Team A would leave Team B
+    /// empty and the match still in whatever mode Setup happened to be in.
     private func applyQuickStart(_ request: QuickStartRequest) {
-        var remaining = request.players.prefix(4).map { $0 }
-        if !remaining.isEmpty {
-            let player = remaining.removeFirst()
-            teamAPlayer1 = player.name
-            teamAPlayer1ID = player.savedPlayerID
-        }
-        if !remaining.isEmpty {
-            let player = remaining.removeFirst()
-            teamAPlayer2 = player.name
-            teamAPlayer2ID = player.savedPlayerID
-        }
-        if !remaining.isEmpty {
-            let player = remaining.removeFirst()
-            teamBPlayer1 = player.name
-            teamBPlayer1ID = player.savedPlayerID
-        }
-        if !remaining.isEmpty {
-            let player = remaining.removeFirst()
-            teamBPlayer2 = player.name
-            teamBPlayer2ID = player.savedPlayerID
+        let players = Array(request.players.prefix(4))
+        switch players.count {
+        case 1:
+            teamAPlayer1 = players[0].name
+            teamAPlayer1ID = players[0].savedPlayerID
+        case 2:
+            playMode = .singles
+            teamAPlayer1 = players[0].name
+            teamAPlayer1ID = players[0].savedPlayerID
+            teamBPlayer1 = players[1].name
+            teamBPlayer1ID = players[1].savedPlayerID
+        case 3:
+            playMode = .doubles
+            teamAPlayer1 = players[0].name
+            teamAPlayer1ID = players[0].savedPlayerID
+            teamAPlayer2 = players[1].name
+            teamAPlayer2ID = players[1].savedPlayerID
+            teamBPlayer1 = players[2].name
+            teamBPlayer1ID = players[2].savedPlayerID
+        case 4:
+            playMode = .doubles
+            teamAPlayer1 = players[0].name
+            teamAPlayer1ID = players[0].savedPlayerID
+            teamAPlayer2 = players[1].name
+            teamAPlayer2ID = players[1].savedPlayerID
+            teamBPlayer1 = players[2].name
+            teamBPlayer1ID = players[2].savedPlayerID
+            teamBPlayer2 = players[3].name
+            teamBPlayer2ID = players[3].savedPlayerID
+        default:
+            break
         }
     }
 

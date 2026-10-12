@@ -78,7 +78,7 @@ struct HomeView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Last Match")
-                        .font(.caption)
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Text("\(teamAName) vs \(teamBName)")
                         .font(.headline)
@@ -118,22 +118,32 @@ struct HomeView: View {
                             .font(.subheadline)
                             .accessibilityIdentifier("Your Record")
                         Spacer()
-                        // Only shown while it's actually something to be
-                        // proud of — a "streak" of 0 isn't a streak, it's
-                        // just noise right after a loss.
-                        if streak > 0 {
-                            Text("🔥 \(streak)")
-                                .font(.subheadline.bold())
-                                .accessibilityIdentifier("WinStreak")
-                        }
                         Text("\(record.wins) - \(record.losses)")
                             .font(.headline)
                             .accessibilityIdentifier("YourRecordValue")
                     }
-                    if !form.isEmpty {
-                        // Most-recent-first, matching how "how am I doing
-                        // lately" is naturally read.
-                        HStack(spacing: 4) {
+                    if !form.isEmpty || streak > 0 {
+                        // Grouped together, not next to the record number
+                        // above — both the streak and the W/L dots are
+                        // "how am I doing lately" (momentum), a different
+                        // thing from the lifetime record, and a plain
+                        // number sitting right beside another plain number
+                        // read ambiguously as one run-together figure.
+                        HStack(spacing: 6) {
+                            // Only shown while it's actually something to
+                            // be proud of — a "streak" of 0 isn't a
+                            // streak, it's just noise right after a loss.
+                            if streak > 0 {
+                                Text("🔥 \(streak)")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange, in: Capsule())
+                                    .accessibilityIdentifier("WinStreak")
+                            }
+                            // Most-recent-first, matching how "how am I
+                            // doing lately" is naturally read.
                             ForEach(Array(form.enumerated()), id: \.offset) { _, didWin in
                                 Text(didWin ? "W" : "L")
                                     .font(.caption2.bold())
@@ -172,7 +182,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Quick Start")
-                        .font(.caption)
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
                     if !selectedQuickStartPlayers.isEmpty {
@@ -183,7 +193,8 @@ struct HomeView: View {
                             selectedQuickStartPlayers = []
                             onQuickStart(QuickStartRequest(players: players))
                         }
-                        .font(.caption.bold())
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                         .accessibilityIdentifier("Start Quick Start Selection")
                     }
                 }
