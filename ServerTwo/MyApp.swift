@@ -34,7 +34,7 @@ struct MyApp: App {
                         if !isPresented { hasSeenOnboarding = true }
                     }
                 )) {
-                    OnboardingView()
+                    OnboardingView(modelContext: modelContainer.mainContext)
                 }
                 .task {
                     applyTestOverridesIfNeeded()
@@ -65,6 +65,16 @@ struct MyApp: App {
         activeMatchController.proUnlocked = false
         activeMatchController.clearAnyInProgressMatchForTesting()
         activeMatchController.clearAllMatchHistoryForTesting()
+        // Without this, `hasSeenOnboarding` (backed by UserDefaults.standard,
+        // not touched by anything above) stays true for the lifetime of the
+        // simulator once onboarding has been dismissed once — meaning no
+        // test after the very first run of the day could ever exercise
+        // OnboardingView again, "-UITest-ResetState" or not. This runs after
+        // `.sheet`'s binding was first evaluated, but `@AppStorage` is
+        // observable, so flipping it here still reactively presents the
+        // sheet a moment later on this same launch — it doesn't require
+        // waiting for the next one.
+        hasSeenOnboarding = false
         if let limitIndex = arguments.firstIndex(of: "-UITest-DemoMatchLimit"),
            limitIndex + 1 < arguments.count,
            let limit = Int(arguments[limitIndex + 1]) {

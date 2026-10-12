@@ -15,6 +15,14 @@ struct PlayerDetailView: View {
     var body: some View {
         List {
             Section {
+                HStack {
+                    Spacer()
+                    PlayerAvatarView(player: player, size: 80)
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+            }
+            Section {
                 if let record {
                     LabeledContent("Record") {
                         Text("\(record.wins) - \(record.losses)")

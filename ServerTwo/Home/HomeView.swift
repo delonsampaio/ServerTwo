@@ -196,11 +196,10 @@ struct HomeView: View {
                             } label: {
                                 VStack(spacing: 4) {
                                     ZStack(alignment: .topTrailing) {
-                                        Text(initials(for: player.name))
-                                            .font(.headline)
-                                            .foregroundStyle(.white)
-                                            .frame(width: 44, height: 44)
-                                            .background(isSelected ? Color.green : Color.accentColor, in: Circle())
+                                        PlayerAvatarView(player: player, size: 44)
+                                            .overlay(
+                                                Circle().stroke(isSelected ? Color.green : Color.clear, lineWidth: 3)
+                                            )
                                         if isSelected {
                                             Image(systemName: "checkmark.circle.fill")
                                                 .symbolRenderingMode(.palette)
@@ -236,12 +235,6 @@ struct HomeView: View {
         } else if selectedQuickStartPlayers.count < 4 {
             selectedQuickStartPlayers.append(player)
         }
-    }
-
-    private func initials(for name: String) -> String {
-        let words = name.split(separator: " ")
-        let letters = words.prefix(2).compactMap { $0.first }
-        return letters.isEmpty ? "?" : String(letters).uppercased()
     }
 
     /// Pro upsell if locked (consistent with every other paywall trigger in

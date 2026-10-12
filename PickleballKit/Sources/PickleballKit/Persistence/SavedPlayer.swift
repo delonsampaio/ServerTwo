@@ -12,6 +12,11 @@ public final class SavedPlayer {
     /// Exactly one `SavedPlayer` should have this `true` at a time —
     /// enforced by `MatchRepository.setMePlayer`, not by the model itself.
     public var isMe: Bool = false
+    /// Pre-processed (resized + compressed) before being stored — see
+    /// `MatchRepository.setPlayerPhoto`. Never the raw picked image, to
+    /// stay well under CloudKit's per-record size limit now that this
+    /// store syncs. `nil` means "no photo," not "photo failed to load."
+    public var photoData: Data? = nil
 
     /// Inverse side of `TeamSide.players` — every match side this player
     /// has been part of. Not used by any current query (stats scan forward

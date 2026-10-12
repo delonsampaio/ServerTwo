@@ -378,9 +378,14 @@ struct MatchSetupView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack {
                         ForEach(matches, id: \.id) { player in
-                            Button(player.name) {
+                            Button {
                                 field.wrappedValue = player.name
                                 selectedID.wrappedValue = player.id
+                            } label: {
+                                HStack(spacing: 6) {
+                                    PlayerAvatarView(player: player, size: 20)
+                                    Text(player.name)
+                                }
                             }
                             .buttonStyle(.bordered)
                             .accessibilityIdentifier("PlayerSuggestion.\(player.name)")

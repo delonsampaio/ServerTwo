@@ -233,6 +233,15 @@ public final class MatchRepository {
         try modelContext.save()
     }
 
+    /// Sets or clears a player's photo. Callers are expected to have already
+    /// resized/compressed `data` (see `PlayerPhotoProcessor`) — this method
+    /// just stores whatever it's given. `data: nil` removes the photo,
+    /// reverting that player to the initials fallback everywhere it's shown.
+    public func setPlayerPhoto(_ player: SavedPlayer, data: Data?) throws {
+        player.photoData = data
+        try modelContext.save()
+    }
+
     /// Clears `isMe` on every `SavedPlayer` that currently has it (not
     /// just the one `fetchMePlayer()` would return) before setting it on
     /// this one. The store is CloudKit-synced, so two devices can each

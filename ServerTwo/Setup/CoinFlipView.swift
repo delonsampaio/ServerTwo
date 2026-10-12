@@ -39,10 +39,19 @@ struct CoinFlipView: View {
 
             coin
 
+            // The result text is always present (reserving its line's
+            // height) and only its opacity toggles — if it were added via
+            // `if let result`, the extra line appearing only once a result
+            // exists would change this VStack's total content height, and
+            // with Spacers above and below, SwiftUI would redistribute
+            // space between them and visibly shift everything else when
+            // the coin lands.
+            Text("\(displayedTeam == .teamA ? setup.resolvedTeamAName : setup.resolvedTeamBName) serves first")
+                .font(.title3.bold())
+                .opacity(result == nil ? 0 : 1)
+                .accessibilityIdentifier("FirstServeResult")
+
             if let result {
-                Text("\(result == .teamA ? setup.resolvedTeamAName : setup.resolvedTeamBName) serves first")
-                    .font(.title3.bold())
-                    .accessibilityIdentifier("FirstServeResult")
                 Button("Begin Match") {
                     activeMatchController.confirmFirstServe(result)
                 }

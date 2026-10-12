@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 import PickleballKit
 
 struct ManagePlayersView: View {
@@ -32,6 +33,34 @@ struct ManagePlayersView: View {
                         // used to fix Rename/Set as Me interfering with
                         // each other; a NavigationLink's row-wide tap
                         // target respects it the same way.
+                        // A write-only PhotosPicker: tapping the avatar
+                        // opens the picker directly (no separate "Edit
+                        // Photo" step), and there's no need for per-row
+                        // @State since the binding's `get` is never
+                        // actually read back.
+                        PhotosPicker(
+                            selection: Binding(
+                                get: { nil },
+                                set: { (newItem: PhotosPickerItem?) in
+                                    guard let newItem else { return }
+                                    Task { await setPhoto(for: player, from: newItem) }
+                                }
+                            ),
+                            matching: .images
+                        ) {
+                            PlayerAvatarView(player: player, size: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("PhotoPicker.\(player.name)")
+                        .contextMenu {
+                            if player.photoData != nil {
+                                Button("Remove Photo", role: .destructive) {
+                                    removePhoto(for: player)
+                                }
+                                .accessibilityIdentifier("RemovePhoto.\(player.name)")
+                            }
+                        }
+
                         NavigationLink {
                             PlayerDetailView(player: player)
                         } label: {
@@ -133,6 +162,20 @@ struct ManagePlayersView: View {
     private func setMe(_ player: SavedPlayer) {
         let repository = MatchRepository(modelContext: modelContext)
         try? repository.setMePlayer(player)
+        loadPlayers()
+    }
+
+    private func setPhoto(for player: SavedPlayer, from item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let processed = PlayerPhotoProcessor.process(data) else { return }
+        let repository = MatchRepository(modelContext: modelContext)
+        try? repository.setPlayerPhoto(player, data: processed)
+        loadPlayers()
+    }
+
+    private func removePhoto(for player: SavedPlayer) {
+        let repository = MatchRepository(modelContext: modelContext)
+        try? repository.setPlayerPhoto(player, data: nil)
         loadPlayers()
     }
 

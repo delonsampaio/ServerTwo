@@ -17,7 +17,18 @@ import PickleballKit
 /// this screen was trimmed to avoid.
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
+    /// Explicitly passed in by `MyApp`, not read via `@Environment(\.modelContext)`.
+    /// This view is presented via `.sheet`, and `@Environment(\.modelContext)`
+    /// was confirmed (via direct instrumentation: insert + save reported no
+    /// error, yet an immediate re-fetch in the very same function, against
+    /// the very same context, returned zero rows — even with a 15-second
+    /// delay first, ruling out any startup/CloudKit-readiness timing
+    /// explanation) to resolve to a context not backed by the app's real
+    /// store for sheet content here. Taking the container's `mainContext`
+    /// directly sidesteps whatever that resolution gap is — the same
+    /// defensive move `ActiveMatchController` already makes for its own
+    /// context, for an analogous reliability reason.
+    let modelContext: ModelContext
     @State private var yourName: String = ""
 
     var body: some View {
@@ -75,6 +86,7 @@ struct OnboardingView: View {
 }
 
 #Preview {
-    OnboardingView()
-        .modelContainer(try! PersistenceContainer.makeInMemoryContainer())
+    let container = try! PersistenceContainer.makeInMemoryContainer()
+    return OnboardingView(modelContext: container.mainContext)
+        .modelContainer(container)
 }
