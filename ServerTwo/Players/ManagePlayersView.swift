@@ -76,22 +76,30 @@ struct ManagePlayersView: View {
                             }
                         }
                         Spacer()
-                        // `.borderless` makes each button its own hit-test
-                        // target. Without it, two plain Buttons packed into
-                        // one List row get overlapping default tap regions
-                        // and a tap aimed at one can fire the other's action
-                        // (observed: tapping "Set as Me" opened "Rename").
+                        // An explicit, non-default style is what keeps
+                        // this NavigationLink/these buttons from
+                        // interfering with each other — without one, two
+                        // plain Buttons packed into one List row get
+                        // overlapping default tap regions and a tap aimed
+                        // at one can fire the other's action (observed:
+                        // tapping "Set as Me" opened "Rename"). `.bordered`
+                        // (not `.borderless`) also gives each button its
+                        // own visible pill chrome, so two of them sitting
+                        // next to each other read as distinct tappable
+                        // buttons instead of one run-on line of blue text.
                         Button("Rename") {
                             renameText = player.name
                             renamingPlayer = player
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                         .accessibilityIdentifier("Rename.\(player.name)")
                         if !player.isMe {
                             Button("Set as Me") {
                                 setMe(player)
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                             .accessibilityIdentifier("SetMe.\(player.name)")
                         }
                     }

@@ -73,6 +73,17 @@ final class ActiveMatchController {
         return "Team B"
     }
 
+    /// Set by either cancel method, consumed once by `MatchSetupView` to
+    /// restore the names/rules of whatever was just canceled — cancelling
+    /// is usually "wrong setting" or "redo the coin flip," not "I never
+    /// want to play these people," so retyping everyone from scratch would
+    /// be exactly the friction Rematch/Quick Start already exist to avoid.
+    private(set) var lastCanceledSetup: PendingMatchSetup?
+
+    func clearLastCanceledSetup() {
+        lastCanceledSetup = nil
+    }
+
     private let repository: MatchRepository
     private let userDefaults: UserDefaults
 
@@ -135,7 +146,8 @@ final class ActiveMatchController {
     /// to go back and change something in Setup. Nothing was ever
     /// persisted at this point, so this is a pure in-memory reset.
     func cancelPendingMatch() {
-        guard case .staged = lifecycleState else { return }
+        guard case .staged(let setup) = lifecycleState else { return }
+        lastCanceledSetup = setup
         lifecycleState = .idle
     }
 
@@ -223,7 +235,15 @@ final class ActiveMatchController {
     /// that was never persisted), this has to actively clear real,
     /// already-persisted progress.
     func cancelActiveMatch() {
-        guard case .active = lifecycleState else { return }
+        guard case .active(let info) = lifecycleState else { return }
+        lastCanceledSetup = PendingMatchSetup(
+            configuration: info.match.configuration,
+            matchFormat: info.match.matchFormat,
+            teamAName: info.teamAName,
+            teamBName: info.teamBName,
+            teamAPlayerIDs: info.teamAPlayerIDs,
+            teamBPlayerIDs: info.teamBPlayerIDs
+        )
         lifecycleState = .idle
         userDefaults.removeObject(forKey: Keys.activeTeamAName)
         userDefaults.removeObject(forKey: Keys.activeTeamBName)

@@ -12,7 +12,7 @@ import PickleballKit
 /// `teamBPlayerIDs`: this controller's `ModelContext` isn't the one views
 /// read from, so a live model object handed in here would risk the same
 /// cross-context bug already found and fixed once in this project.
-struct PendingMatchSetup {
+struct PendingMatchSetup: Equatable {
     let configuration: GameConfiguration
     let matchFormat: MatchFormat
     let teamAName: String

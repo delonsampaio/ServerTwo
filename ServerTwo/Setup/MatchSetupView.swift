@@ -183,6 +183,11 @@ struct MatchSetupView: View {
             applyQuickStart(request)
             onQuickStartConsumed()
         }
+        .onChange(of: activeMatchController.lastCanceledSetup) { _, newValue in
+            guard let setup = newValue else { return }
+            applyCancelRestore(setup)
+            activeMatchController.clearLastCanceledSetup()
+        }
         .onAppear {
             // Covers the one case `.onChange` doesn't: a request that was
             // already set before this exact view instance was first created
@@ -191,7 +196,13 @@ struct MatchSetupView: View {
             // only comes into existence once that match finishes and this
             // view appears for the first time already holding a non-nil
             // value — `.onChange` only fires on a value that CHANGES after
-            // this view starts observing it).
+            // this view starts observing it). This is actually the PRIMARY
+            // path for a cancel restore, not just a fallback: canceling
+            // always creates a fresh MatchSetupView synchronously (the
+            // branch flips from ScoringView/CoinFlipView to it), so
+            // `lastCanceledSetup` is already set by the time this instance
+            // first appears, before `.onChange` above would ever see it
+            // transition from nil.
             if let pendingRematch {
                 applyRematch(pendingRematch)
                 onPrefillConsumed()
@@ -199,6 +210,10 @@ struct MatchSetupView: View {
             if let pendingQuickStart {
                 applyQuickStart(pendingQuickStart)
                 onQuickStartConsumed()
+            }
+            if let setup = activeMatchController.lastCanceledSetup {
+                applyCancelRestore(setup)
+                activeMatchController.clearLastCanceledSetup()
             }
         }
     }
@@ -230,6 +245,42 @@ struct MatchSetupView: View {
         // now decided on its own screen after "Start Match" (see
         // `CoinFlipView`), there's nothing to reset here to force that —
         // every match, rematch or not, always goes through that screen.
+    }
+
+    /// `PendingMatchSetup` (unlike `RematchRequest`) only carries player
+    /// ids, not names — at staging time there was no need to remember
+    /// names separately, since `MatchSetupView` already had them in its
+    /// own text fields. Restoring after a cancel has to look names back
+    /// up from the ids instead.
+    private func applyCancelRestore(_ setup: PendingMatchSetup) {
+        playMode = setup.configuration.playMode
+        switch setup.configuration.scoringFormat {
+        case .sideOut:
+            scoringFormatKind = .sideOut
+            rallyFreeze = false
+        case .rally(let freeze):
+            scoringFormatKind = .rally
+            rallyFreeze = freeze
+        }
+        winningScore = setup.configuration.winningScore
+        winByTwo = setup.configuration.winByTwo
+        trackTimeouts = setup.configuration.timeoutsPerTeam > 0
+        matchFormat = setup.matchFormat
+
+        let repository = MatchRepository(modelContext: modelContext)
+        let allPlayers = (try? repository.fetchAllSavedPlayers()) ?? []
+        func name(for id: UUID) -> String {
+            allPlayers.first { $0.id == id }?.name ?? ""
+        }
+
+        teamAPlayer1ID = setup.teamAPlayerIDs.first
+        teamAPlayer1 = teamAPlayer1ID.map(name) ?? ""
+        teamAPlayer2ID = setup.teamAPlayerIDs.count > 1 ? setup.teamAPlayerIDs[1] : nil
+        teamAPlayer2 = teamAPlayer2ID.map(name) ?? ""
+        teamBPlayer1ID = setup.teamBPlayerIDs.first
+        teamBPlayer1 = teamBPlayer1ID.map(name) ?? ""
+        teamBPlayer2ID = setup.teamBPlayerIDs.count > 1 ? setup.teamBPlayerIDs[1] : nil
+        teamBPlayer2 = teamBPlayer2ID.map(name) ?? ""
     }
 
     private func swapTeams() {
