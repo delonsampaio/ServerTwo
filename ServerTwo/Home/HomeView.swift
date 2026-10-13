@@ -79,7 +79,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Last Match")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
                     Text("\(teamAName) vs \(teamBName)")
                         .font(.headline)
                     Text("\(teamAGames) - \(teamBGames)")
@@ -96,6 +96,7 @@ struct HomeView: View {
                         onRematch(request)
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.small)
                     .accessibilityIdentifier("Rematch")
                 }
             }
@@ -183,7 +184,7 @@ struct HomeView: View {
                 HStack {
                     Text("Quick Start")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
                     Spacer()
                     if !selectedQuickStartPlayers.isEmpty {
                         Button("Start (\(selectedQuickStartPlayers.count))") {
@@ -201,6 +202,9 @@ struct HomeView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 16) {
                         ForEach(Array(frequentPlayers.prefix(4)), id: \.id) { player in
+                            // The selected checkmark badge pokes above the
+                            // avatar's own bounds (offset upward) — without
+                            // top padding here, the ScrollView clips it.
                             let isSelected = selectedQuickStartPlayers.contains { $0.id == player.id }
                             Button {
                                 toggleQuickStartSelection(player)
@@ -233,6 +237,7 @@ struct HomeView: View {
                             .accessibilityIdentifier("QuickStart.\(player.name)")
                         }
                     }
+                    .padding(.top, 6)
                 }
             }
             .padding()

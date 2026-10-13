@@ -232,14 +232,28 @@ struct MatchSetupView: View {
         winByTwo = request.configuration.winByTwo
         trackTimeouts = request.configuration.timeoutsPerTeam > 0
         matchFormat = request.matchFormat
+
+        // A match saved before player-linking existed (or any save path
+        // that didn't link players) carries no `savedPlayerID` for its
+        // slots. Leaving those nil here would make Setup treat the
+        // Rematch-prefilled name exactly like fresh, unselected typing —
+        // showing suggestion chips under text the app itself just filled
+        // in. Resolving an id up front (reusing an existing SavedPlayer by
+        // name, or creating one) closes that gap instead of waiting for
+        // Start Match to do the same upsert implicitly.
+        let repository = MatchRepository(modelContext: modelContext)
+        func resolvedID(name: String, existingID: UUID?) -> UUID? {
+            if let existingID { return existingID }
+            return try? repository.upsertSavedPlayer(name: name)?.id
+        }
         teamAPlayer1 = request.teamAPlayer1.name
-        teamAPlayer1ID = request.teamAPlayer1.savedPlayerID
+        teamAPlayer1ID = resolvedID(name: request.teamAPlayer1.name, existingID: request.teamAPlayer1.savedPlayerID)
         teamAPlayer2 = request.teamAPlayer2?.name ?? ""
-        teamAPlayer2ID = request.teamAPlayer2?.savedPlayerID
+        teamAPlayer2ID = request.teamAPlayer2.flatMap { resolvedID(name: $0.name, existingID: $0.savedPlayerID) }
         teamBPlayer1 = request.teamBPlayer1.name
-        teamBPlayer1ID = request.teamBPlayer1.savedPlayerID
+        teamBPlayer1ID = resolvedID(name: request.teamBPlayer1.name, existingID: request.teamBPlayer1.savedPlayerID)
         teamBPlayer2 = request.teamBPlayer2?.name ?? ""
-        teamBPlayer2ID = request.teamBPlayer2?.savedPlayerID
+        teamBPlayer2ID = request.teamBPlayer2.flatMap { resolvedID(name: $0.name, existingID: $0.savedPlayerID) }
         // A rematch is a new match — the previous match's first-server
         // result must never carry over invisibly. Since who serves first is
         // now decided on its own screen after "Start Match" (see

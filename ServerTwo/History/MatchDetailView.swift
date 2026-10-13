@@ -74,8 +74,8 @@ struct MatchDetailView: View {
     private func gameCard(_ game: GameRecord) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Game \(game.gameNumber)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
             // Names and scores are visually separated (name small/secondary,
             // score large/bold) rather than run together in one sentence —
             // a single "TeamName Score - Score TeamName" line reads as
@@ -114,8 +114,8 @@ struct MatchDetailView: View {
     private func gameScoreColumn(name: String, score: Int) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(name)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text("\(score)")
