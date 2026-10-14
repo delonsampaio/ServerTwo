@@ -81,6 +81,12 @@ struct HomeView: View {
         let games = (match.games ?? []).sorted { $0.gameNumber < $1.gameNumber }
         let teamAGames = games.filter { $0.winningTeam == .teamA }.count
         let teamBGames = games.filter { $0.winningTeam == .teamB }.count
+        // Same treatment as MatchHistoryListView's rows, so this card and
+        // History read consistently instead of Home showing a bare
+        // "0 - 1" series tally that could be mistaken for a game score.
+        let myResult: Bool? = mePlayer.flatMap {
+            MatchRepository(modelContext: modelContext).myResult(for: $0, in: match)
+        }
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -89,8 +95,22 @@ struct HomeView: View {
                         .foregroundStyle(.primary)
                     Text("\(teamAName) vs \(teamBName)")
                         .font(.headline)
-                    Text("\(teamAGames) - \(teamBGames)")
-                        .font(.title2.bold())
+                    HStack(spacing: 8) {
+                        if let myResult {
+                            Text(myResult ? "W" : "L")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(myResult ? .green : .red)
+                                .frame(width: 22, height: 22)
+                                .background(myResult ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
+                        }
+                        if match.matchFormat == .bestOfOne, let onlyGame = games.first {
+                            Text("\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)")
+                                .font(.title2.bold())
+                        } else {
+                            Text("\(teamAGames) - \(teamBGames)")
+                                .font(.title2.bold())
+                        }
+                    }
                 }
                 Spacer()
                 HStack(spacing: 8) {
@@ -165,7 +185,14 @@ struct HomeView: View {
                         Spacer()
                         if !form.isEmpty {
                             HStack(spacing: 8) {
-                                ForEach(Array(form.enumerated()), id: \.offset) { _, didWin in
+                                // `form` itself is most-recent-first (see
+                                // `recentForm`'s own doc comment) — reversed
+                                // here so the dots read oldest-to-newest,
+                                // left to right, landing the most recent
+                                // result on the right, directly under the
+                                // streak badge above it that's describing
+                                // that same current momentum.
+                                ForEach(Array(form.reversed().enumerated()), id: \.offset) { _, didWin in
                                     Text(didWin ? "W" : "L")
                                         .font(.subheadline.bold())
                                         .foregroundStyle(.white)
@@ -221,60 +248,79 @@ struct HomeView: View {
                         .accessibilityIdentifier("Start Quick Start Selection")
                     }
                 }
-                // A plain, evenly-distributed row (not a horizontal
-                // ScrollView) — at most 4 avatars ever show (Setup's
-                // doubles max), which comfortably fits every supported
-                // iPhone width, and a ScrollView's content hugs its own
-                // natural size regardless of the container's width, so it
-                // can't actually spread fewer-than-4 avatars out even if
-                // asked to. `.frame(maxWidth: .infinity)` per column here
-                // does the spreading instead.
-                HStack(spacing: 16) {
-                    ForEach(Array(frequentPlayers.prefix(4)), id: \.id) { player in
-                        // The selected checkmark badge pokes above the
-                        // avatar's own bounds (offset upward) — without top
-                        // padding here, it would sit flush against the
-                        // card's own top edge.
-                        let isSelected = selectedQuickStartPlayers.contains { $0.id == player.id }
-                        Button {
-                            toggleQuickStartSelection(player)
-                        } label: {
-                            VStack(spacing: 4) {
-                                ZStack(alignment: .topTrailing) {
-                                    PlayerAvatarView(player: player, size: 44)
-                                        .overlay(
-                                            Circle().strokeBorder(.primary.opacity(0.12), lineWidth: 1)
-                                        )
-                                        .overlay(
-                                            Circle().stroke(isSelected ? Color.green : Color.clear, lineWidth: 3)
-                                        )
-                                    if isSelected {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .symbolRenderingMode(.palette)
-                                            .foregroundStyle(.green, .white)
-                                            .offset(x: 4, y: -4)
-                                    }
-                                }
-                                Text(player.name)
-                                    .font(.caption2)
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                            }
-                            .frame(maxWidth: .infinity)
+                // Up to 4 players: a plain, evenly-distributed row (not a
+                // horizontal ScrollView) — that many comfortably fits
+                // every supported iPhone width, and a ScrollView's content
+                // hugs its own natural size regardless of the container's
+                // width, so it can't actually spread fewer-than-4 avatars
+                // out even if asked to. Past 4, an evenly-distributed row
+                // would squeeze every avatar instead, so it switches to a
+                // horizontal scroll at a fixed per-item width instead —
+                // sized so a 5th player visibly peeks off the right edge,
+                // a natural cue that the row scrolls without needing a
+                // visible scrollbar.
+                let quickStartPlayers = Array(frequentPlayers.prefix(8))
+                if quickStartPlayers.count <= 4 {
+                    HStack(spacing: 16) {
+                        ForEach(quickStartPlayers, id: \.id) { player in
+                            quickStartItem(player)
+                                .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.plain)
-                        // Only 4 player slots exist in Setup (doubles'
-                        // max) — once 4 are selected, further taps on an
-                        // unselected chip would have nowhere to go.
-                        .disabled(!isSelected && selectedQuickStartPlayers.count >= 4)
-                        .accessibilityIdentifier("QuickStart.\(player.name)")
+                    }
+                    .padding(.top, 6)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(quickStartPlayers, id: \.id) { player in
+                                quickStartItem(player)
+                                    .frame(width: 68)
+                            }
+                        }
+                        .padding(.top, 6)
                     }
                 }
-                .padding(.top, 6)
             }
             .padding()
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
+    }
+
+    private func quickStartItem(_ player: SavedPlayer) -> some View {
+        // The selected checkmark badge pokes above the avatar's own
+        // bounds (offset upward) — without top padding on the row above,
+        // it would sit flush against the card's own top edge.
+        let isSelected = selectedQuickStartPlayers.contains { $0.id == player.id }
+        return Button {
+            toggleQuickStartSelection(player)
+        } label: {
+            VStack(spacing: 4) {
+                ZStack(alignment: .topTrailing) {
+                    PlayerAvatarView(player: player, size: 44)
+                        .overlay(
+                            Circle().strokeBorder(.primary.opacity(0.12), lineWidth: 1)
+                        )
+                        .overlay(
+                            Circle().stroke(isSelected ? Color.green : Color.clear, lineWidth: 3)
+                        )
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.green, .white)
+                            .offset(x: 4, y: -4)
+                    }
+                }
+                Text(player.name)
+                    .font(.caption2)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(.plain)
+        // Only 4 player slots exist in Setup (doubles' max) — once 4 are
+        // selected, further taps on an unselected chip would have
+        // nowhere to go.
+        .disabled(!isSelected && selectedQuickStartPlayers.count >= 4)
+        .accessibilityIdentifier("QuickStart.\(player.name)")
     }
 
     private func toggleQuickStartSelection(_ player: SavedPlayer) {
