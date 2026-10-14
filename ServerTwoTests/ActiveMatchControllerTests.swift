@@ -470,4 +470,49 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertNil(resumedController.gameCompletionDates[0])
         XCTAssertNotNil(resumedController.gameCompletionDates[1])
     }
+
+    /// End-to-end proof that `gameCompletionDates` actually makes it into
+    /// the persisted record, not just the controller's in-memory array —
+    /// `finishMatch()` hands the array to `saveCompletedMatch`, which has a
+    /// defaulted `gameCompletionDates: [Date?] = []` parameter; deleting the
+    /// one argument that wires them together would compile cleanly and every
+    /// other existing test would still pass, while every `GameRecord.completedAt`
+    /// silently went nil forever in production. Found in the final
+    /// whole-branch review, Important #1.
+    func testFinishMatchPersistsGameCompletionDatesOntoEveryGameRecord() throws {
+        let (controller, _) = try makeController()
+        start(controller, matchFormat: .bestOfThree, teamAName: "A", teamBName: "B")
+
+        // Win game 1 outright (11-0), then game 2 (11-0) — team A wins the
+        // match 2-0, so both games have a real completion timestamp tracked
+        // by the controller.
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+
+        let record = try controller.finishMatch()
+        XCTAssertTrue(
+            record.games?.allSatisfy { $0.completedAt != nil } ?? false,
+            "Every persisted GameRecord must carry the completion date the controller tracked in memory — if finishMatch() stopped passing gameCompletionDates through, these would all be nil"
+        )
+    }
+
+    /// `correctScore(team:to:)` calls `syncGameCompletionDates()` the same
+    /// as `recordPoint`/`undo`, but only those other two call sites were
+    /// covered by a test — this exercises the sync helper via the third
+    /// call site so a future change that breaks `correctScore`'s sync call
+    /// specifically (without touching the other two) would be caught.
+    func testCorrectScoreGrowsGameCompletionDatesWhenItWinsAGame() throws {
+        let (controller, _) = try makeController()
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+        start(controller, configuration: config, matchFormat: .bestOfThree, teamAName: "A", teamBName: "B")
+        XCTAssertEqual(controller.gameCompletionDates.count, 0)
+
+        // Push team A's score directly to the game-winning value via
+        // correctScore, rather than recordPoint — this must grow
+        // completedGames (and therefore gameCompletionDates) by one, same
+        // as it would via normal point-by-point scoring.
+        controller.correctScore(team: .teamA, to: 11)
+        XCTAssertEqual(controller.match?.completedGames.count, 1)
+        XCTAssertEqual(controller.gameCompletionDates.count, 1)
+    }
 }

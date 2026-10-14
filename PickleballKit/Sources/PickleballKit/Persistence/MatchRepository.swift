@@ -68,6 +68,13 @@ public final class MatchRepository {
 
     // MARK: Completed match history
 
+    /// Persists a finished `PickleballMatch` as history: a `MatchRecord`
+    /// plus its `TeamSide`/`GameRecord`/`PointEvent` graph. `gameCompletionDates`
+    /// is never computed here — it's captured live, point by point, by
+    /// `ActiveMatchController.syncGameCompletionDates()` and simply handed
+    /// through to populate each `GameRecord.completedAt`; this method has no
+    /// other source of those timestamps (a crash-resumed game's date is
+    /// `nil` for the same reason — see `GameRecord.completedAt`'s doc comment).
     @discardableResult
     public func saveCompletedMatch(
         _ match: PickleballMatch,
@@ -424,6 +431,10 @@ public final class MatchRepository {
         var hasPartnerMatch = false, hasOpponentMatch = false
 
         for match in matches {
+            // Named `meSide`, not `mySide`, so it doesn't shadow the
+            // `mySide(for:in:)` method for the rest of this `guard let`
+            // chain (and everything below it in this loop) — a prior
+            // version named it `mySide` and that shadowing broke the build.
             guard let meSide = mySide(for: me, in: match),
                   let otherSide = mySide(for: other, in: match) else { continue }
 
