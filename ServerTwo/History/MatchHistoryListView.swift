@@ -130,16 +130,46 @@ struct MatchHistoryListView: View {
         let games = (match.games ?? []).sorted { $0.gameNumber < $1.gameNumber }
         let teamAGames = games.filter { $0.winningTeam == .teamA }.count
         let teamBGames = games.filter { $0.winningTeam == .teamB }.count
-        return VStack(alignment: .leading) {
-            Text("\(teamAName) vs \(teamBName)")
-                .font(.headline)
-                .accessibilityIdentifier("\(teamAName) vs \(teamBName)")
-            Text("\(teamAGames) - \(teamBGames)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text(match.completedAt, style: .date)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        // Whether `mePlayer` won this specific match (nil if they're unset
+        // or didn't play in it) — lets the row show an at-a-glance W/L
+        // badge instead of making the reader work out who's who from
+        // which side of "vs" their own name happens to land on.
+        let myResult: Bool? = mePlayer.flatMap { me in
+            (match.teamSides ?? [])
+                .first { side in (side.players ?? []).contains { $0.id == me.id } }
+                .map { $0.team == match.winningTeam }
+        }
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(teamAName) vs \(teamBName)")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .accessibilityIdentifier("\(teamAName) vs \(teamBName)")
+                Text(match.completedAt, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if let myResult {
+                Text(myResult ? "W" : "L")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(myResult ? .green : .red)
+                    .frame(width: 22, height: 22)
+                    .background(myResult ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
+            }
+            // A best-of-1 match's "games won" score is always 1-0 or 0-1 -
+            // true but uninformative on every single row. Showing the
+            // actual point score instead tells a reader something new;
+            // best-of-3/5 still show the meaningful games-won tally.
+            if match.matchFormat == .bestOfOne, let onlyGame = games.first {
+                Text("\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)")
+                    .font(.subheadline.weight(.bold).monospacedDigit())
+                    .foregroundStyle(.primary)
+            } else {
+                Text("\(teamAGames) - \(teamBGames)")
+                    .font(.subheadline.weight(.bold).monospacedDigit())
+                    .foregroundStyle(.primary)
+            }
         }
     }
 

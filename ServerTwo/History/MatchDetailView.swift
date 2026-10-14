@@ -14,6 +14,23 @@ struct MatchDetailView: View {
     private var orderedGames: [GameRecord] {
         (match.games ?? []).sorted { $0.gameNumber < $1.gameNumber }
     }
+    /// "Singles • Best of 1", etc. `nil` if the stored rules can't be
+    /// decoded — not expected for a match this app itself saved, but a
+    /// failed decode should just omit the metadata rather than crash or
+    /// show garbage.
+    private var formatSummary: String? {
+        guard let configuration = try? JSONDecoder().decode(GameConfiguration.self, from: match.configurationData) else {
+            return nil
+        }
+        let mode = configuration.playMode == .singles ? "Singles" : "Doubles"
+        let bestOf = "Best of \(match.matchFormat.rawValue)"
+        switch configuration.scoringFormat {
+        case .sideOut:
+            return "\(mode) • \(bestOf)"
+        case .rally:
+            return "\(mode) • \(bestOf) • Rally"
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -37,8 +54,6 @@ struct MatchDetailView: View {
                     Button("Rematch") {
                         onRematch(request)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                     .accessibilityIdentifier("Rematch")
                 }
             }
@@ -58,15 +73,23 @@ struct MatchDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            HStack(spacing: 6) {
-                Image(systemName: "trophy.fill")
-                Text("Winner: \(match.winningTeam == .teamA ? teamAName : teamBName)")
-                    .font(.subheadline.bold())
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "trophy.fill")
+                    Text("Winner: \(match.winningTeam == .teamA ? teamAName : teamBName)")
+                        .font(.subheadline.bold())
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.yellow.opacity(0.3), in: Capsule())
+
+                if let formatSummary {
+                    Text(formatSummary)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
             }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Color.yellow.opacity(0.3), in: Capsule())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -82,34 +105,39 @@ struct MatchDetailView: View {
             // score large/bold) rather than run together in one sentence —
             // a single "TeamName Score - Score TeamName" line reads as
             // crowded, especially with doubles' longer combined names.
-            // Matches the name-above-score pattern already used in
-            // ScoringView and FinishMatchSheet.
-            // `.lastTextBaseline` (not the HStack default `.center`) lines
-            // the separator up with the score digits specifically — each
-            // `gameScoreColumn` is a two-line name+score block, and
-            // center-aligning the whole HStack left the "-" floating
-            // between the two lines instead of reading as part of the
-            // score.
-            HStack(alignment: .lastTextBaseline, spacing: 8) {
-                gameScoreColumn(name: teamAName, score: game.teamAFinalScore)
+            // Each column spans half the card's width (not just its own
+            // content's width), so the two sides read as a balanced
+            // scoreboard instead of a block bunched into the top-left
+            // corner with the rest of the card empty.
+            HStack(alignment: .lastTextBaseline) {
+                gameScoreColumn(name: teamAName, score: game.teamAFinalScore, won: game.winningTeam == .teamA, alignment: .leading)
                 Text("-")
-                    .font(.title.bold())
-                    .foregroundStyle(.secondary)
-                gameScoreColumn(name: teamBName, score: game.teamBFinalScore)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                gameScoreColumn(name: teamBName, score: game.teamBFinalScore, won: game.winningTeam == .teamB, alignment: .trailing)
             }
+
+            Divider()
 
             VStack(spacing: 10) {
                 ForEach(game.orderedPoints) { point in
                     HStack(spacing: 10) {
                         Text("\(point.sequenceNumber)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, alignment: .leading)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 24, alignment: .leading)
+                        Circle()
+                            .fill(point.scoringTeam == .teamA ? Color.accentColor : Color.orange)
+                            .frame(width: 6, height: 6)
                         Text("\(point.scoringTeam == .teamA ? teamAName : teamBName) scored")
                             .font(.subheadline)
+                            .foregroundStyle(.secondary)
                         Spacer()
                         Text("\(point.teamAScoreAfter)-\(point.teamBScoreAfter)")
-                            .font(.subheadline.monospacedDigit().bold())
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(Color.primary.opacity(0.06), in: Capsule())
                     }
                 }
             }
@@ -119,15 +147,18 @@ struct MatchDetailView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func gameScoreColumn(name: String, score: Int) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+    private func gameScoreColumn(name: String, score: Int, won: Bool, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
             Text(name)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text("\(score)")
-                .font(.title.bold())
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(won ? .primary : .secondary)
         }
+        .frame(maxWidth: .infinity, alignment: alignment == .leading ? .leading : .trailing)
     }
 }

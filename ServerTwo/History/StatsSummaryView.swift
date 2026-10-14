@@ -27,9 +27,9 @@ struct StatsSummaryView: View {
             statColumn(title: "Matches", value: "\(matches.count)")
             if let mePlayer {
                 let record = repository.personalRecord(for: mePlayer, in: matches)
-                Divider()
+                statDivider
                 statColumn(title: "Your Record", value: "\(record.wins) - \(record.losses)")
-                Divider()
+                statDivider
                 statColumn(title: "Points For/Against", value: "\(record.pointsFor) - \(record.pointsAgainst)")
             }
             Spacer(minLength: 0)
@@ -37,10 +37,27 @@ struct StatsSummaryView: View {
         .padding(.vertical, 8)
     }
 
+    // An explicit height and color rather than Divider's own defaults —
+    // its default separator color is tuned for a system background, and
+    // this card can sit against a plain black background in dark mode
+    // where that default reads as too low-contrast to notice.
+    private var statDivider: some View {
+        Divider()
+            .frame(height: 32)
+            .overlay(Color.primary.opacity(0.15))
+    }
+
     private func statColumn(title: String, value: String) -> some View {
         VStack {
-            Text(value).font(.headline)
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value)
+                .font(.title3.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
         }
     }
 }
