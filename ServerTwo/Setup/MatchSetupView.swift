@@ -191,7 +191,9 @@ struct MatchSetupView: View {
             // Match" stages everything else and hands off to it. Styled
             // and placed the same way as "New Match" on Home: a bold,
             // full-width primary CTA pinned outside the scrolling
-            // content, not a row at the bottom of it.
+            // content, not a row at the bottom of it. `.glassProminent`
+            // (not a hand-drawn accent-color fill) so it renders as true
+            // Liquid Glass material instead of a flat rectangle.
             Button {
                 if activeMatchController.canStartNewMatch {
                     startMatch()
@@ -202,10 +204,11 @@ struct MatchSetupView: View {
                 Text("Start Match")
                     .font(.headline.weight(.semibold))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .foregroundStyle(.white)
-                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(.vertical, 8)
             }
+            .buttonStyle(.glassProminent)
+            .tint(Color.accentColor)
+            .controlSize(.large)
             .padding()
             .accessibilityIdentifier("Start Match")
         }

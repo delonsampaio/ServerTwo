@@ -28,16 +28,22 @@ struct FinishMatchSheet: View {
             // Full-width, equal-width action row (not small pills with
             // empty space around them) — these are the two things a
             // thumb needs to reach without looking closely right after a
-            // match ends.
+            // match ends. Native `.glass`/`.glassProminent` (not
+            // hand-drawn fills) for true Liquid Glass material; the
+            // `.frame(maxWidth: .infinity)` goes on each label, not the
+            // Button itself — on the Button it only widens the tap
+            // target, leaving the style's own background hugging the
+            // text.
             HStack(spacing: 12) {
-                Button("Cancel", role: .cancel) {
+                Button(role: .cancel) {
                     dismiss()
+                } label: {
+                    Text("Cancel")
+                        .font(.headline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
                 }
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .buttonStyle(.glass)
 
                 Button {
                     onConfirm()
@@ -45,13 +51,14 @@ struct FinishMatchSheet: View {
                 } label: {
                     Text("Confirm Finish")
                         .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .padding(.vertical, 8)
                 }
+                .buttonStyle(.glassProminent)
+                .tint(Color.accentColor)
                 .accessibilityIdentifier("Confirm Finish")
             }
+            .controlSize(.large)
         }
         .padding()
         // An opaque elevated surface of our own — the sheet's own default

@@ -63,7 +63,8 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
+            .tint(Color.accentColor)
             .controlSize(.large)
             .padding()
             .accessibilityIdentifier("New Match")
