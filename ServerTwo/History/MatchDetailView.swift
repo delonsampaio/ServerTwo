@@ -14,6 +14,66 @@ struct MatchDetailView: View {
     private var orderedGames: [GameRecord] {
         (match.games ?? []).sorted { $0.gameNumber < $1.gameNumber }
     }
+
+    var durationText: String? {
+        let interval = match.completedAt.timeIntervalSince(match.startedAt)
+        guard interval >= 0 else { return nil }
+        guard interval >= 60 else { return "< 1 min" }
+        return Duration.seconds(interval)
+            .formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
+    }
+
+    /// Two games are indistinguishable for "closest" purposes only when
+    /// they share BOTH their margin and their total points — not merely
+    /// the same margin. A plain `Set` of margins would make the
+    /// margin-tie-break rule below unreachable for any 2-game match
+    /// where both games happen to share a margin (e.g. 11-9 and 15-13,
+    /// margin 2 both times): `Set([2, 2])` has one element, so a guard
+    /// on distinct margins alone would return `nil` before ever reaching
+    /// the tiebreaker, contradicting the spec's own worked example of
+    /// exactly that case.
+    private struct ClosenessKey: Hashable {
+        let margin: Int
+        let totalPoints: Int
+    }
+
+    var closestGameID: GameRecord.ID? {
+        guard orderedGames.count > 1 else { return nil }
+        let keys = Set(orderedGames.map {
+            ClosenessKey(
+                margin: abs($0.teamAFinalScore - $0.teamBFinalScore),
+                totalPoints: $0.teamAFinalScore + $0.teamBFinalScore
+            )
+        })
+        guard keys.count > 1 else { return nil }
+
+        return orderedGames.min { lhs, rhs in
+            let lhsMargin = abs(lhs.teamAFinalScore - lhs.teamBFinalScore)
+            let rhsMargin = abs(rhs.teamAFinalScore - rhs.teamBFinalScore)
+            if lhsMargin != rhsMargin { return lhsMargin < rhsMargin }
+            let lhsTotal = lhs.teamAFinalScore + lhs.teamBFinalScore
+            let rhsTotal = rhs.teamAFinalScore + rhs.teamBFinalScore
+            return lhsTotal > rhsTotal
+        }?.id
+    }
+
+    var longestGameID: GameRecord.ID? {
+        guard orderedGames.count > 1 else { return nil }
+        guard orderedGames.allSatisfy({ $0.completedAt != nil }) else { return nil }
+
+        var previousCheckpoint = match.startedAt
+        var longest: (id: GameRecord.ID, duration: TimeInterval)?
+        for game in orderedGames {
+            let completedAt = game.completedAt!
+            let duration = completedAt.timeIntervalSince(previousCheckpoint)
+            if longest == nil || duration > longest!.duration {
+                longest = (game.id, duration)
+            }
+            previousCheckpoint = completedAt
+        }
+        return longest?.id
+    }
+
     /// "Singles • Best of 1", etc. `nil` if the stored rules can't be
     /// decoded — not expected for a match this app itself saved, but a
     /// failed decode should just omit the metadata rather than crash or
@@ -30,6 +90,16 @@ struct MatchDetailView: View {
         case .rally:
             return "\(mode) • \(bestOf) • Rally"
         }
+    }
+
+    private var matchMetadataText: String? {
+        // `joined(separator:)` always returns a (possibly empty) String,
+        // which implicitly wraps into a non-nil String? — without this
+        // guard, "both formatSummary and durationText are nil" would
+        // render an empty Text row instead of none at all.
+        let parts = [formatSummary, durationText].compactMap { $0 }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " • ")
     }
 
     var body: some View {
@@ -94,8 +164,8 @@ struct MatchDetailView: View {
                 .padding(.vertical, 4)
                 .background(Color.yellow.opacity(0.3), in: Capsule())
 
-                if let formatSummary {
-                    Text(formatSummary)
+                if let matchMetadataText {
+                    Text(matchMetadataText)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -108,9 +178,27 @@ struct MatchDetailView: View {
 
     private func gameCard(_ game: GameRecord) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Game \(game.gameNumber)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
+            HStack(spacing: 6) {
+                Text("Game \(game.gameNumber)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                if game.id == closestGameID {
+                    Text("Closest Game")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange, in: Capsule())
+                }
+                if game.id == longestGameID {
+                    Text("Longest Game")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue, in: Capsule())
+                }
+            }
             // Names and scores are visually separated (name small/secondary,
             // score large/bold) rather than run together in one sentence —
             // a single "TeamName Score - Score TeamName" line reads as
