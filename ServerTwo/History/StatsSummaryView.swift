@@ -23,6 +23,11 @@ struct StatsSummaryView: View {
                 statColumn(title: "Points For/Against", value: "\(record.pointsFor) - \(record.pointsAgainst)")
             }
         }
+        // Explicit outer margin, not left to the List row's default inset
+        // — "Points For/Against" is the widest value in its column, so
+        // without this it sat with noticeably less breathing room against
+        // the card's trailing edge than "Matches" had on the leading edge.
+        .padding(.horizontal, 8)
         .padding(.vertical, 8)
     }
 
