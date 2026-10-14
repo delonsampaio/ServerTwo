@@ -23,6 +23,7 @@ struct TimeoutControlsView: View {
         }
         .disabled(remaining <= 0)
         .buttonStyle(.bordered)
+        .controlSize(.large)
         .accessibilityLabel("\(name) timeout, \(remaining) remaining")
     }
 }

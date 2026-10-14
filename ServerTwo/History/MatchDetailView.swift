@@ -37,6 +37,8 @@ struct MatchDetailView: View {
                     Button("Rematch") {
                         onRematch(request)
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                     .accessibilityIdentifier("Rematch")
                 }
             }
@@ -82,10 +84,16 @@ struct MatchDetailView: View {
             // crowded, especially with doubles' longer combined names.
             // Matches the name-above-score pattern already used in
             // ScoringView and FinishMatchSheet.
-            HStack(spacing: 8) {
+            // `.lastTextBaseline` (not the HStack default `.center`) lines
+            // the separator up with the score digits specifically — each
+            // `gameScoreColumn` is a two-line name+score block, and
+            // center-aligning the whole HStack left the "-" floating
+            // between the two lines instead of reading as part of the
+            // score.
+            HStack(alignment: .lastTextBaseline, spacing: 8) {
                 gameScoreColumn(name: teamAName, score: game.teamAFinalScore)
                 Text("-")
-                    .font(.title2.bold())
+                    .font(.title.bold())
                     .foregroundStyle(.secondary)
                 gameScoreColumn(name: teamBName, score: game.teamBFinalScore)
             }

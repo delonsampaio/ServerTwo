@@ -32,8 +32,8 @@ struct CoinFlipView: View {
             Spacer()
 
             Text("\(setup.resolvedTeamAName) vs \(setup.resolvedTeamBName)")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 

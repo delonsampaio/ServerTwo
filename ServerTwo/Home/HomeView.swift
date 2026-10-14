@@ -275,12 +275,15 @@ struct HomeView: View {
                 HStack {
                     Image(systemName: "lock.fill")
                     Text("Unlock Server Two Pro — $1.99")
-                        .font(.subheadline.bold())
+                        .font(.headline)
                     Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
                 }
+                .foregroundStyle(.white)
             }
             .padding()
-            .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12))
             .accessibilityIdentifier("Home Unlock Pro Banner")
         }
     }

@@ -69,8 +69,8 @@ struct ManagePlayersView: View {
                                     .accessibilityIdentifier("PlayerRow.\(player.name)")
                                 if player.isMe {
                                     Text("Me")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(Color.accentColor)
                                         .accessibilityIdentifier("Me.\(player.name)")
                                 }
                             }
