@@ -84,6 +84,16 @@ final class ActiveMatchController {
         lastCanceledSetup = nil
     }
 
+    /// Positional with `match?.completedGames` — index `i` is when game
+    /// `i`'s winning point was recorded. `nil` entries are games that
+    /// completed before this session's own timestamp capture began (a
+    /// crash-resumed match's pre-crash games — see `resumeIfNeeded`
+    /// below), never a placeholder for "forgot to record." Never
+    /// persisted to `GameRecord`/`MatchRecord` directly — `finishMatch()`
+    /// hands the whole array to `saveCompletedMatch`, which is the only
+    /// place it's written to disk.
+    private(set) var gameCompletionDates: [Date?] = []
+
     private let repository: MatchRepository
     private let userDefaults: UserDefaults
 
@@ -132,6 +142,7 @@ final class ActiveMatchController {
             teamAPlayerIDs: [],
             teamBPlayerIDs: []
         ))
+        gameCompletionDates = Array(repeating: nil, count: resumed.match.completedGames.count)
     }
 
     /// Captures everything Setup decided except who serves first —
@@ -174,21 +185,25 @@ final class ActiveMatchController {
             teamAPlayerIDs: setup.teamAPlayerIDs,
             teamBPlayerIDs: setup.teamBPlayerIDs
         ))
+        gameCompletionDates = []
         persistSnapshot()
     }
 
     func recordPoint(for team: Team) {
         match?.recordPoint(for: team)
+        syncGameCompletionDates()
         persistSnapshot()
     }
 
     func undo() {
         match?.undo()
+        syncGameCompletionDates()
         persistSnapshot()
     }
 
     func correctScore(team: Team, to newScore: Int) {
         match?.correctScore(team: team, to: newScore)
+        syncGameCompletionDates()
         persistSnapshot()
     }
 
@@ -219,7 +234,8 @@ final class ActiveMatchController {
             teamBName: info.teamBName,
             startedAt: info.startedAt,
             teamAPlayers: teamAPlayers,
-            teamBPlayers: teamBPlayers
+            teamBPlayers: teamBPlayers,
+            gameCompletionDates: gameCompletionDates
         )
         lifecycleState = .idle
         userDefaults.removeObject(forKey: Keys.activeTeamAName)
@@ -245,6 +261,7 @@ final class ActiveMatchController {
             teamBPlayerIDs: info.teamBPlayerIDs
         )
         lifecycleState = .idle
+        gameCompletionDates = []
         userDefaults.removeObject(forKey: Keys.activeTeamAName)
         userDefaults.removeObject(forKey: Keys.activeTeamBName)
         try? repository.clearInProgressSnapshot()
@@ -269,6 +286,20 @@ final class ActiveMatchController {
     func clearAllMatchHistoryForTesting() {
         try? repository.deleteAllMatchHistory()
         try? repository.deleteAllSavedPlayers()
+    }
+
+    /// Called from `recordPoint`/`undo`/`correctScore` only — each of
+    /// those can move `completedGames.count` by exactly one in either
+    /// direction, so a plain grow-by-one/shrink-by-one here is correct;
+    /// it would NOT be correct if called from anywhere that could skip
+    /// multiple games at once.
+    private func syncGameCompletionDates() {
+        guard let count = match?.completedGames.count else { return }
+        if gameCompletionDates.count > count {
+            gameCompletionDates.removeLast(gameCompletionDates.count - count)
+        } else if gameCompletionDates.count < count {
+            gameCompletionDates.append(contentsOf: Array(repeating: Date(), count: count - gameCompletionDates.count))
+        }
     }
 
     private func persistSnapshot() {

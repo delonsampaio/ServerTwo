@@ -356,4 +356,87 @@ final class ActiveMatchControllerTests: XCTestCase {
         let second = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         XCTAssertTrue(second.proUnlocked)
     }
+
+    func testGameCompletionDatesStaysCorrectlySizedAcrossUndoAndReplay() throws {
+        let (controller, _) = try makeController()
+        start(controller, matchFormat: .bestOfThree, teamAName: "A", teamBName: "B")
+
+        // Win game 1 outright (11-0).
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        XCTAssertEqual(controller.gameCompletionDates.count, 1)
+
+        // Undo the game-winning point — this reverts completedGames back to
+        // empty, which must shrink gameCompletionDates back to empty too, not
+        // leave a stale premature timestamp sitting at index 0.
+        controller.undo()
+        XCTAssertEqual(controller.gameCompletionDates.count, 0)
+
+        // Replay the real winning point for game 1.
+        controller.recordPoint(for: .teamA)
+        XCTAssertEqual(controller.gameCompletionDates.count, 1)
+
+        // Win game 2 as well — now two completed games, two dates. (Not
+        // asserting the two dates are distinct values: back-to-back Date()
+        // captures with only a scoring loop between them is a real, if
+        // small, flakiness risk without an injected clock — the array being
+        // correctly *sized* is this test's actual claim, not that it holds
+        // literally non-equal timestamps.)
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        XCTAssertEqual(controller.gameCompletionDates.count, 2)
+    }
+
+    func testGameCompletionDatesResetsToEmptyOnFreshMatch() throws {
+        let (controller, _) = try makeController()
+        start(controller, teamAName: "A", teamBName: "B")
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        XCTAssertEqual(controller.gameCompletionDates.count, 1)
+
+        _ = try controller.finishMatch()
+
+        // A brand new match must not inherit the previous match's dates.
+        start(controller, teamAName: "C", teamBName: "D")
+        XCTAssertEqual(controller.gameCompletionDates.count, 0)
+    }
+
+    func testGameCompletionDatesResetsToEmptyOnCancelActiveMatch() throws {
+        let (controller, _) = try makeController()
+        start(controller, teamAName: "A", teamBName: "B")
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        XCTAssertEqual(controller.gameCompletionDates.count, 1)
+
+        controller.cancelActiveMatch()
+
+        // An idle controller must never hold leftover timestamps from a
+        // discarded match — same reasoning as the fresh-match case above,
+        // just via the other path back to .idle.
+        start(controller, teamAName: "C", teamBName: "D")
+        XCTAssertEqual(controller.gameCompletionDates.count, 0)
+    }
+
+    func testGameCompletionDatesPreSizesWithNilsOnCrashResume() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let context = ModelContext(container)
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+
+        let firstController = ActiveMatchController(modelContext: context, userDefaults: defaults)
+        start(firstController, matchFormat: .bestOfThree, teamAName: "A", teamBName: "B")
+        // Win game 1 (11-0) — this persists an in-progress snapshot via the
+        // existing persistSnapshot() call, which is what the second
+        // controller below resumes from.
+        for _ in 1...11 { firstController.recordPoint(for: .teamA) }
+        XCTAssertEqual(firstController.gameCompletionDates.count, 1)
+
+        // A fresh controller against the SAME context/defaults simulates a
+        // crash/relaunch — its own gameCompletionDates starts empty, with no
+        // memory of the dates the first controller tracked in memory.
+        let resumedController = ActiveMatchController(modelContext: context, userDefaults: defaults)
+        XCTAssertEqual(resumedController.gameCompletionDates, [nil])
+
+        // Winning game 2 from here must APPEND a real date for game 2, not
+        // overwrite game 1's nil or reset the array.
+        for _ in 1...11 { resumedController.recordPoint(for: .teamA) }
+        XCTAssertEqual(resumedController.gameCompletionDates.count, 2)
+        XCTAssertNil(resumedController.gameCompletionDates[0])
+        XCTAssertNotNil(resumedController.gameCompletionDates[1])
+    }
 }
