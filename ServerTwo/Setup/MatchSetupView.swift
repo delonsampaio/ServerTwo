@@ -68,46 +68,24 @@ struct MatchSetupView: View {
     }
 
     var body: some View {
-        Form {
+        // "Start Match" lives outside the Form, pinned above the tab bar
+        // (matching "New Match" on Home) — inside the scrolling Form, a
+        // user who lands here via Rematch/Quick Start (or just typed two
+        // names) still had to scroll past the whole "Match Rules" card
+        // every time to reach it, even though the rules usually stay on
+        // their defaults.
+        VStack(spacing: 0) {
+            Form {
+            // Players change on nearly every match; rules mostly stay on
+            // their defaults. Team A/B sit right under Mode (which
+            // controls how many player fields each shows) so entering
+            // players never needs scrolling past four static rules
+            // sections first — the rules themselves are still here, just
+            // consolidated into one card below instead of four.
             Section("Mode") {
                 Picker("Mode", selection: $playMode) {
                     Text("Singles").tag(PlayMode.singles)
                     Text("Doubles").tag(PlayMode.doubles)
-                }
-                .pickerStyle(.segmented)
-            }
-
-            Section("Scoring Format") {
-                Picker("Format", selection: $scoringFormatKind) {
-                    ForEach(ScoringFormatKind.allCases) { kind in
-                        Text(kind.rawValue).tag(kind)
-                    }
-                }
-                .pickerStyle(.segmented)
-                if scoringFormatKind == .rally {
-                    Toggle("Win game point on serve only (freeze)", isOn: $rallyFreeze)
-                }
-            }
-
-            Section("Win Condition") {
-                Picker("Win Score", selection: $winningScore) {
-                    ForEach(WinningScore.allCases, id: \.self) { score in
-                        Text("\(score.rawValue)").tag(score)
-                    }
-                }
-                Toggle("Win by 2", isOn: $winByTwo)
-                // A casual game among friends often doesn't bother with
-                // timeouts at all. On by default, but a one-tap opt-out
-                // rather than a 0/1/2/3 count picker, which would be
-                // clutter nobody but a tournament format actually needs.
-                Toggle("Track Timeouts", isOn: $trackTimeouts)
-            }
-
-            Section("Match Format") {
-                Picker("Best of", selection: $matchFormat) {
-                    ForEach(MatchFormat.allCases, id: \.self) { format in
-                        Text("Best of \(format.rawValue)").tag(format)
-                    }
                 }
                 .pickerStyle(.segmented)
             }
@@ -125,7 +103,7 @@ struct MatchSetupView: View {
                 }
             }
 
-            Section("Team B") {
+            Section {
                 TextField(playMode == .doubles ? "Player 1" : "Player Name", text: trackedTextBinding(text: $teamBPlayer1, selectedID: $teamBPlayer1ID))
                     .focused($focusedField, equals: .teamBPlayer1)
                     .accessibilityIdentifier("Team B Player Name")
@@ -136,38 +114,100 @@ struct MatchSetupView: View {
                         .accessibilityIdentifier("Team B Player 2 Name")
                     suggestionChips(for: $teamBPlayer2, selectedID: $teamBPlayer2ID, isFocused: focusedField == .teamBPlayer2)
                 }
-                Button("Swap Teams") {
-                    swapTeams()
-                }
-                .accessibilityIdentifier("Swap Teams")
-                // "Swap Teams" only flips which side an existing pair is
-                // on — it can't recombine players across pairs. This is
-                // the one other degree of freedom that's missing: round-
-                // robin doubles rotates partners, not just sides. Only
-                // meaningful with two players per side, so doubles-only;
-                // Player 1s stay put, only the Player 2s trade places.
-                if playMode == .doubles {
-                    Button("Swap Partners") {
-                        swapPartners()
+            } header: {
+                // Both swap actions moved into Team B's own header
+                // (trailing side) instead of being rows inside Team B's
+                // card — as body rows they made Team B's card visibly
+                // taller than Team A's (an asymmetry neither swap
+                // actually implies) and made each read as something that
+                // belonged to Team B specifically, when both are really
+                // actions on the pairing between the two teams.
+                HStack {
+                    Text("Team B")
+                    Spacer()
+                    HStack(spacing: 14) {
+                        // "Swap Teams" only flips which side an existing
+                        // pair is on — it can't recombine players across
+                        // pairs. "Swap Partners" is the one other degree
+                        // of freedom that's missing: round-robin doubles
+                        // rotates partners, not just sides. Only
+                        // meaningful with two players per side, so
+                        // doubles-only; Player 1s stay put, only the
+                        // Player 2s trade places.
+                        if playMode == .doubles {
+                            Button {
+                                swapPartners()
+                            } label: {
+                                Label("Swap Partners", systemImage: "arrow.left.arrow.right")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .accessibilityIdentifier("Swap Partners")
+                        }
+                        Button {
+                            swapTeams()
+                        } label: {
+                            Label("Swap Teams", systemImage: "arrow.up.arrow.down")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .accessibilityIdentifier("Swap Teams")
                     }
-                    .accessibilityIdentifier("Swap Partners")
                 }
             }
 
-            Section {
-                // Who serves first is decided on its own screen right
-                // before scoring starts, not here — see `CoinFlipView`.
-                // "Start Match" stages everything else and hands off to it.
-                Button("Start Match") {
-                    if activeMatchController.canStartNewMatch {
-                        startMatch()
-                    } else {
-                        isShowingPaywall = true
+            Section("Match Rules") {
+                // Segmented (not the Form-default drill-down row) —
+                // unchanged from before consolidation, just relocated.
+                Picker("Scoring", selection: $scoringFormatKind) {
+                    ForEach(ScoringFormatKind.allCases) { kind in
+                        Text(kind.rawValue).tag(kind)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .accessibilityIdentifier("Start Match")
+                .pickerStyle(.segmented)
+                if scoringFormatKind == .rally {
+                    Toggle("Win game point on serve only (freeze)", isOn: $rallyFreeze)
+                }
+                Picker("Format", selection: $matchFormat) {
+                    ForEach(MatchFormat.allCases, id: \.self) { format in
+                        Text("Best of \(format.rawValue)").tag(format)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Picker("Win Score", selection: $winningScore) {
+                    ForEach(WinningScore.allCases, id: \.self) { score in
+                        Text("\(score.rawValue)").tag(score)
+                    }
+                }
+                Toggle("Win by 2", isOn: $winByTwo)
+                // A casual game among friends often doesn't bother with
+                // timeouts at all. On by default, but a one-tap opt-out
+                // rather than a 0/1/2/3 count picker, which would be
+                // clutter nobody but a tournament format actually needs.
+                Toggle("Track Timeouts", isOn: $trackTimeouts)
             }
+            }
+
+            // Who serves first is decided on its own screen right before
+            // scoring starts, not here — see `CoinFlipView`. "Start
+            // Match" stages everything else and hands off to it. Styled
+            // and placed the same way as "New Match" on Home: a bold,
+            // full-width primary CTA pinned outside the scrolling
+            // content, not a row at the bottom of it.
+            Button {
+                if activeMatchController.canStartNewMatch {
+                    startMatch()
+                } else {
+                    isShowingPaywall = true
+                }
+            } label: {
+                Text("Start Match")
+                    .font(.headline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .foregroundStyle(.white)
+                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .padding()
+            .accessibilityIdentifier("Start Match")
         }
         .navigationTitle("New Match")
         .sheet(isPresented: $isShowingPaywall) {

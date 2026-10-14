@@ -89,15 +89,24 @@ struct CoinFlipView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 HStack(spacing: 12) {
-                    Button("\(setup.resolvedTeamAName) Won Spin") {
+                    // `.frame(maxWidth: .infinity)` on the label (not the
+                    // Button itself) — applied to the Button directly it
+                    // only widened the tap area, while the visible
+                    // `.bordered` background kept hugging the text, still
+                    // leaving a gap between two unequal-looking pills.
+                    Button {
                         settle(on: .teamA)
+                    } label: {
+                        Text("\(setup.resolvedTeamAName) Won Spin")
+                            .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("Team A Won Spin")
-                    Button("\(setup.resolvedTeamBName) Won Spin") {
+                    Button {
                         settle(on: .teamB)
+                    } label: {
+                        Text("\(setup.resolvedTeamBName) Won Spin")
+                            .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("Team B Won Spin")
                 }
                 .buttonStyle(.bordered)
