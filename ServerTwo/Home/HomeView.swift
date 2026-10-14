@@ -114,23 +114,22 @@ struct HomeView: View {
                 let streak = repository.winStreak(for: mePlayer, in: matches)
                 let form = repository.recentForm(for: mePlayer, in: matches)
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
+                    HStack(alignment: .top) {
                         Text("Your Record")
                             .font(.subheadline)
                             .accessibilityIdentifier("Your Record")
                         Spacer()
-                        Text("\(record.wins) - \(record.losses)")
-                            .font(.headline)
-                            .accessibilityIdentifier("YourRecordValue")
-                    }
-                    if !form.isEmpty || streak > 0 {
-                        // Grouped together, not next to the record number
-                        // above — both the streak and the W/L dots are
-                        // "how am I doing lately" (momentum), a different
-                        // thing from the lifetime record, and a plain
-                        // number sitting right beside another plain number
-                        // read ambiguously as one run-together figure.
-                        HStack(spacing: 6) {
+                        // The streak sits directly under the record it's
+                        // annotating, not beside the W/L dots below — it
+                        // was previously grouped with the dots, but a
+                        // Capsule badge dropped into a row of same-sized
+                        // Circles read as a mismatched, out-of-place shape.
+                        // Stacking it under "4 - 1" instead pairs it with
+                        // the number it actually describes.
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(record.wins) - \(record.losses)")
+                                .font(.headline)
+                                .accessibilityIdentifier("YourRecordValue")
                             // Only shown while it's actually something to
                             // be proud of — a "streak" of 0 isn't a
                             // streak, it's just noise right after a loss.
@@ -143,8 +142,12 @@ struct HomeView: View {
                                     .background(Color.orange, in: Capsule())
                                     .accessibilityIdentifier("WinStreak")
                             }
-                            // Most-recent-first, matching how "how am I
-                            // doing lately" is naturally read.
+                        }
+                    }
+                    if !form.isEmpty {
+                        // Most-recent-first, matching how "how am I doing
+                        // lately" is naturally read.
+                        HStack(spacing: 6) {
                             ForEach(Array(form.enumerated()), id: \.offset) { _, didWin in
                                 Text(didWin ? "W" : "L")
                                     .font(.caption2.bold())

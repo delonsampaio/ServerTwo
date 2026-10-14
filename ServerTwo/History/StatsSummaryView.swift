@@ -8,7 +8,12 @@ struct StatsSummaryView: View {
     let repository: MatchRepository
 
     var body: some View {
-        HStack {
+        // `.top` (not the default `.center`) — "Points For/Against" wraps
+        // to two lines while the other two labels stay on one, and
+        // center-aligning the whole HStack let that taller column pull
+        // its own number down out of line with the other two, reading as
+        // randomly misaligned.
+        HStack(alignment: .top) {
             statColumn(title: "Matches", value: "\(matches.count)")
             if let mePlayer {
                 let record = repository.personalRecord(for: mePlayer, in: matches)
