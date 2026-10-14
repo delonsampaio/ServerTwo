@@ -385,6 +385,37 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertEqual(controller.gameCompletionDates.count, 2)
     }
 
+    func testGameCompletionDatesStaysCorrectlySizedWhenUndoingTheMatchDecidingPoint() throws {
+        let (controller, _) = try makeController()
+        start(controller, matchFormat: .bestOfThree, teamAName: "A", teamBName: "B")
+
+        // Win game 1 outright (11-0).
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        XCTAssertEqual(controller.gameCompletionDates.count, 1)
+
+        // Win game 2 as well — team A now wins the whole match 2-0.
+        // Because this point ends the match itself (not just the game),
+        // PickleballMatch never spins up a fresh currentGame afterward, so
+        // currentGameIsCounted stays true going into the undo() below.
+        // That's the branch of PickleballMatch.undo() the OTHER
+        // gameCompletionDates test above never reaches: it only ever
+        // undoes a point that wins a single game within an ongoing match,
+        // which leaves currentGameIsCounted false and falls through to
+        // the other removal branch (completedGames.popLast()). Both
+        // branches happen to shrink completedGames.count by exactly 1, so
+        // this test is the one that actually proves syncGameCompletionDates
+        // is correct on the higher-risk path: undoing the point that wins
+        // the entire match.
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        XCTAssertEqual(controller.gameCompletionDates.count, 2)
+
+        // Undo the match-deciding point. This must shrink
+        // gameCompletionDates from 2 back to 1 — not stay stuck at 2, and
+        // not over-shrink to 0.
+        controller.undo()
+        XCTAssertEqual(controller.gameCompletionDates.count, 1)
+    }
+
     func testGameCompletionDatesResetsToEmptyOnFreshMatch() throws {
         let (controller, _) = try makeController()
         start(controller, teamAName: "A", teamBName: "B")
