@@ -14,6 +14,8 @@ struct PlayerDetailView: View {
     @State private var recentForm: [Bool] = []
     @State private var matches: [MatchRecord] = []
     @State private var loadError: Error?
+    @State private var mePlayer: SavedPlayer?
+    @State private var chemistry: (asPartner: (wins: Int, losses: Int)?, asOpponent: (wins: Int, losses: Int)?)?
 
     var body: some View {
         List {
@@ -67,6 +69,33 @@ struct PlayerDetailView: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.vertical, 8)
+
+                    if showsChemistry, let chemistry {
+                        if let asPartner = chemistry.asPartner {
+                            Divider()
+                            HStack {
+                                Text("As Your Partner")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(asPartner.wins) - \(asPartner.losses)")
+                                    .font(.subheadline.weight(.bold).monospacedDigit())
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        if let asOpponent = chemistry.asOpponent {
+                            Divider()
+                            HStack {
+                                Text("As Your Opponent")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(asOpponent.wins) - \(asOpponent.losses)")
+                                    .font(.subheadline.weight(.bold).monospacedDigit())
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
 
                     if !recentForm.isEmpty {
                         Divider()
@@ -127,6 +156,10 @@ struct PlayerDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { loadRecord() }
         .refreshable { loadRecord() }
+    }
+
+    private var showsChemistry: Bool {
+        mePlayer != nil && mePlayer?.id != player.id
     }
 
     private var statDivider: some View {
@@ -196,6 +229,12 @@ struct PlayerDetailView: View {
             record = repository.personalRecord(for: player, in: allMatches)
             recentForm = repository.recentForm(for: player, in: allMatches)
             matches = allMatches.filter { repository.myResult(for: player, in: $0) != nil }
+            mePlayer = try repository.fetchMePlayer()
+            if let mePlayer, mePlayer.id != player.id {
+                chemistry = repository.chemistry(between: mePlayer, and: player, in: allMatches)
+            } else {
+                chemistry = nil
+            }
             loadError = nil
         } catch {
             loadError = error
