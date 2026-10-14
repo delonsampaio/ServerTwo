@@ -288,4 +288,60 @@ final class SavedPlayerRepositoryTests: XCTestCase {
         let record = repository.personalRecord(for: mike, in: allMatches)
         XCTAssertEqual(record.wins, 1, "Renaming must not sever the relationship to past matches — identity is the stable id, not the name")
     }
+
+    /// Pins the fix for a real bug: matches saved before a side's players
+    /// were linked (or any save path that skipped linking, e.g. before the
+    /// Saved Players feature existed) have `side.players == nil`, and the
+    /// id-only match this repository used to do silently dropped those
+    /// matches out of every stat — undercounting "Your Record" rather than
+    /// failing loudly. Reported by the user noticing a History row with no
+    /// W/L badge even though their own name was right there in "Delon &
+    /// Katie vs Yi & Fred".
+    func testPersonalRecordFallsBackToNameMatchingForMatchesSavedWithoutLinkedPlayers() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+
+        let me = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Delon"))
+
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        // No teamAPlayers/teamBPlayers passed — simulates a legacy/unlinked
+        // match, exactly like `testSaveCompletedMatchWithNoPlayersLeavesTeamSidePlayersEmpty`.
+        _ = try repository.saveCompletedMatch(match, teamAName: "Delon & Katie", teamBName: "Yi & Fred", startedAt: Date())
+
+        let allMatches = try repository.fetchMatchHistory()
+        let record = repository.personalRecord(for: me, in: allMatches)
+        XCTAssertEqual(record.wins, 1, "Delon's name is right there in the unlinked side's display name — the fallback should still find and count this match")
+        XCTAssertEqual(record.losses, 0)
+    }
+
+    func testMyResultMatchesViaLinkedIDOrNameFallbackAndNilsWhenAbsent() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        // Rally scoring (not the default sideOut) so every `recordPoint`
+        // call unconditionally adds to the named team's score, including
+        // the `.teamB` calls below where team A is still the initial
+        // server — see the identical note on
+        // `testPersonalRecordCountsOnlyMatchesIncludingThePlayerOnEitherSide`.
+        let config = GameConfiguration(scoringFormat: .rally(freeze: false), winningScore: .eleven, winByTwo: true)
+
+        let me = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Delon"))
+
+        let linkedMatch = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { linkedMatch.recordPoint(for: .teamA) }
+        let savedLinked = try repository.saveCompletedMatch(linkedMatch, teamAName: "Delon", teamBName: "Katie", startedAt: Date(), teamAPlayers: [me])
+
+        let unlinkedMatch = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { unlinkedMatch.recordPoint(for: .teamB) }
+        let savedUnlinked = try repository.saveCompletedMatch(unlinkedMatch, teamAName: "Delon", teamBName: "Yi", startedAt: Date())
+
+        let strangersMatch = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { strangersMatch.recordPoint(for: .teamA) }
+        let savedStrangers = try repository.saveCompletedMatch(strangersMatch, teamAName: "Strangers", teamBName: "Others", startedAt: Date())
+
+        XCTAssertEqual(repository.myResult(for: me, in: savedLinked), true, "Linked via id, team A won")
+        XCTAssertEqual(repository.myResult(for: me, in: savedUnlinked), false, "Unlinked but name-matched, team A (Delon) lost")
+        XCTAssertNil(repository.myResult(for: me, in: savedStrangers), "Delon's name appears nowhere in this match")
+    }
 }

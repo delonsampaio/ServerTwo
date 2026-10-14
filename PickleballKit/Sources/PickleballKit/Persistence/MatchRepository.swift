@@ -308,6 +308,26 @@ public final class MatchRepository {
         }
     }
 
+    /// Which side `player` was on in `match`, if any. Matches saved before
+    /// a side's players were linked (or any save path that skipped linking
+    /// them) have `side.players == nil` — an id match alone would silently
+    /// skip those matches out of every stat below, even when the player
+    /// obviously appears in the side's own display name. Falling back to
+    /// an exact match against the side's `" & "`-joined name components
+    /// (not a raw substring test, so "Delon" won't accidentally match
+    /// inside some other "Delonte") recovers those matches instead of
+    /// quietly undercounting them.
+    private func mySide(for player: SavedPlayer, in match: MatchRecord) -> TeamSide? {
+        (match.teamSides ?? []).first { side in
+            if let players = side.players, !players.isEmpty {
+                return players.contains { $0.id == player.id }
+            }
+            return side.displayName.components(separatedBy: " & ").contains {
+                $0.caseInsensitiveCompare(player.name) == .orderedSame
+            }
+        }
+    }
+
     /// A pure computation over already-fetched match history — no I/O, so
     /// callers that already hold `[MatchRecord]` (e.g. a loaded History
     /// screen) can call this directly without a redundant fetch.
@@ -317,9 +337,7 @@ public final class MatchRepository {
     ) -> (wins: Int, losses: Int, pointsFor: Int, pointsAgainst: Int) {
         var wins = 0, losses = 0, pointsFor = 0, pointsAgainst = 0
         for match in matches {
-            guard let mySide = (match.teamSides ?? []).first(where: { side in
-                (side.players ?? []).contains { $0.id == player.id }
-            }) else { continue }
+            guard let mySide = mySide(for: player, in: match) else { continue }
 
             if mySide.team == match.winningTeam {
                 wins += 1
@@ -351,9 +369,7 @@ public final class MatchRepository {
     public func winStreak(for player: SavedPlayer, in matches: [MatchRecord]) -> Int {
         var streak = 0
         for match in matches {
-            guard let mySide = (match.teamSides ?? []).first(where: { side in
-                (side.players ?? []).contains { $0.id == player.id }
-            }) else { continue }
+            guard let mySide = mySide(for: player, in: match) else { continue }
             guard mySide.team == match.winningTeam else { break }
             streak += 1
         }
@@ -367,12 +383,17 @@ public final class MatchRepository {
         var results: [Bool] = []
         for match in matches {
             guard results.count < limit else { break }
-            guard let mySide = (match.teamSides ?? []).first(where: { side in
-                (side.players ?? []).contains { $0.id == player.id }
-            }) else { continue }
+            guard let mySide = mySide(for: player, in: match) else { continue }
             results.append(mySide.team == match.winningTeam)
         }
         return results
+    }
+
+    /// Whether `player` won `match`, or `nil` if they didn't appear in it
+    /// (by either id-linked players or a name-component fallback — see
+    /// `mySide(for:in:)`). A pure computation, same as `personalRecord`.
+    public func myResult(for player: SavedPlayer, in match: MatchRecord) -> Bool? {
+        mySide(for: player, in: match).map { $0.team == match.winningTeam }
     }
 
     /// Deletes every completed match. Cascades to each match's `TeamSide`,

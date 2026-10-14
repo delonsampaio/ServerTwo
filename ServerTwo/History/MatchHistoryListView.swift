@@ -133,11 +133,11 @@ struct MatchHistoryListView: View {
         // Whether `mePlayer` won this specific match (nil if they're unset
         // or didn't play in it) — lets the row show an at-a-glance W/L
         // badge instead of making the reader work out who's who from
-        // which side of "vs" their own name happens to land on.
-        let myResult: Bool? = mePlayer.flatMap { me in
-            (match.teamSides ?? [])
-                .first { side in (side.players ?? []).contains { $0.id == me.id } }
-                .map { $0.team == match.winningTeam }
+        // which side of "vs" their own name happens to land on. Also
+        // covers matches saved before a side's players were linked, via
+        // `myResult`'s own name-based fallback — see `MatchRepository`.
+        let myResult: Bool? = mePlayer.flatMap {
+            MatchRepository(modelContext: modelContext).myResult(for: $0, in: match)
         }
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
