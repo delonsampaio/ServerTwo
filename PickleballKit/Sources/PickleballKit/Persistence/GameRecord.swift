@@ -8,6 +8,14 @@ public final class GameRecord {
     public var teamAFinalScore: Int = 0
     public var teamBFinalScore: Int = 0
     public var winningTeamRawValue: String = Team.teamA.rawValue
+
+    /// When this specific game finished, captured live by
+    /// `ActiveMatchController` (never by the scoring engine — see
+    /// `MatchRepository.saveCompletedMatch`'s doc comment). `nil` for any
+    /// match saved before this field existed, and for a game that
+    /// completed before a crash/relaunch this session resumed from.
+    public var completedAt: Date? = nil
+
     public var match: MatchRecord?
 
     /// SwiftData to-many relationship arrays have no guaranteed order —

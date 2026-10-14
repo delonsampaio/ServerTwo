@@ -1,6 +1,12 @@
 import SwiftData
 import Foundation
 
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
 public enum MatchRepositoryError: Error, Equatable {
     case matchNotOver
 }
@@ -70,7 +76,8 @@ public final class MatchRepository {
         startedAt: Date,
         completedAt: Date = Date(),
         teamAPlayers: [SavedPlayer] = [],
-        teamBPlayers: [SavedPlayer] = []
+        teamBPlayers: [SavedPlayer] = [],
+        gameCompletionDates: [Date?] = []
     ) throws -> MatchRecord {
         guard let winner = match.matchWinner else {
             throw MatchRepositoryError.matchNotOver
@@ -114,6 +121,7 @@ public final class MatchRepository {
                 winningTeam: gameWinner
             )
             gameRecord.match = record
+            gameRecord.completedAt = gameCompletionDates[safe: gameNumber - 1].flatMap { $0 }
             modelContext.insert(gameRecord)
 
             let events = derivePointEvents(history: game.history, finalState: game.state)

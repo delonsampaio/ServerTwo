@@ -27,6 +27,74 @@ final class MatchRepositoryHistoryTests: XCTestCase {
         XCTAssertEqual(points.last?.teamAScoreAfter, 11)
     }
 
+    func testSaveCompletedMatchAppliesGameCompletionDatesByPosition() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(scoringFormat: .rally(freeze: false), winningScore: .eleven, winByTwo: true)
+
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfThree, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+
+        let firstGameEnd = Date(timeIntervalSince1970: 1000)
+        let secondGameEnd = Date(timeIntervalSince1970: 2000)
+
+        let saved = try repository.saveCompletedMatch(
+            match,
+            teamAName: "A",
+            teamBName: "B",
+            startedAt: Date(timeIntervalSince1970: 0),
+            gameCompletionDates: [firstGameEnd, secondGameEnd]
+        )
+
+        let games = try XCTUnwrap(saved.games).sorted { $0.gameNumber < $1.gameNumber }
+        XCTAssertEqual(games.count, 2)
+        XCTAssertEqual(games[0].completedAt, firstGameEnd)
+        XCTAssertEqual(games[1].completedAt, secondGameEnd)
+    }
+
+    func testSaveCompletedMatchOmittingGameCompletionDatesLeavesEveryGameNil() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+
+        // No gameCompletionDates argument at all — every existing caller in
+        // this file (and in the app) must keep compiling unchanged.
+        let saved = try repository.saveCompletedMatch(match, teamAName: "A", teamBName: "B", startedAt: Date())
+
+        let game = try XCTUnwrap(saved.games?.first)
+        XCTAssertNil(game.completedAt)
+    }
+
+    func testSaveCompletedMatchToleratesShorterGameCompletionDatesThanGames() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(scoringFormat: .rally(freeze: false), winningScore: .eleven, winByTwo: true)
+
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfThree, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+
+        // Only one date for two games — simulates a crash-resumed match whose
+        // earlier game predates this session's own timestamp capture. Must
+        // degrade to nil for the uncovered game, not crash.
+        let onlyDate = Date(timeIntervalSince1970: 500)
+        let saved = try repository.saveCompletedMatch(
+            match,
+            teamAName: "A",
+            teamBName: "B",
+            startedAt: Date(timeIntervalSince1970: 0),
+            gameCompletionDates: [onlyDate]
+        )
+
+        let games = try XCTUnwrap(saved.games).sorted { $0.gameNumber < $1.gameNumber }
+        XCTAssertEqual(games[0].completedAt, onlyDate)
+        XCTAssertNil(games[1].completedAt)
+    }
+
     func testSaveCompletedMatchThrowsIfMatchIsNotOver() throws {
         let context = try makeInMemoryContext()
         let repository = MatchRepository(modelContext: context)
