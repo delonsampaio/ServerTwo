@@ -57,6 +57,16 @@ struct MatchDetailView: View {
                     .accessibilityIdentifier("Rematch")
                 }
             }
+            // Liquid Glass merges adjacent trailing toolbar items into one
+            // shared capsule by default, which made "Rematch" and the
+            // Share icon read as a single "Share Rematch" button instead
+            // of two distinct actions. A `ToolbarSpacer` is the system's
+            // own way to force a visual break between groups — manually
+            // drawing a background on each button instead would fight
+            // Liquid Glass's own chrome the same way an explicit
+            // `.buttonStyle` on a toolbar button does elsewhere in this
+            // app (it renders as a bare "..." there).
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 MatchRecapShareButton(match: match)
             }
