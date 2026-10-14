@@ -6,9 +6,11 @@ struct TimeoutControlsView: View {
     let onRequestTimeout: (Team) -> Void
 
     var body: some View {
-        HStack {
+        // Equal-width columns (not a Spacer pushing two independently-sized
+        // buttons apart) so each button sits directly underneath its own
+        // team's score card above, reading as one unified column per side.
+        HStack(spacing: 12) {
             timeoutButton(for: .teamA)
-            Spacer()
             timeoutButton(for: .teamB)
         }
     }
@@ -20,6 +22,7 @@ struct TimeoutControlsView: View {
             onRequestTimeout(team)
         } label: {
             Label("Timeout (\(remaining))", systemImage: "hand.raised.fill")
+                .frame(maxWidth: .infinity)
         }
         .disabled(remaining <= 0)
         .buttonStyle(.bordered)

@@ -194,13 +194,16 @@ struct ScoringView: View {
                     .font(.title3.bold())
             }
 
-            CourtDiagramView(state: match.currentGame.state)
-                .padding(.horizontal)
-
-            HStack(spacing: 2) {
+            // Who's serving now lives inside each team's own score card
+            // (a fixed-height badge slot at its top) instead of a separate
+            // diagram floating above the cards, divorced from the
+            // player/score it's actually about.
+            HStack(spacing: 12) {
                 scoreZone(for: .teamA, match: match)
                 scoreZone(for: .teamB, match: match)
             }
+            .padding(.horizontal)
+            .frame(maxHeight: .infinity)
 
             // Hidden once the match is decided — there's no more play left to
             // pause, and showing them pushed the "Finish Match" button's
@@ -234,18 +237,57 @@ struct ScoringView: View {
     private func scoreZone(for team: Team, match: PickleballMatch) -> some View {
         let name = team == .teamA ? activeMatchController.teamAName : activeMatchController.teamBName
         let score = match.currentGame.state.score(for: team)
+        let isServing = match.currentGame.state.servingTeam == team
         return Button {
             activeMatchController.recordPoint(for: team)
         } label: {
             VStack(spacing: 8) {
+                // A fixed-height slot whether or not this team is serving
+                // — if the receiving side just left it empty with nothing
+                // reserving the space, its card's content would sit lower
+                // than the serving side's, breaking the side-by-side
+                // alignment the two cards are supposed to share.
+                Group {
+                    if isServing {
+                        Label("SERVING", systemImage: "circle.grid.cross.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.accentColor.opacity(0.18), in: Capsule())
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(height: 28)
+
+                Spacer()
+
                 Text(name)
                     .font(.title2.bold())
+                    .foregroundStyle(isServing ? .primary : .secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text("\(score)")
                     .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .foregroundStyle(isServing ? .primary : .secondary)
+
+                Spacer()
+
+                Text("Tap to Score")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.tertiary)
             }
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(isServing ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(isServing ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: isServing ? 2 : 1)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
