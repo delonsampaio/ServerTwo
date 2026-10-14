@@ -396,6 +396,45 @@ public final class MatchRepository {
         mySide(for: player, in: match).map { $0.team == match.winningTeam }
     }
 
+    /// `me`'s record against `other`, split by relationship. Each side is
+    /// `nil` if `me` and `other` never shared that relationship (e.g. two
+    /// players who have only ever partnered have a `nil` asOpponent, not a
+    /// 0-0 one) — a relationship that never happened isn't a stat, it's
+    /// nothing to report.
+    public func chemistry(
+        between me: SavedPlayer,
+        and other: SavedPlayer,
+        in matches: [MatchRecord]
+    ) -> (asPartner: (wins: Int, losses: Int)?, asOpponent: (wins: Int, losses: Int)?) {
+        // A caller passing the same player for both arguments isn't a real
+        // relationship — without this guard every one of their matches would
+        // count as a win/loss "with/against themselves."
+        guard me.id != other.id else { return (nil, nil) }
+
+        var partnerWins = 0, partnerLosses = 0
+        var opponentWins = 0, opponentLosses = 0
+        var hasPartnerMatch = false, hasOpponentMatch = false
+
+        for match in matches {
+            guard let meSide = mySide(for: me, in: match),
+                  let otherSide = mySide(for: other, in: match) else { continue }
+
+            let won = meSide.team == match.winningTeam
+            if meSide.team == otherSide.team {
+                hasPartnerMatch = true
+                won ? (partnerWins += 1) : (partnerLosses += 1)
+            } else {
+                hasOpponentMatch = true
+                won ? (opponentWins += 1) : (opponentLosses += 1)
+            }
+        }
+
+        return (
+            hasPartnerMatch ? (partnerWins, partnerLosses) : nil,
+            hasOpponentMatch ? (opponentWins, opponentLosses) : nil
+        )
+    }
+
     /// Deletes every completed match. Cascades to each match's `TeamSide`,
     /// `GameRecord`, and `PointEvent` rows via their `.cascade` delete rules.
     public func deleteAllMatchHistory() throws {

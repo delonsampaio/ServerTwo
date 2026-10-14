@@ -344,4 +344,109 @@ final class SavedPlayerRepositoryTests: XCTestCase {
         XCTAssertEqual(repository.myResult(for: me, in: savedUnlinked), false, "Unlinked but name-matched, team A (Delon) lost")
         XCTAssertNil(repository.myResult(for: me, in: savedStrangers), "Delon's name appears nowhere in this match")
     }
+
+    func testChemistryPartnerOnlyHistoryPopulatesAsPartnerAndNilsAsOpponent() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(scoringFormat: .rally(freeze: false), winningScore: .eleven, winByTwo: true)
+
+        let me = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Delon"))
+        let other = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Katie"))
+
+        // Match 1: partners, win 11-7.
+        let match1 = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...7 { match1.recordPoint(for: .teamB) }
+        for _ in 1...11 { match1.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(match1, teamAName: "Delon & Katie", teamBName: "Opponents", startedAt: Date(), teamAPlayers: [me, other])
+
+        // Match 2: partners again, lose this time.
+        let match2 = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match2.recordPoint(for: .teamB) }
+        _ = try repository.saveCompletedMatch(match2, teamAName: "Delon & Katie", teamBName: "Opponents", startedAt: Date(), teamAPlayers: [me, other])
+
+        let allMatches = try repository.fetchMatchHistory()
+        let result = repository.chemistry(between: me, and: other, in: allMatches)
+
+        XCTAssertEqual(result.asPartner?.wins, 1)
+        XCTAssertEqual(result.asPartner?.losses, 1)
+        XCTAssertNil(result.asOpponent)
+    }
+
+    func testChemistryOpponentOnlyHistoryPopulatesAsOpponentAndNilsAsPartner() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(scoringFormat: .rally(freeze: false), winningScore: .eleven, winByTwo: true)
+
+        let me = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Delon"))
+        let other = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Katie"))
+
+        // Opponents, me (team A) wins.
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...7 { match.recordPoint(for: .teamB) }
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(match, teamAName: "Delon", teamBName: "Katie", startedAt: Date(), teamAPlayers: [me], teamBPlayers: [other])
+
+        let allMatches = try repository.fetchMatchHistory()
+        let result = repository.chemistry(between: me, and: other, in: allMatches)
+
+        XCTAssertNil(result.asPartner)
+        XCTAssertEqual(result.asOpponent?.wins, 1)
+        XCTAssertEqual(result.asOpponent?.losses, 0)
+    }
+
+    func testChemistryMixedHistorySplitsCorrectlyBetweenBothRelationships() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(scoringFormat: .rally(freeze: false), winningScore: .eleven, winByTwo: true)
+
+        let me = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Delon"))
+        let other = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Katie"))
+
+        // Partnered once, won.
+        let partnered = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { partnered.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(partnered, teamAName: "Delon & Katie", teamBName: "Opponents", startedAt: Date(), teamAPlayers: [me, other])
+
+        // Opposed once, lost.
+        let opposed = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { opposed.recordPoint(for: .teamB) }
+        _ = try repository.saveCompletedMatch(opposed, teamAName: "Delon", teamBName: "Katie", startedAt: Date(), teamAPlayers: [me], teamBPlayers: [other])
+
+        let allMatches = try repository.fetchMatchHistory()
+        let result = repository.chemistry(between: me, and: other, in: allMatches)
+
+        XCTAssertEqual(result.asPartner?.wins, 1)
+        XCTAssertEqual(result.asPartner?.losses, 0)
+        XCTAssertEqual(result.asOpponent?.wins, 0)
+        XCTAssertEqual(result.asOpponent?.losses, 1)
+    }
+
+    func testChemistryNoSharedMatchesReturnsBothNil() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let me = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Delon"))
+        let other = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Katie"))
+
+        let result = repository.chemistry(between: me, and: other, in: [])
+
+        XCTAssertNil(result.asPartner)
+        XCTAssertNil(result.asOpponent)
+    }
+
+    func testChemistryGuardsAgainstSamePlayerPassedTwice() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let me = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Delon"))
+        let config = GameConfiguration(scoringFormat: .rally(freeze: false), winningScore: .eleven, winByTwo: true)
+
+        let match = PickleballMatch(configuration: config, matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        _ = try repository.saveCompletedMatch(match, teamAName: "Delon", teamBName: "Opponent", startedAt: Date(), teamAPlayers: [me])
+
+        let allMatches = try repository.fetchMatchHistory()
+        let result = repository.chemistry(between: me, and: me, in: allMatches)
+
+        XCTAssertNil(result.asPartner)
+        XCTAssertNil(result.asOpponent)
+    }
 }
