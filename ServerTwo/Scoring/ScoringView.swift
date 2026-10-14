@@ -263,14 +263,21 @@ struct ScoringView: View {
 
                 Spacer()
 
+                // Both sides stay full .primary contrast — the serving
+                // card's border, tint, and badge already distinguish it,
+                // and dimming the receiving side's score actively hurts
+                // the courtside-glare legibility this screen is built
+                // for (see the type above). Sizes pushed up (name to
+                // .title, score to 108pt) to actually use the height
+                // these full-height cards have to give.
                 Text(name)
-                    .font(.title2.bold())
-                    .foregroundStyle(isServing ? .primary : .secondary)
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text("\(score)")
-                    .font(.system(size: 72, weight: .bold, design: .rounded))
-                    .foregroundStyle(isServing ? .primary : .secondary)
+                    .font(.system(size: 108, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
 
                 Spacer()
 
