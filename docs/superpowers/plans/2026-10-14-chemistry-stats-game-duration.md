@@ -340,7 +340,7 @@ In `PickleballKit/Sources/PickleballKit/Persistence/MatchRepository.swift`, modi
     ) throws -> MatchRecord {
 ```
 
-Inside the existing `for game in match.completedGames` loop (around line 107-131), set `completedAt` on each constructed `GameRecord` using a bounds-safe lookup. No `Array` safe-subscript extension exists anywhere in PickleballKit yet (verified: `grep -rn "subscript(safe" PickleballKit/Sources PickleballKit/Tests` returns nothing) — add this one, near the top of `MatchRepository.swift`, outside the class:
+Inside the existing `for game in match.completedGames` loop (around line 107-131), set `completedAt` on each constructed `GameRecord` using a bounds-safe lookup. `gameCompletionDates` is `[Date?]`, so `gameCompletionDates[safe:]` returns `Date??` — `.flatMap { $0 }` flattens that cleanly, clearer than relying on `?? nil`'s optional-promotion to do the same thing. No `Array` safe-subscript extension exists anywhere in PickleballKit yet (verified: `grep -rn "subscript(safe" PickleballKit/Sources PickleballKit/Tests` returns nothing) — add this one, near the top of `MatchRepository.swift`, outside the class:
 
 ```swift
 extension Array {
@@ -353,7 +353,7 @@ extension Array {
 Then, immediately after `gameRecord.match = record` inside the loop:
 
 ```swift
-            gameRecord.completedAt = gameCompletionDates[safe: gameNumber - 1] ?? nil
+            gameRecord.completedAt = gameCompletionDates[safe: gameNumber - 1].flatMap { $0 }
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -408,11 +408,14 @@ func testGameCompletionDatesStaysCorrectlySizedAcrossUndoAndReplay() throws {
     controller.recordPoint(for: .teamA)
     XCTAssertEqual(controller.gameCompletionDates.count, 1)
 
-    // Win game 2 as well — now two completed games, two dates, and the
-    // two dates must be distinct (not the same stale value reused).
+    // Win game 2 as well — now two completed games, two dates. (Not
+    // asserting the two dates are distinct values: back-to-back Date()
+    // captures with only a scoring loop between them is a real, if
+    // small, flakiness risk without an injected clock — the array being
+    // correctly *sized* is this test's actual claim, not that it holds
+    // literally non-equal timestamps.)
     for _ in 1...11 { controller.recordPoint(for: .teamA) }
     XCTAssertEqual(controller.gameCompletionDates.count, 2)
-    XCTAssertNotEqual(controller.gameCompletionDates[0], controller.gameCompletionDates[1])
 }
 
 func testGameCompletionDatesResetsToEmptyOnFreshMatch() throws {
@@ -426,6 +429,48 @@ func testGameCompletionDatesResetsToEmptyOnFreshMatch() throws {
     // A brand new match must not inherit the previous match's dates.
     start(controller, teamAName: "C", teamBName: "D")
     XCTAssertEqual(controller.gameCompletionDates.count, 0)
+}
+
+func testGameCompletionDatesResetsToEmptyOnCancelActiveMatch() throws {
+    let (controller, _) = try makeController()
+    start(controller, teamAName: "A", teamBName: "B")
+    for _ in 1...11 { controller.recordPoint(for: .teamA) }
+    XCTAssertEqual(controller.gameCompletionDates.count, 1)
+
+    controller.cancelActiveMatch()
+
+    // An idle controller must never hold leftover timestamps from a
+    // discarded match — same reasoning as the fresh-match case above,
+    // just via the other path back to .idle.
+    start(controller, teamAName: "C", teamBName: "D")
+    XCTAssertEqual(controller.gameCompletionDates.count, 0)
+}
+
+func testGameCompletionDatesPreSizesWithNilsOnCrashResume() throws {
+    let container = try PersistenceContainer.makeInMemoryContainer()
+    let context = ModelContext(container)
+    let defaults = UserDefaults(suiteName: UUID().uuidString)!
+
+    let firstController = ActiveMatchController(modelContext: context, userDefaults: defaults)
+    start(firstController, matchFormat: .bestOfThree, teamAName: "A", teamBName: "B")
+    // Win game 1 (11-0) — this persists an in-progress snapshot via the
+    // existing persistSnapshot() call, which is what the second
+    // controller below resumes from.
+    for _ in 1...11 { firstController.recordPoint(for: .teamA) }
+    XCTAssertEqual(firstController.gameCompletionDates.count, 1)
+
+    // A fresh controller against the SAME context/defaults simulates a
+    // crash/relaunch — its own gameCompletionDates starts empty, with no
+    // memory of the dates the first controller tracked in memory.
+    let resumedController = ActiveMatchController(modelContext: context, userDefaults: defaults)
+    XCTAssertEqual(resumedController.gameCompletionDates, [nil])
+
+    // Winning game 2 from here must APPEND a real date for game 2, not
+    // overwrite game 1's nil or reset the array.
+    for _ in 1...11 { resumedController.recordPoint(for: .teamA) }
+    XCTAssertEqual(resumedController.gameCompletionDates.count, 2)
+    XCTAssertNil(resumedController.gameCompletionDates[0])
+    XCTAssertNotNil(resumedController.gameCompletionDates[1])
 }
 ```
 
@@ -507,6 +552,12 @@ Pre-size (not reset) in `resumeIfNeeded` (around line 118-135), right after the 
         gameCompletionDates = Array(repeating: nil, count: resumed.match.completedGames.count)
 ```
 
+Also reset to empty in `cancelActiveMatch()` (around line 237-251), anywhere in the method body — this path, like `confirmFirstServe`, transitions back toward `.idle`/a fresh match, and without this an idle controller could hold a discarded match's leftover timestamps into whatever comes next:
+
+```swift
+        gameCompletionDates = []
+```
+
 Thread it into `finishMatch()`'s existing `saveCompletedMatch` call (around line 216-223):
 
 ```swift
@@ -527,7 +578,7 @@ Thread it into `finishMatch()`'s existing `saveCompletedMatch` call (around line
 xcodebuild test -project ServerTwo.xcodeproj -scheme ServerTwo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -maximum-concurrent-test-simulator-destinations 2 -only-testing:ServerTwoTests/ActiveMatchControllerTests -resultBundlePath /tmp/task3-green.xcresult
 xcrun xcresulttool get test-results summary --path /tmp/task3-green.xcresult
 ```
-Expected: PASS, the 2 new cases plus every pre-existing case in `ActiveMatchControllerTests`.
+Expected: PASS, all 4 new cases plus every pre-existing case in `ActiveMatchControllerTests`.
 
 - [ ] **Step 5: Commit**
 
@@ -542,20 +593,22 @@ git commit -m "Track per-game completion dates in ActiveMatchController, undo-sa
 
 **Files:**
 - Modify: `ServerTwo/Players/PlayerDetailView.swift`
-- Test: `ServerTwoUITests/` (new scratch-style test, or a permanent addition — see Step 1; follow this project's established convention of a temporary scratch UI test for visual verification, promoted to permanent only if the plan's reviewer asks for it)
+- Test: `ServerTwoUITests/ChemistryRowsUITests.swift` (new, **permanent** — see note below)
 
 **Interfaces:**
 - Consumes: `MatchRepository.chemistry(between:and:in:)` from Task 1, and the already-existing `MatchRepository.fetchMePlayer()` (no changes needed to that function).
 - Produces: nothing consumed by a later task — this is a leaf UI task.
 
+**This test is permanent, not scratch-and-delete.** The scratch-test-then-delete pattern used elsewhere in this session is for one-off *visual* verification during UI polish; `showsChemistry`'s exact guard condition (`mePlayer != nil && mePlayer?.id != player.id`) is Review Focus item #1 — the single most important behavioral invariant in this whole feature — and deleting its only test would leave zero regression coverage for it. This file joins `SavedPlayersUITests.swift`/`HistoryFilterUITests.swift` as a permanent part of the suite.
+
 - [ ] **Step 1: Write the failing UI test**
 
-Create `ServerTwoUITests/ScratchChemistryRowsCheck.swift` (temporary, matching this project's established pattern — deleted at the end of this task once confirmed, per Step 6 below; this project's Xcode target uses file-system-synchronized groups, so no `project.pbxproj` edit is needed for this file to be picked up):
+Create `ServerTwoUITests/ChemistryRowsUITests.swift`:
 
 ```swift
 import XCTest
 
-final class ScratchChemistryRowsCheck: XCTestCase {
+final class ChemistryRowsUITests: XCTestCase {
     func testChemistryRowsAppearForOtherPlayerWhenMeIsSetAndOmittedOnOwnProfile() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-UITest-ResetState"]
@@ -626,7 +679,7 @@ final class ScratchChemistryRowsCheck: XCTestCase {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-xcodebuild test -project ServerTwo.xcodeproj -scheme ServerTwo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -maximum-concurrent-test-simulator-destinations 2 -only-testing:ServerTwoUITests/ScratchChemistryRowsCheck -resultBundlePath /tmp/task4-red.xcresult
+xcodebuild test -project ServerTwo.xcodeproj -scheme ServerTwo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -maximum-concurrent-test-simulator-destinations 2 -only-testing:ServerTwoUITests/ChemistryRowsUITests -resultBundlePath /tmp/task4-red.xcresult
 xcrun xcresulttool get test-results summary --path /tmp/task4-red.xcresult
 ```
 Expected: FAIL — no "As Your Opponent"/"As Your Partner" text exists anywhere yet.
@@ -674,7 +727,7 @@ In `loadRecord()` (around line 192-203), fetch `mePlayer` and compute chemistry,
     }
 ```
 
-Add the two rows inside the existing `if let record { ... }` block (around line 71, right after the Recent Form `Divider()`/`HStack` block, before its closing brace):
+Add the two rows inside the existing `if let record { ... }` block, right after the hero stats `HStack`'s `.padding(.vertical, 8)` (around line 69) and **before** the `if !recentForm.isEmpty { ... }` block — the spec places chemistry "between the existing hero stats strip and the Recent Form row," not after Recent Form:
 
 ```swift
                     if showsChemistry, let chemistry {
@@ -708,22 +761,16 @@ Add the two rows inside the existing `if let record { ... }` block (around line 
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-xcodebuild test -project ServerTwo.xcodeproj -scheme ServerTwo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -maximum-concurrent-test-simulator-destinations 2 -only-testing:ServerTwoUITests/ScratchChemistryRowsCheck -resultBundlePath /tmp/task4-green.xcresult
+xcodebuild test -project ServerTwo.xcodeproj -scheme ServerTwo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -maximum-concurrent-test-simulator-destinations 2 -only-testing:ServerTwoUITests/ChemistryRowsUITests -resultBundlePath /tmp/task4-green.xcresult
 xcrun xcresulttool get test-results summary --path /tmp/task4-green.xcresult
 ```
 Expected: PASS.
 
 - [ ] **Step 5: Visually verify with a screenshot**
 
-Add a screenshot capture to the test (write to `/Users/delonsampaio/Downloads/chemistry-rows.png`, following this project's established scratch-test screenshot pattern) at the point where Katie's profile is showing the chemistry rows, re-run, and view the image to confirm the rows read correctly (not just that the accessibility text exists).
+Temporarily add a screenshot capture to the test (write to `/Users/delonsampaio/Downloads/chemistry-rows.png`) at the point where Katie's profile is showing the chemistry rows, re-run, view the image to confirm the rows read correctly (not just that the accessibility text exists), then remove the screenshot capture again — the test itself stays (see the permanence note above), only the temporary screenshot line is scratch.
 
-- [ ] **Step 6: Delete the scratch test**
-
-```bash
-rm ServerTwoUITests/ScratchChemistryRowsCheck.swift
-```
-
-- [ ] **Step 7: Run the full test suite to confirm nothing else broke**
+- [ ] **Step 6: Run the full test suite to confirm nothing else broke**
 
 ```bash
 xcodebuild test -project ServerTwo.xcodeproj -scheme ServerTwo -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -maximum-concurrent-test-simulator-destinations 2 -resultBundlePath /tmp/task4-full.xcresult
@@ -731,10 +778,10 @@ xcrun xcresulttool get test-results summary --path /tmp/task4-full.xcresult
 ```
 Expected: PASS, every test in both `ServerTwoTests` and `ServerTwoUITests`.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add ServerTwo/Players/PlayerDetailView.swift
+git add ServerTwo/Players/PlayerDetailView.swift ServerTwoUITests/ChemistryRowsUITests.swift
 git commit -m "Show With You/Against You chemistry rows on PlayerDetailView"
 ```
 
@@ -901,10 +948,29 @@ In `ServerTwo/History/MatchDetailView.swift`, add two new computed properties af
             .formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
     }
 
+    /// Two games are indistinguishable for "closest" purposes only when
+    /// they share BOTH their margin and their total points — not merely
+    /// the same margin. A plain `Set` of margins would make the
+    /// margin-tie-break rule below unreachable for any 2-game match
+    /// where both games happen to share a margin (e.g. 11-9 and 15-13,
+    /// margin 2 both times): `Set([2, 2])` has one element, so a guard
+    /// on distinct margins alone would return `nil` before ever reaching
+    /// the tiebreaker, contradicting the spec's own worked example of
+    /// exactly that case.
+    private struct ClosenessKey: Hashable {
+        let margin: Int
+        let totalPoints: Int
+    }
+
     var closestGameID: GameRecord.ID? {
         guard orderedGames.count > 1 else { return nil }
-        let margins = Set(orderedGames.map { abs($0.teamAFinalScore - $0.teamBFinalScore) })
-        guard margins.count > 1 else { return nil }
+        let keys = Set(orderedGames.map {
+            ClosenessKey(
+                margin: abs($0.teamAFinalScore - $0.teamBFinalScore),
+                totalPoints: $0.teamAFinalScore + $0.teamBFinalScore
+            )
+        })
+        guard keys.count > 1 else { return nil }
 
         return orderedGames.min { lhs, rhs in
             let lhsMargin = abs(lhs.teamAFinalScore - lhs.teamBFinalScore)
@@ -944,16 +1010,25 @@ Expected: PASS, all 6 cases.
 
 - [ ] **Step 5: Show the duration in `resultCard`**
 
-In `resultCard` (around line 76-107), add the duration next to the existing `formatSummary` pill:
+In `resultCard` (around line 76-107), **combine** `formatSummary` and `durationText` into one bullet-separated string rather than two adjacent `Text` views with nothing between them — two bare `Text`s here would read as "Singles • Best of 1  24 min" with no visual separator, and for a doubles/rally match with all three pieces of metadata (mode, format, duration) present at once, three separate elements risk wrapping awkwardly on narrow screens:
 
 ```swift
-                if let formatSummary {
-                    Text(formatSummary)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-                if let durationText {
-                    Text(durationText)
+    private var matchMetadataText: String? {
+        // `joined(separator:)` always returns a (possibly empty) String,
+        // which implicitly wraps into a non-nil String? — without this
+        // guard, "both formatSummary and durationText are nil" would
+        // render an empty Text row instead of none at all.
+        let parts = [formatSummary, durationText].compactMap { $0 }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " • ")
+    }
+```
+
+Then replace the existing lone `if let formatSummary { Text(formatSummary)... }` in `resultCard` with:
+
+```swift
+                if let matchMetadataText {
+                    Text(matchMetadataText)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -1075,6 +1150,20 @@ final class ScratchDurationClosestLongestCheck: XCTestCase {
         app.buttons["Confirm Finish"].firstMatch.tap()
     }
 
+    /// Uses Rally scoring, not the default Side-Out, and taps exact,
+    /// predetermined counts per game rather than alternating teamA/teamB
+    /// taps and relying on `finishButton.exists` to signal "this game is
+    /// done." Two things make the original (now-fixed) version of this
+    /// helper unreliable under Side-Out: (1) "Finish Match" only appears
+    /// once the whole MATCH is over, not at the end of an individual
+    /// game, so it can't be used to detect a game boundary inside a
+    /// multi-game match; (2) in Side-Out scoring, tapping the
+    /// non-serving team's zone doesn't score a point at all — it
+    /// triggers a side-out instead — so alternating taps between teams
+    /// does not reliably produce "whoever I tap scores," unlike in Rally
+    /// scoring, where every tap unconditionally adds to the tapped
+    /// team's score (the same reasoning `SavedPlayerRepositoryTests`
+    /// already documents for exactly this reason).
     private func playBestOfThreeMatch(_ app: XCUIApplication, teamA: String, teamB: String) {
         app.tabBars.buttons["Play"].tap()
         let teamAField = app.textFields.matching(identifier: "Team A Player Name").firstMatch
@@ -1082,6 +1171,8 @@ final class ScratchDurationClosestLongestCheck: XCTestCase {
         app.swipeUp()
         let singlesToggle = app.buttons["Singles"]
         if singlesToggle.exists { singlesToggle.tap() }
+        let rallyToggle = app.buttons["Rally"]
+        if rallyToggle.exists { rallyToggle.tap() }
         let bestOfThreeToggle = app.buttons["Best of 3"]
         if bestOfThreeToggle.exists { bestOfThreeToggle.tap() }
 
@@ -1110,28 +1201,19 @@ final class ScratchDurationClosestLongestCheck: XCTestCase {
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 2))
         let finishButton = app.buttons["Finish Match"]
 
-        // Game 1: Team A wins 11-0.
-        for _ in 0..<20 {
-            if finishButton.exists { break }
-            teamAZone.tap()
-        }
-        // Game 2: Team B wins 11-9 (distinct margin from game 1 and 3, so
-        // closestGameID is guaranteed non-nil regardless of exact taps).
-        for _ in 0..<9 {
-            if finishButton.exists { break }
-            teamBZone.tap()
-            if finishButton.exists { break }
-            teamAZone.tap()
-        }
-        for _ in 0..<2 {
-            if finishButton.exists { break }
-            teamBZone.tap()
-        }
-        // Game 3 (deciding): Team A wins.
-        for _ in 0..<20 {
-            if finishButton.exists { break }
-            teamAZone.tap()
-        }
+        // Game 1: Team A wins 11-0 (margin 11, total 11).
+        for _ in 0..<11 { teamAZone.tap() }
+        // Game 2: Team B wins 11-9 (margin 2, total 20) - loser's points
+        // first, so the winning tap is also the game-deciding one.
+        for _ in 0..<9 { teamAZone.tap() }
+        for _ in 0..<11 { teamBZone.tap() }
+        // Game 3 (deciding): Team A wins 11-5 (margin 6, total 16). All
+        // three games have distinct margins and totals, so closestGameID
+        // is guaranteed non-nil regardless of which one it lands on.
+        for _ in 0..<5 { teamBZone.tap() }
+        for _ in 0..<11 { teamAZone.tap() }
+
+        XCTAssertTrue(finishButton.waitForExistence(timeout: 2))
         finishButton.tap()
         app.buttons["Confirm Finish"].firstMatch.tap()
     }
