@@ -116,30 +116,29 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top) {
                         Text("Your Record")
-                            .font(.subheadline)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
                             .accessibilityIdentifier("Your Record")
                         Spacer()
                         // The streak sits directly under the record it's
-                        // annotating, not beside the W/L dots below — it
-                        // was previously grouped with the dots, but a
+                        // annotating, not beside the W/L dots below — a
                         // Capsule badge dropped into a row of same-sized
                         // Circles read as a mismatched, out-of-place shape.
-                        // Stacking it under "4 - 1" instead pairs it with
-                        // the number it actually describes.
+                        // Plain colored text (no pill chrome) instead of a
+                        // second badge-style element keeps it reading as
+                        // an annotation of the number above, not a
+                        // competing chip.
                         VStack(alignment: .trailing, spacing: 2) {
                             Text("\(record.wins) - \(record.losses)")
-                                .font(.headline)
+                                .font(.title2.bold())
                                 .accessibilityIdentifier("YourRecordValue")
                             // Only shown while it's actually something to
                             // be proud of — a "streak" of 0 isn't a
                             // streak, it's just noise right after a loss.
                             if streak > 0 {
-                                Text("🔥 \(streak)")
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(Color.orange, in: Capsule())
+                                Text("🔥 \(streak) streak")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.orange)
                                     .accessibilityIdentifier("WinStreak")
                             }
                         }
@@ -147,12 +146,12 @@ struct HomeView: View {
                     if !form.isEmpty {
                         // Most-recent-first, matching how "how am I doing
                         // lately" is naturally read.
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             ForEach(Array(form.enumerated()), id: \.offset) { _, didWin in
                                 Text(didWin ? "W" : "L")
-                                    .font(.caption2.bold())
+                                    .font(.subheadline.bold())
                                     .foregroundStyle(.white)
-                                    .frame(width: 20, height: 20)
+                                    .frame(width: 28, height: 28)
                                     .background(didWin ? Color.green : Color.red, in: Circle())
                             }
                         }
@@ -162,10 +161,11 @@ struct HomeView: View {
             } else {
                 HStack {
                     Text("Matches Played")
-                        .font(.subheadline)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
                     Spacer()
                     Text("\(matches.count)")
-                        .font(.headline)
+                        .font(.title2.bold())
                 }
             }
         }
@@ -265,7 +265,8 @@ struct HomeView: View {
         if activeMatchController.proUnlocked {
             HStack {
                 Text("Share your last match")
-                    .font(.subheadline)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
                 Spacer()
                 MatchRecapShareButton(match: lastMatch)
             }
