@@ -31,7 +31,12 @@ struct HomeView: View {
                         lastMatchCard(lastMatch)
                         quickStartRow
                         matchesPlayedCard
-                        thirdSlot(lastMatch: lastMatch)
+                        // Share now lives in the Last Match card's own
+                        // header once Pro is unlocked — this slot is only
+                        // needed for the upsell banner while it's locked.
+                        if !activeMatchController.proUnlocked {
+                            proUpsellBanner
+                        }
                     } else if loadError != nil {
                         ContentUnavailableView(
                             "Couldn't Load History",
@@ -50,14 +55,16 @@ struct HomeView: View {
             }
             .refreshable { loadMatches() }
 
-            Divider()
-
-            Button("New Match") {
+            Button {
                 onNewMatch()
+            } label: {
+                Label("New Match", systemImage: "plus")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .frame(maxWidth: .infinity)
             .padding()
             .accessibilityIdentifier("New Match")
         }
@@ -86,18 +93,29 @@ struct HomeView: View {
                         .font(.title2.bold())
                 }
                 Spacer()
-                // Only offered when the match's stored rules can still be
-                // decoded and both sides are present — not expected to ever
-                // fail for a match this app itself just saved, but a failed
-                // decode should silently omit the button rather than offer
-                // a rematch that can't actually be built.
-                if let request = RematchRequest(match: match) {
-                    Button("Rematch") {
-                        onRematch(request)
+                HStack(spacing: 8) {
+                    // Only offered when the match's stored rules can still be
+                    // decoded and both sides are present — not expected to
+                    // ever fail for a match this app itself just saved, but a
+                    // failed decode should silently omit the button rather
+                    // than offer a rematch that can't actually be built.
+                    if let request = RematchRequest(match: match) {
+                        Button("Rematch") {
+                            onRematch(request)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("Rematch")
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .accessibilityIdentifier("Rematch")
+                    // Lives here (not its own card below) once Pro is
+                    // unlocked — a whole extra full-width card just for one
+                    // button was more vertical clutter than this match
+                    // needed, when it already has a header row with room.
+                    if activeMatchController.proUnlocked {
+                        MatchRecapShareButton(match: match)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
                 }
             }
         }
@@ -114,48 +132,49 @@ struct HomeView: View {
                 let streak = repository.winStreak(for: mePlayer, in: matches)
                 let form = repository.recentForm(for: mePlayer, in: matches)
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top) {
+                    // Header row: title plus the streak (when there is
+                    // one) — keeping the streak up here, not stacked under
+                    // the record number below, frees that number to pair
+                    // directly with the W/L dots on its own row instead of
+                    // leaving a hollow gap across the bottom-right of the
+                    // card.
+                    HStack(alignment: .firstTextBaseline) {
                         Text("Your Record")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
                             .accessibilityIdentifier("Your Record")
                         Spacer()
-                        // The streak sits directly under the record it's
-                        // annotating, not beside the W/L dots below — a
-                        // Capsule badge dropped into a row of same-sized
-                        // Circles read as a mismatched, out-of-place shape.
-                        // Plain colored text (no pill chrome) instead of a
-                        // second badge-style element keeps it reading as
-                        // an annotation of the number above, not a
-                        // competing chip.
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("\(record.wins) - \(record.losses)")
-                                .font(.title2.bold())
-                                .accessibilityIdentifier("YourRecordValue")
-                            // Only shown while it's actually something to
-                            // be proud of — a "streak" of 0 isn't a
-                            // streak, it's just noise right after a loss.
-                            if streak > 0 {
-                                Text("🔥 \(streak) streak")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.orange)
-                                    .accessibilityIdentifier("WinStreak")
-                            }
+                        // Only shown while it's actually something to be
+                        // proud of — a "streak" of 0 isn't a streak, it's
+                        // just noise right after a loss.
+                        if streak > 0 {
+                            Text("🔥 \(streak) streak")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.orange)
+                                .accessibilityIdentifier("WinStreak")
                         }
                     }
-                    if !form.isEmpty {
-                        // Most-recent-first, matching how "how am I doing
-                        // lately" is naturally read.
-                        HStack(spacing: 8) {
-                            ForEach(Array(form.enumerated()), id: \.offset) { _, didWin in
-                                Text(didWin ? "W" : "L")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.white)
-                                    .frame(width: 28, height: 28)
-                                    .background(didWin ? Color.green : Color.red, in: Circle())
+                    // Content row: the record is the hero metric on the
+                    // left, recent form (most-recent-first, matching how
+                    // "how am I doing lately" is naturally read) on the
+                    // right of the same row.
+                    HStack(alignment: .lastTextBaseline) {
+                        Text("\(record.wins) - \(record.losses)")
+                            .font(.title2.bold())
+                            .accessibilityIdentifier("YourRecordValue")
+                        Spacer()
+                        if !form.isEmpty {
+                            HStack(spacing: 8) {
+                                ForEach(Array(form.enumerated()), id: \.offset) { _, didWin in
+                                    Text(didWin ? "W" : "L")
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(.white)
+                                        .frame(width: 28, height: 28)
+                                        .background(didWin ? Color.green : Color.red, in: Circle())
+                                }
                             }
+                            .accessibilityIdentifier("RecentForm")
                         }
-                        .accessibilityIdentifier("RecentForm")
                     }
                 }
             } else {
@@ -202,46 +221,56 @@ struct HomeView: View {
                         .accessibilityIdentifier("Start Quick Start Selection")
                     }
                 }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(Array(frequentPlayers.prefix(4)), id: \.id) { player in
-                            // The selected checkmark badge pokes above the
-                            // avatar's own bounds (offset upward) — without
-                            // top padding here, the ScrollView clips it.
-                            let isSelected = selectedQuickStartPlayers.contains { $0.id == player.id }
-                            Button {
-                                toggleQuickStartSelection(player)
-                            } label: {
-                                VStack(spacing: 4) {
-                                    ZStack(alignment: .topTrailing) {
-                                        PlayerAvatarView(player: player, size: 44)
-                                            .overlay(
-                                                Circle().stroke(isSelected ? Color.green : Color.clear, lineWidth: 3)
-                                            )
-                                        if isSelected {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .symbolRenderingMode(.palette)
-                                                .foregroundStyle(.green, .white)
-                                                .offset(x: 4, y: -4)
-                                        }
+                // A plain, evenly-distributed row (not a horizontal
+                // ScrollView) — at most 4 avatars ever show (Setup's
+                // doubles max), which comfortably fits every supported
+                // iPhone width, and a ScrollView's content hugs its own
+                // natural size regardless of the container's width, so it
+                // can't actually spread fewer-than-4 avatars out even if
+                // asked to. `.frame(maxWidth: .infinity)` per column here
+                // does the spreading instead.
+                HStack(spacing: 16) {
+                    ForEach(Array(frequentPlayers.prefix(4)), id: \.id) { player in
+                        // The selected checkmark badge pokes above the
+                        // avatar's own bounds (offset upward) — without top
+                        // padding here, it would sit flush against the
+                        // card's own top edge.
+                        let isSelected = selectedQuickStartPlayers.contains { $0.id == player.id }
+                        Button {
+                            toggleQuickStartSelection(player)
+                        } label: {
+                            VStack(spacing: 4) {
+                                ZStack(alignment: .topTrailing) {
+                                    PlayerAvatarView(player: player, size: 44)
+                                        .overlay(
+                                            Circle().strokeBorder(.primary.opacity(0.12), lineWidth: 1)
+                                        )
+                                        .overlay(
+                                            Circle().stroke(isSelected ? Color.green : Color.clear, lineWidth: 3)
+                                        )
+                                    if isSelected {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .symbolRenderingMode(.palette)
+                                            .foregroundStyle(.green, .white)
+                                            .offset(x: 4, y: -4)
                                     }
-                                    Text(player.name)
-                                        .font(.caption2)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                        .frame(width: 60)
                                 }
+                                Text(player.name)
+                                    .font(.caption2)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
                             }
-                            .buttonStyle(.plain)
-                            // Only 4 player slots exist in Setup (doubles'
-                            // max) — once 4 are selected, further taps on
-                            // an unselected chip would have nowhere to go.
-                            .disabled(!isSelected && selectedQuickStartPlayers.count >= 4)
-                            .accessibilityIdentifier("QuickStart.\(player.name)")
+                            .frame(maxWidth: .infinity)
                         }
+                        .buttonStyle(.plain)
+                        // Only 4 player slots exist in Setup (doubles'
+                        // max) — once 4 are selected, further taps on an
+                        // unselected chip would have nowhere to go.
+                        .disabled(!isSelected && selectedQuickStartPlayers.count >= 4)
+                        .accessibilityIdentifier("QuickStart.\(player.name)")
                     }
-                    .padding(.top, 6)
                 }
+                .padding(.top, 6)
             }
             .padding()
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -256,40 +285,27 @@ struct HomeView: View {
         }
     }
 
-    /// Pro upsell if locked (consistent with every other paywall trigger in
-    /// the app); a share shortcut for the last match if unlocked, rather
-    /// than leaving the slot empty or showing a "you already own this"
-    /// banner nobody needs to see.
-    @ViewBuilder
-    private func thirdSlot(lastMatch: MatchRecord) -> some View {
-        if activeMatchController.proUnlocked {
+    /// Consistent with every other paywall trigger in the app. Only shown
+    /// while locked — once Pro is unlocked, the share shortcut this slot
+    /// used to hold moved into the Last Match card's own header instead,
+    /// so there's nothing left to show here.
+    private var proUpsellBanner: some View {
+        Button {
+            isShowingPaywall = true
+        } label: {
             HStack {
-                Text("Share your last match")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
+                Image(systemName: "lock.fill")
+                Text("Unlock Server Two Pro — $1.99")
+                    .font(.headline)
                 Spacer()
-                MatchRecapShareButton(match: lastMatch)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
             }
-            .padding()
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        } else {
-            Button {
-                isShowingPaywall = true
-            } label: {
-                HStack {
-                    Image(systemName: "lock.fill")
-                    Text("Unlock Server Two Pro — $1.99")
-                        .font(.headline)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-            }
-            .padding()
-            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12))
-            .accessibilityIdentifier("Home Unlock Pro Banner")
+            .foregroundStyle(.white)
         }
+        .padding()
+        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityIdentifier("Home Unlock Pro Banner")
     }
 
     private func loadMatches() {
