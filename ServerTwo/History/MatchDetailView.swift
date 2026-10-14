@@ -108,16 +108,18 @@ struct MatchDetailView: View {
             // Each column spans half the card's width (not just its own
             // content's width), so the two sides read as a balanced
             // scoreboard instead of a block bunched into the top-left
-            // corner with the rest of the card empty.
+            // corner with the rest of the card empty. No separator between
+            // them — flush-left and flush-right on opposite edges of the
+            // card already reads as two sides without needing a "-" to
+            // say so, and with that much empty space between them a lone
+            // hyphen just looked stranded in the middle of the card.
             HStack(alignment: .lastTextBaseline) {
                 gameScoreColumn(name: teamAName, score: game.teamAFinalScore, won: game.winningTeam == .teamA, alignment: .leading)
-                Text("-")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
                 gameScoreColumn(name: teamBName, score: game.teamBFinalScore, won: game.winningTeam == .teamB, alignment: .trailing)
             }
 
             Divider()
+                .overlay(Color.primary.opacity(0.12))
 
             VStack(spacing: 10) {
                 ForEach(game.orderedPoints) { point in

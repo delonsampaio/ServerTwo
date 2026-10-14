@@ -161,15 +161,21 @@ struct MatchHistoryListView: View {
             // true but uninformative on every single row. Showing the
             // actual point score instead tells a reader something new;
             // best-of-3/5 still show the meaningful games-won tally.
-            if match.matchFormat == .bestOfOne, let onlyGame = games.first {
-                Text("\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)")
-                    .font(.subheadline.weight(.bold).monospacedDigit())
-                    .foregroundStyle(.primary)
-            } else {
-                Text("\(teamAGames) - \(teamBGames)")
-                    .font(.subheadline.weight(.bold).monospacedDigit())
-                    .foregroundStyle(.primary)
+            //
+            // A fixed trailing-aligned width (not just natural sizing) -
+            // "0 - 11" and "11 - 6" are different widths, which otherwise
+            // shifts the W/L badge left/right from row to row instead of
+            // sitting in a straight column.
+            Group {
+                if match.matchFormat == .bestOfOne, let onlyGame = games.first {
+                    Text("\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)")
+                } else {
+                    Text("\(teamAGames) - \(teamBGames)")
+                }
             }
+            .font(.subheadline.weight(.bold).monospacedDigit())
+            .foregroundStyle(.primary)
+            .frame(width: 54, alignment: .trailing)
         }
     }
 
