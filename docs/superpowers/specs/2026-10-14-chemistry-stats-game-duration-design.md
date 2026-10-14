@@ -39,6 +39,11 @@ public func chemistry(
     and other: SavedPlayer,
     in matches: [MatchRecord]
 ) -> (asPartner: (wins: Int, losses: Int)?, asOpponent: (wins: Int, losses: Int)?) {
+    // A caller passing the same player for both arguments isn't a real
+    // relationship — without this guard every one of their matches would
+    // count as a win/loss "with/against themselves."
+    guard me.id != other.id else { return (nil, nil) }
+
     var partnerWins = 0, partnerLosses = 0
     var opponentWins = 0, opponentLosses = 0
     var hasPartnerMatch = false, hasOpponentMatch = false
@@ -85,22 +90,65 @@ This reuses the existing private `mySide(for:in:)` helper unchanged (id-match-fi
 
 On `MatchDetailView`'s per-game card (`gameCard(_:)`), two additions:
 
-- **Overall match duration** — `match.completedAt - match.startedAt`, formatted (e.g. "24 min"), shown once in the summary card alongside the existing `formatSummary` pill ("Singles • Best of 1").
-- **Closest / Longest game labels** — within a single match's games (relevant for Best of 3/5; a no-op for Best of 1, which has only one game), the game with the smallest `|teamAFinalScore - teamBFinalScore|` gets a "Closest Game" tag, and the game with the longest duration gets a "Longest Game" tag. If a single game is both, it gets both tags. No comparison across different matches — this is purely about one match's own games relative to each other.
+- **Overall match duration** — `match.completedAt - match.startedAt`, formatted via `Duration.seconds(interval).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))`, except intervals under 60 seconds (a fast test match, or a real match scored unrealistically quickly) show "< 1 min" rather than "0 min". Shown once in the summary card alongside the existing `formatSummary` pill ("Singles • Best of 1"). Note this is the time between the match being created and "Confirm Finish" being tapped on the Finish Match sheet — it can run a couple of minutes longer than the sum of the individual games' durations below, since players may chat at the net before confirming. That's expected, not a bug.
+- **Closest game label** — within a single match's games (a no-op for Best of 1, which has only one game — and for any match where every game has the identical score margin, where "closest" has no meaning), the game with the smallest `|teamAFinalScore - teamBFinalScore|` gets a "Closest Game" tag. Ties on margin break toward the game with the higher combined point total (e.g. a 15-13 game beats an 11-9 game at the same 2-point margin — it went deeper). This needs only final scores, which every saved match already has, so it works on history saved before this feature shipped too.
+- **Longest game label** — the game with the longest duration gets a "Longest Game" tag. Unlike "closest," this needs the new per-game timestamp below, so it's only available for matches played after this feature ships. If a single game is both closest and longest, it gets both tags. Neither label compares across different matches — this is purely about one match's own games relative to each other.
 
 ### Data model change
 
 `GameRecord` gains one new field, additive and optional, following the exact precedent set by `TeamSide.players` in the Saved Players feature (nil default, no migration, existing rows simply have no value):
 
 ```swift
-public var completedAt: Date?
+public var completedAt: Date? = nil
 ```
+
+(Explicit `= nil`, not just `Date?` — matches the house style already used by `TeamSide.players: [SavedPlayer]? = nil` and `SavedPlayer.photoData: Data? = nil`.)
 
 ### Where the timestamp comes from
 
 Per the Context section above, the live engine (`PickleballGame`/`PickleballMatch`) stays wall-clock-agnostic — this field is populated the same way `MatchRecord.startedAt`/`completedAt` already are: by the caller, not the engine.
 
-`ActiveMatchController` already must observe `match.completedGames.count` growing during live play (the same signal `ScoringView`'s existing `.onChange(of: ...completedGames.count)` reacts to, for its own "Game Over" alert). It gains a new `private(set) var gameCompletionDates: [Date] = []`, appending `Date()` each time it detects `completedGames.count` increased. This array is positional — `gameCompletionDates[i]` corresponds to `completedGames[i]` — matching how `MatchRepository.saveCompletedMatch` already iterates `match.completedGames` by index when building `GameRecord`s.
+**Not via `.onChange`** — that's a SwiftUI View modifier and doesn't exist on `ActiveMatchController`, which is a plain `@Observable` class, not a View. `ActiveMatchController` doesn't need to "observe" anything regardless: it already owns the only three call sites that can change `match.completedGames.count` —
+
+```swift
+func recordPoint(for team: Team) {
+    match?.recordPoint(for: team)
+    persistSnapshot()
+}
+
+func undo() {
+    match?.undo()
+    persistSnapshot()
+}
+
+func correctScore(team: Team, to newScore: Int) {
+    match?.correctScore(team: team, to: newScore)
+    persistSnapshot()
+}
+```
+
+— `ScoringView` always goes through these wrappers, never touches `match.recordPoint`/`.undo`/`.correctScore` directly. Each of the three can grow `completedGames` by one (a game-winning point) or shrink it by one (`PickleballMatch.undo()` has an explicit `currentGameIsCounted` branch that does `completedGames.removeLast()` — undoing a game-winning point is a real, already-supported path, not an edge case). A plain append-only array would desync from `completedGames` the first time a game-winning point gets undone: the premature timestamp stays attached to the wrong game once the real winning point is replayed later.
+
+`ActiveMatchController` gains:
+
+```swift
+private(set) var gameCompletionDates: [Date?] = []
+```
+
+— `[Date?]`, not `[Date]`, because a crash-resumed match can have games that completed before this session even started (no real timestamp to give them, and no honest way to represent "unknown" in a bare `[Date]`). Synced to `completedGames.count` at the end of each of the three wrapper methods above, via one small helper:
+
+```swift
+private func syncGameCompletionDates() {
+    guard let count = match?.completedGames.count else { return }
+    if gameCompletionDates.count > count {
+        gameCompletionDates.removeLast(gameCompletionDates.count - count)
+    } else if gameCompletionDates.count < count {
+        gameCompletionDates.append(contentsOf: Array(repeating: Date(), count: count - gameCompletionDates.count))
+    }
+}
+```
+
+Growing always appends `Date()` (a real completion happening right now, in this live session) and shrinking always removes from the end (undo) — this is correct specifically because it's only ever called once per wrapper method, so the count can only have moved by one. On a fresh match (`confirmFirstServe`), `gameCompletionDates` starts `[]`. On a **crash-resumed** match, it's pre-sized instead of reset: `Array(repeating: nil, count: match.completedGames.count)` — the games that completed before the crash correctly get `nil` (we don't know when they really finished), and `syncGameCompletionDates()` only ever appends real dates for games completed from that point forward.
 
 `MatchRepository.saveCompletedMatch` gains one new parameter:
 
@@ -113,11 +161,11 @@ public func saveCompletedMatch(
     completedAt: Date = Date(),
     teamAPlayers: [SavedPlayer] = [],
     teamBPlayers: [SavedPlayer] = [],
-    gameCompletionDates: [Date] = []  // new
+    gameCompletionDates: [Date?] = []  // new
 ) throws -> MatchRecord
 ```
 
-Inside the existing `for game in match.completedGames` loop, each `GameRecord`'s `completedAt` is set from `gameCompletionDates[safe: gameNumber - 1]` (a bounds-safe subscript, since a resumed-from-crash match's `gameCompletionDates` could be shorter than `completedGames` if the app relaunched mid-match — those earlier games simply get `nil`, same as any other historical row). The default `[]` keeps every other existing caller (including every current test that calls `saveCompletedMatch` without this parameter) compiling unchanged.
+Inside the existing `for game in match.completedGames` loop, each `GameRecord`'s `completedAt` is set from `gameCompletionDates[safe: gameNumber - 1] ?? nil` (a bounds-safe subscript — `gameCompletionDates` and `completedGames` should always be the same length by construction, but a mismatch degrades to `nil` rather than crashing). The default `[]` keeps every other existing caller, including every current test that calls `saveCompletedMatch` without this parameter, compiling unchanged.
 
 ### Closest/longest computation
 
@@ -125,17 +173,35 @@ A pure, local computation inside `MatchDetailView` (no repository change needed 
 
 ```swift
 private var closestGameID: GameRecord.ID? {
-    orderedGames.min { abs($0.teamAFinalScore - $0.teamBFinalScore) < abs($1.teamAFinalScore - $1.teamBFinalScore) }?.id
+    // A Best-of-1 match, or a match where every game happened to have the
+    // identical margin, has no meaningfully "closest" game — tagging
+    // Game 1 of a solitary 11-0 as "Closest Game" would be actively
+    // misleading, not just unhelpful.
+    guard orderedGames.count > 1 else { return nil }
+    let margins = Set(orderedGames.map { abs($0.teamAFinalScore - $0.teamBFinalScore) })
+    guard margins.count > 1 else { return nil }
+
+    return orderedGames.min { lhs, rhs in
+        let lhsMargin = abs(lhs.teamAFinalScore - lhs.teamBFinalScore)
+        let rhsMargin = abs(rhs.teamAFinalScore - rhs.teamBFinalScore)
+        if lhsMargin != rhsMargin { return lhsMargin < rhsMargin }
+        // Tie on margin: the game with more total points went deeper
+        // (e.g. 15-13 over 11-9 at the same 2-point margin) and is the
+        // more deserving "closest" game.
+        let lhsTotal = lhs.teamAFinalScore + lhs.teamBFinalScore
+        let rhsTotal = rhs.teamAFinalScore + rhs.teamBFinalScore
+        return lhsTotal > rhsTotal
+    }?.id
 }
 
 private var longestGameID: GameRecord.ID? {
-    // All-or-nothing: a match that crashed and resumed mid-way could have
-    // only its later games timestamped (gameCompletionDates shorter than
-    // completedGames at the moment it was saved — see "Where the
-    // timestamp comes from" below). Measuring some games against a stale
-    // checkpoint would produce a confidently wrong "Longest Game" tag,
-    // which is worse than no tag — so this skips the whole match rather
-    // than guess.
+    guard orderedGames.count > 1 else { return nil }
+    // All-or-nothing: a match that crashed and resumed mid-way can have
+    // only its later games timestamped (see "Where the timestamp comes
+    // from" above — pre-crash games correctly get `nil`, not a fabricated
+    // date). Measuring some games against a stale checkpoint would
+    // produce a confidently wrong "Longest Game" tag, which is worse than
+    // no tag — so this skips the whole match rather than guess.
     guard orderedGames.allSatisfy({ $0.completedAt != nil }) else { return nil }
 
     var previousCheckpoint = match.startedAt
@@ -152,15 +218,16 @@ private var longestGameID: GameRecord.ID? {
 }
 ```
 
-`closestGameID` is `nil` only when `orderedGames` is empty (never true for a saved match). `longestGameID` is additionally `nil` whenever any game in the match lacks a `completedAt` — a match with only one game, any match saved before this feature shipped, or a crash-resumed match whose earlier games predate the live timestamp capture. No tag ever appears on data that can't support it; there's no fallback estimate.
+`closestGameID` needs only final scores — already present on every saved match, old or new — so it works on history saved before this feature shipped. It's `nil` for a Best of 1 (nothing to compare) or a match where every game has the identical margin (nothing distinguishes a "closest" one). `longestGameID` is additionally `nil` whenever any game in the match lacks a `completedAt` — any match saved before this feature shipped, or a crash-resumed match whose earlier games predate the live timestamp capture. No tag ever appears on data that can't support it; there's no fallback estimate.
 
 ### Testing
 
 - `MatchRepositoryTests` (or wherever `saveCompletedMatch` is currently tested): a new case confirming `gameCompletionDates` lands on the correct `GameRecord` by position, and that omitting the parameter (existing callers) still saves successfully with `completedAt == nil` on every game.
-- A `MatchDetailView` UI test confirming the duration string and closest/longest tags render for a freshly-played Best of 3 match, and confirming no tags appear for a Best of 1 match (only one game, nothing to compare) or for a match seeded without `gameCompletionDates` (simulating pre-feature history).
+- A unit test on `ActiveMatchController` (or an integration-style test driving it through a real point sequence) confirming `gameCompletionDates` stays correctly sized after: recording a game-winning point, undoing that exact point, then replaying it for real — the final array must have exactly one date for that game, not two or zero.
+- `closestGameID`/`longestGameID` unit or UI tests covering: a Best of 1 match (both `nil`); a Best of 3 where every game has the same margin (`closestGameID` `nil`, since there's nothing to distinguish); a tie on margin where one game has a higher total score (that game wins the tiebreak); a match seeded without `gameCompletionDates` — i.e. every `completedAt` is `nil` — showing `closestGameID` populated (it only needs scores) but `longestGameID` `nil` (simulating pre-feature history, and confirming the two labels are independently gated, not both-or-nothing).
 
 ## Non-goals
 
 - No history-wide "longest match ever" aggregate (explicitly descoped — per-match only, per the earlier discussion).
 - No backfill of `completedAt` for existing `GameRecord` rows — they simply never show closest/longest tags for games predating this change, same treatment as any other additive-optional field in this codebase.
-- No change to `PickleballGame`/`PickleballMatch`'s public API beyond nothing — this feature touches only `ActiveMatchController` (ServerTwo target) and `MatchRepository`/`GameRecord` (PickleballKit), never the scoring engine itself.
+- No change to `PickleballGame`/`PickleballMatch`'s public API at all — this feature touches only `ActiveMatchController` (ServerTwo target) and `MatchRepository`/`GameRecord` (PickleballKit), never the scoring engine itself.
