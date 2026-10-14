@@ -1,4 +1,5 @@
 import SwiftUI
+import PickleballKit
 
 enum AppTab: Hashable {
     case home, play, history, settings
@@ -41,7 +42,19 @@ struct RootTabView: View {
             .tag(AppTab.history)
 
             NavigationStack {
-                SettingsView()
+                // Both ManagePlayersView's player rows and
+                // PlayerDetailView's match rows (two and three pushes
+                // deep in this stack) use plain destination-based
+                // `NavigationLink`s, constructing their destination
+                // directly, rather than `NavigationLink(value:)` +
+                // `.navigationDestination(for:)` — that style, even
+                // registered at this stack's root, silently did nothing
+                // on tap once the tapped row was itself inside content
+                // reached via an older destination-based push. Confirmed
+                // with an actual assertion after the tap, not just a
+                // screenshot that happened to be taken before noticing
+                // nothing had changed.
+                SettingsView(onRematch: startRematch)
             }
             .tabItem { Label("Settings", systemImage: "gear") }
             .tag(AppTab.settings)
