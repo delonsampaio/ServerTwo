@@ -150,7 +150,7 @@ final class PickleballMatchTests: XCTestCase {
         XCTAssertEqual(match.gamesWon(for: .teamA), 1)
         XCTAssertEqual(match.matchWinner, .teamA)
 
-        match.correctScore(team: .teamB, to: 20) // actually teamB had more points
+        match.correctScore(team: .teamB, to: 13) // actually teamB had more points
 
         XCTAssertEqual(match.gamesWon(for: .teamA), 0)
         XCTAssertEqual(match.gamesWon(for: .teamB), 1)

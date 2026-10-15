@@ -95,4 +95,19 @@ final class PickleballGameUndoAndCorrectionTests: XCTestCase {
         XCTAssertTrue(game.isGameOver)
         XCTAssertEqual(game.gameWinner, .teamA)
     }
+
+    func testCorrectScoreToAnImpossibleOvertimeMarginIsNoLongerAcceptedAsAWin() {
+        // Before the isCompletedGameScore extraction, correctScore's looser
+        // checks would have accepted this as a win — the game could never
+        // actually reach 15-10 through single points (it would have ended
+        // at 11-9 or 12-10 first). This is the deliberate tightening the
+        // extraction's own doc comment calls out.
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+        let game = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        game.correctScore(team: .teamA, to: 15)
+        game.correctScore(team: .teamB, to: 10)
+
+        XCTAssertFalse(game.isGameOver)
+        XCTAssertNil(game.gameWinner)
+    }
 }

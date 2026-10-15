@@ -65,9 +65,7 @@ public final class PickleballGame {
     public var gameWinner: Team? {
         let a = state.teamAScore
         let b = state.teamBScore
-        let target = configuration.winningScore.rawValue
-        guard max(a, b) >= target, a != b else { return nil }
-        if configuration.winByTwo && abs(a - b) < 2 { return nil }
+        guard configuration.isCompletedGameScore(teamA: a, teamB: b) else { return nil }
         let leader: Team = a > b ? .teamA : .teamB
         if case .rally(let freeze) = configuration.scoringFormat, freeze {
             guard state.lastPointWonWhileServing else { return nil }
