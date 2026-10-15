@@ -9,6 +9,7 @@ extension Array {
 
 public enum MatchRepositoryError: Error, Equatable {
     case matchNotOver
+    case invalidGameScore
 }
 
 /// A match reconstructed from a saved in-progress snapshot, paired with
@@ -154,6 +155,90 @@ public final class MatchRepository {
         // loadInProgressMatch can't resurface a finished match (which would
         // both read as "currently playing" and risk being saved twice).
         try clearInProgressSnapshot()
+
+        return record
+    }
+
+    /// A match recorded after the fact from final scores alone, with no
+    /// point-by-point log — bypasses `PickleballMatch` entirely since there's
+    /// no live match to drive. Each entry in `gameScores` must be a legal
+    /// completed game per `configuration.isCompletedGameScore`, and no entry
+    /// may follow the game that decides the match. Throws `.invalidGameScore`
+    /// for either violation and `.matchNotOver` if the entries don't yet
+    /// give one team `matchFormat.gamesToWin` games.
+    @discardableResult
+    public func saveQuickLoggedMatch(
+        configuration: GameConfiguration,
+        matchFormat: MatchFormat,
+        teamAName: String,
+        teamBName: String,
+        gameScores: [(teamA: Int, teamB: Int)],
+        teamAPlayers: [SavedPlayer] = [],
+        teamBPlayers: [SavedPlayer] = [],
+        completedAt: Date = Date()
+    ) throws -> MatchRecord {
+        var gamesWon: [Team: Int] = [.teamA: 0, .teamB: 0]
+        var gameRecords: [GameRecord] = []
+        for (index, score) in gameScores.enumerated() {
+            // A game entry after the match was already decided (e.g. a 3rd
+            // game for a Best of 3 that's already 2-0) is as invalid as a
+            // bad score — without this, extra trailing entries would
+            // silently inflate gamesWon past matchFormat.gamesToWin and
+            // still "succeed."
+            guard gamesWon[.teamA, default: 0] < matchFormat.gamesToWin,
+                  gamesWon[.teamB, default: 0] < matchFormat.gamesToWin else {
+                throw MatchRepositoryError.invalidGameScore
+            }
+            guard configuration.isCompletedGameScore(teamA: score.teamA, teamB: score.teamB) else {
+                throw MatchRepositoryError.invalidGameScore
+            }
+            let winner: Team = score.teamA > score.teamB ? .teamA : .teamB
+            gamesWon[winner, default: 0] += 1
+            // points and completedAt are left at their defaults (empty, nil):
+            // a quick-logged game has no point log and no live timing data.
+            gameRecords.append(GameRecord(
+                gameNumber: index + 1,
+                teamAFinalScore: score.teamA,
+                teamBFinalScore: score.teamB,
+                winningTeam: winner
+            ))
+        }
+        guard let matchWinner = (
+            gamesWon[.teamA, default: 0] >= matchFormat.gamesToWin ? Team.teamA :
+            gamesWon[.teamB, default: 0] >= matchFormat.gamesToWin ? Team.teamB : nil
+        ) else {
+            throw MatchRepositoryError.matchNotOver
+        }
+
+        let configurationData = try JSONEncoder().encode(configuration)
+        let record = MatchRecord(
+            startedAt: completedAt,
+            completedAt: completedAt,
+            matchFormat: matchFormat,
+            winningTeam: matchWinner,
+            configurationData: configurationData
+        )
+        // Same explicit-insert-for-every-object discipline as
+        // saveCompletedMatch, for the same reason (see its own comment).
+        modelContext.insert(record)
+
+        let teamASide = TeamSide(team: .teamA, displayName: teamAName)
+        let teamBSide = TeamSide(team: .teamB, displayName: teamBName)
+        teamASide.match = record
+        teamBSide.match = record
+        teamASide.players = teamAPlayers
+        teamBSide.players = teamBPlayers
+        record.teamSides = [teamASide, teamBSide]
+        modelContext.insert(teamASide)
+        modelContext.insert(teamBSide)
+
+        for gameRecord in gameRecords {
+            gameRecord.match = record
+            modelContext.insert(gameRecord)
+        }
+        record.games = gameRecords
+
+        try modelContext.save()
 
         return record
     }
