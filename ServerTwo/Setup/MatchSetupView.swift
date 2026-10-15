@@ -1,6 +1,86 @@
 import SwiftUI
 import SwiftData
 import PickleballKit
+import UIKit
+
+fileprivate struct QuickLogGameEntry: Identifiable {
+    let id: Int  // 1-based game number — stable for the life of the sheet
+    var teamAText: String = ""
+    var teamBText: String = ""
+}
+
+/// Pure, unit-testable Quick Log row state: which scores have been
+/// committed (validated, not just typed) so far, whether the match is
+/// decided, and which rows should be visible. This type has no idea when
+/// it's safe to call `commit()` — that discipline (immediately for
+/// unambiguous edits, after a short debounce for an ambiguous single
+/// digit, never on a stale mid-keystroke value) lives entirely in
+/// MatchSetupView's wiring below, not here. See
+/// QuickLogRowVisibilityUITests for the test that actually verifies that
+/// wiring discipline — a unit test of this type alone cannot, since
+/// `commit()` has no way to distinguish "the user finished typing this
+/// score" from "the user is mid-keystroke."
+fileprivate struct QuickLogState {
+    private(set) var entries: [QuickLogGameEntry]
+    private(set) var committedScores: [(teamA: Int, teamB: Int)] = []
+    private(set) var isDecided = false
+    private let matchFormat: MatchFormat
+    private let configuration: GameConfiguration
+
+    init(matchFormat: MatchFormat, configuration: GameConfiguration) {
+        self.matchFormat = matchFormat
+        self.configuration = configuration
+        // Rows up to (matchFormat.gamesToWin * 2) - 1 — the most games
+        // that format could ever need (1 for Best of 1, 3 for Best of 3,
+        // 5 for Best of 5).
+        self.entries = (1...((matchFormat.gamesToWin * 2) - 1)).map { QuickLogGameEntry(id: $0) }
+    }
+
+    /// Visible up to the point the match is decided (then no further
+    /// rows) or one past the last committed-and-valid row (the next one
+    /// to fill in) — a pure function of committedScores, never a
+    /// destructive mutation of entries itself. A row that becomes hidden
+    /// keeps its typed text untouched underneath.
+    var visibleEntries: [QuickLogGameEntry] {
+        let visibleCount = isDecided
+            ? committedScores.count
+            : min(committedScores.count + 1, entries.count)
+        return Array(entries.prefix(visibleCount))
+    }
+
+    mutating func updateText(gameID: Int, team: Team, text: String) {
+        guard let index = entries.firstIndex(where: { $0.id == gameID }) else { return }
+        if team == .teamA {
+            entries[index].teamAText = text
+        } else {
+            entries[index].teamBText = text
+        }
+    }
+
+    /// Re-derives committedScores/isDecided from entries' CURRENT text.
+    /// Stops at the first row that isn't both parseable and a legal
+    /// completed game under the current rules, or once a team has
+    /// already reached matchFormat.gamesToWin — later rows (even with
+    /// typed text) never contribute, but their text is untouched either
+    /// way.
+    mutating func commit() {
+        var scores: [(teamA: Int, teamB: Int)] = []
+        var gamesWon: [Team: Int] = [.teamA: 0, .teamB: 0]
+        for entry in entries {
+            guard gamesWon[.teamA, default: 0] < matchFormat.gamesToWin,
+                  gamesWon[.teamB, default: 0] < matchFormat.gamesToWin else { break }
+            guard let teamA = Int(entry.teamAText.trimmingCharacters(in: .whitespaces)),
+                  let teamB = Int(entry.teamBText.trimmingCharacters(in: .whitespaces)),
+                  configuration.isCompletedGameScore(teamA: teamA, teamB: teamB) else { break }
+            let winner: Team = teamA > teamB ? .teamA : .teamB
+            gamesWon[winner, default: 0] += 1
+            scores.append((teamA: teamA, teamB: teamB))
+        }
+        committedScores = scores
+        isDecided = gamesWon[.teamA, default: 0] >= matchFormat.gamesToWin
+            || gamesWon[.teamB, default: 0] >= matchFormat.gamesToWin
+    }
+}
 
 struct MatchSetupView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
@@ -56,6 +136,13 @@ struct MatchSetupView: View {
     @State private var teamBPlayer2ID: UUID?
     @State private var isShowingPaywall = false
     @FocusState private var focusedField: NameField?
+    @State private var isShowingQuickLog = false
+    @State private var quickLogState: QuickLogState?
+    // One shared debounce task for the whole sheet, not one per row/field
+    // — a new edit anywhere cancels and replaces whatever's pending, so
+    // rapid cross-field edits (e.g. an external keyboard tabbing between
+    // fields) are handled correctly by a single, always-current task.
+    @State private var quickLogCommitTask: Task<Void, Never>?
 
     private enum ScoringFormatKind: String, CaseIterable, Identifiable {
         case sideOut = "Side-Out"
@@ -211,10 +298,40 @@ struct MatchSetupView: View {
             .controlSize(.large)
             .padding()
             .accessibilityIdentifier("Start Match")
+
+            // Visually secondary (a plain text button, not competing with
+            // the pinned CTA above it) — same relationship "Already spun a
+            // paddle?" has to the main flow on CoinFlipView. Gated by the
+            // same canStartNewMatch check as "Start Match," so Quick Log
+            // can't become an unlimited free-tier loophole around the
+            // demo-match paywall.
+            Button {
+                if activeMatchController.canStartNewMatch {
+                    presentQuickLogSheet()
+                } else {
+                    isShowingPaywall = true
+                }
+            } label: {
+                Text("Log Final Score Instead")
+                    .font(.subheadline.weight(.medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+            .padding(.bottom, 4)
+            .accessibilityIdentifier("Log Final Score Instead")
         }
         .navigationTitle("New Match")
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
+        }
+        // The capture list makes `body` itself read `quickLogState`, so
+        // SwiftUI re-evaluates `body` (and re-captures this closure)
+        // whenever it changes. Without it, `body` only touches the
+        // `$isShowingQuickLog` binding (which creates no dependency), and
+        // the sheet presents with a closure captured before
+        // `presentQuickLogSheet()` set the state — an empty sheet.
+        .sheet(isPresented: $isShowingQuickLog) { [quickLogState] in
+            quickLogSheet(quickLogState)
         }
         .onChange(of: pendingRematch) { _, newValue in
             guard let request = newValue else { return }
@@ -524,6 +641,192 @@ struct MatchSetupView: View {
                 }
                 .id(suggestionsVersion)
             }
+        }
+    }
+
+    private var quickLogConfiguration: GameConfiguration {
+        GameConfiguration(
+            playMode: playMode,
+            scoringFormat: scoringFormatKind == .sideOut ? .sideOut : .rally(freeze: rallyFreeze),
+            winningScore: winningScore,
+            winByTwo: winByTwo,
+            timeoutsPerTeam: trackTimeouts ? winningScore.standardTimeoutsPerTeam : 0
+        )
+    }
+
+    private var quickLogTeamAName: String {
+        let name = combinedName(teamAPlayer1, teamAPlayer2)
+        return name.isEmpty ? "Team A" : name
+    }
+
+    private var quickLogTeamBName: String {
+        let name = combinedName(teamBPlayer1, teamBPlayer2)
+        return name.isEmpty ? "Team B" : name
+    }
+
+    private func presentQuickLogSheet() {
+        quickLogState = QuickLogState(matchFormat: matchFormat, configuration: quickLogConfiguration)
+        isShowingQuickLog = true
+    }
+
+    private func commitQuickLogRow() {
+        quickLogState?.commit()
+    }
+
+    /// `quickLogState.entries` isn't addressable through a normal index
+    /// `Binding` the way a plain `@State` array is, since `quickLogState`
+    /// itself is wrapped in an `Optional`. This wraps lookup-by-id (not
+    /// index) into an ordinary `Binding<String>`, reading/writing through
+    /// `quickLogState?.updateText` — every keystroke still writes straight
+    /// into `entries` immediately (never deferred), which is what keeps a
+    /// row's typed text intact even while the row is temporarily hidden.
+    /// `set` also classifies and schedules the commit — see
+    /// `scheduleQuickLogCommit` below.
+    private func quickLogScoreBinding(gameID: Int, team: Team) -> Binding<String> {
+        Binding(
+            get: {
+                guard let entry = quickLogState?.entries.first(where: { $0.id == gameID }) else { return "" }
+                return team == .teamA ? entry.teamAText : entry.teamBText
+            },
+            set: { newValue in
+                // Digits only, max 2 characters — guards against pasted
+                // non-numeric input slipping past .keyboardType(.numberPad),
+                // and against runaway length. No real pickleball score
+                // needs 3+ digits.
+                let sanitized = String(newValue.filter(\.isNumber).prefix(2))
+                quickLogState?.updateText(gameID: gameID, team: team, text: sanitized)
+                scheduleQuickLogCommit(gameID: gameID, team: team)
+            }
+        )
+    }
+
+    /// Classifies the just-edited field and either commits immediately or
+    /// after a short debounce. A field only waits when its OWN text is a
+    /// single digit 1-9 that some further digit could extend into a
+    /// different, independently-valid outcome; everything else (blank,
+    /// invalid, multi-digit, or an unextendable single digit) commits at
+    /// once. Driven purely by text-binding changes — deliberately not by
+    /// `@FocusState`, which doesn't reliably sync for fields inside
+    /// `.sheet` content.
+    private func scheduleQuickLogCommit(gameID: Int, team: Team) {
+        quickLogCommitTask?.cancel()
+        guard let entry = quickLogState?.entries.first(where: { $0.id == gameID }) else { return }
+        let text = team == .teamA ? entry.teamAText : entry.teamBText
+        let otherText = team == .teamA ? entry.teamBText : entry.teamAText
+
+        if let otherScore = Int(otherText.trimmingCharacters(in: .whitespaces)),
+           isAmbiguousSingleDigit(text, otherScore: otherScore, configuration: quickLogConfiguration) {
+            quickLogCommitTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                guard !Task.isCancelled else { return }
+                commitQuickLogRow()
+            }
+        } else {
+            commitQuickLogRow()
+        }
+    }
+
+    /// True only when `text` is a single digit 1-9 that some further
+    /// digit (0-9) could extend into a legal completed game score —
+    /// checked with `text` as either side's score, since either team
+    /// could end up the winner. `11` and otherScore `1` is ambiguous this
+    /// way (11-1 and 11-13 are both independently valid, different
+    /// winners); `11` and otherScore `9` is not (no digit appended to "9"
+    /// can produce a valid score against 11, so 11-9 commits immediately).
+    private func isAmbiguousSingleDigit(_ text: String, otherScore: Int, configuration: GameConfiguration) -> Bool {
+        guard let value = Int(text.trimmingCharacters(in: .whitespaces)), value > 0, value < 10 else { return false }
+        return (0...9).contains { digit in
+            let candidate = value * 10 + digit
+            return configuration.isCompletedGameScore(teamA: candidate, teamB: otherScore)
+                || configuration.isCompletedGameScore(teamA: otherScore, teamB: candidate)
+        }
+    }
+
+    private func quickLogSheet(_ state: QuickLogState?) -> some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        Text(quickLogTeamAName)
+                        Spacer()
+                        Text(quickLogTeamBName)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                }
+                Section("Game Scores") {
+                    ForEach(state?.visibleEntries ?? []) { entry in
+                        QuickLogRow(
+                            gameID: entry.id,
+                            teamAText: quickLogScoreBinding(gameID: entry.id, team: .teamA),
+                            teamBText: quickLogScoreBinding(gameID: entry.id, team: .teamB)
+                        )
+                    }
+                }
+            }
+            .navigationTitle("Log Final Score")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        quickLogCommitTask?.cancel()
+                        isShowingQuickLog = false
+                    }
+                    .accessibilityIdentifier("Cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { saveQuickLoggedMatch() }
+                        .disabled(!(state?.isDecided ?? false))
+                        .accessibilityIdentifier("Save")
+                }
+                // .numberPad has no Return key, so this is the only way to
+                // dismiss the keyboard — Save/row-reveal don't depend on
+                // this being tapped, but there's still no other way to put
+                // the keyboard away.
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        quickLogCommitTask?.cancel()
+                        commitQuickLogRow()
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                    .accessibilityIdentifier("QuickLog.Done")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    // Temporary stub — Task 5 replaces this with the real persistence call.
+    private func saveQuickLoggedMatch() {
+        isShowingQuickLog = false
+    }
+}
+
+/// Takes its two fields' text as plain Bindings — no focus tracking at
+/// all, since commit timing is driven entirely by each field's text
+/// changes (focus-based commit was abandoned for this sheet because
+/// `@FocusState` doesn't reliably sync for fields inside `.sheet` content).
+fileprivate struct QuickLogRow: View {
+    let gameID: Int
+    @Binding var teamAText: String
+    @Binding var teamBText: String
+
+    var body: some View {
+        HStack {
+            Text("Game \(gameID)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 56, alignment: .leading)
+            TextField("0", text: $teamAText)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("QuickLog.Game\(gameID).TeamAScore")
+            Text("–")
+                .foregroundStyle(.secondary)
+            TextField("0", text: $teamBText)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("QuickLog.Game\(gameID).TeamBScore")
         }
     }
 }
