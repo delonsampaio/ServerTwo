@@ -137,4 +137,32 @@ final class MatchDetailViewTests: XCTestCase {
 
         XCTAssertEqual(view.longestGameID, games[1].id)
     }
+
+    func testDurationTextIsNilWhenStartedAtExactlyEqualsCompletedAt() {
+        // Quick Log sets both timestamps to the same Date() — must read as
+        // "we don't know," not "< 1 min" (which would look like a bug).
+        let record = MatchRecord(
+            startedAt: Date(timeIntervalSince1970: 1000),
+            completedAt: Date(timeIntervalSince1970: 1000),
+            matchFormat: .bestOfOne,
+            winningTeam: .teamA,
+            configurationData: Data()
+        )
+        let view = MatchDetailView(match: record, onRematch: { _ in })
+
+        XCTAssertNil(view.durationText)
+    }
+
+    func testDurationTextStillShowsUnderAMinuteForAGenuinelyShortLiveMatch() {
+        let record = MatchRecord(
+            startedAt: Date(timeIntervalSince1970: 1000),
+            completedAt: Date(timeIntervalSince1970: 1030),
+            matchFormat: .bestOfOne,
+            winningTeam: .teamA,
+            configurationData: Data()
+        )
+        let view = MatchDetailView(match: record, onRematch: { _ in })
+
+        XCTAssertEqual(view.durationText, "< 1 min")
+    }
 }

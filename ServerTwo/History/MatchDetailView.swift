@@ -17,7 +17,10 @@ struct MatchDetailView: View {
 
     var durationText: String? {
         let interval = match.completedAt.timeIntervalSince(match.startedAt)
-        guard interval >= 0 else { return nil }
+        // Exactly zero means "no timing data" (Quick Log sets both
+        // timestamps identically) — distinct from a genuinely short live
+        // match, which still reports "< 1 min" below.
+        guard interval > 0 else { return nil }
         guard interval >= 60 else { return "< 1 min" }
         return Duration.seconds(interval)
             .formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
@@ -216,28 +219,33 @@ struct MatchDetailView: View {
                 gameScoreColumn(name: teamBName, score: game.teamBFinalScore, won: game.winningTeam == .teamB, alignment: .trailing)
             }
 
-            Divider()
-                .overlay(Color.primary.opacity(0.12))
+            // A quick-logged game's GameRecord.points stays empty (there's
+            // no live play to log) — the divider and point list would
+            // otherwise render with nothing underneath.
+            if !game.orderedPoints.isEmpty {
+                Divider()
+                    .overlay(Color.primary.opacity(0.12))
 
-            VStack(spacing: 10) {
-                ForEach(game.orderedPoints) { point in
-                    HStack(spacing: 10) {
-                        Text("\(point.sequenceNumber)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 24, alignment: .leading)
-                        Circle()
-                            .fill(point.scoringTeam == .teamA ? Color.accentColor : Color.orange)
-                            .frame(width: 6, height: 6)
-                        Text("\(point.scoringTeam == .teamA ? teamAName : teamBName) scored")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(point.teamAScoreAfter)-\(point.teamBScoreAfter)")
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(Color.primary.opacity(0.06), in: Capsule())
+                VStack(spacing: 10) {
+                    ForEach(game.orderedPoints) { point in
+                        HStack(spacing: 10) {
+                            Text("\(point.sequenceNumber)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 24, alignment: .leading)
+                            Circle()
+                                .fill(point.scoringTeam == .teamA ? Color.accentColor : Color.orange)
+                                .frame(width: 6, height: 6)
+                            Text("\(point.scoringTeam == .teamA ? teamAName : teamBName) scored")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(point.teamAScoreAfter)-\(point.teamBScoreAfter)")
+                                .font(.subheadline.weight(.semibold).monospacedDigit())
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color.primary.opacity(0.06), in: Capsule())
+                        }
                     }
                 }
             }
