@@ -5,7 +5,7 @@ struct ScoringView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
     @Environment(AppSettings.self) private var appSettings
 
-    @State private var correctingTeam: Team?
+    @State private var isShowingScoreCorrection = false
     @State private var showingSideSwitchAlert = false
     @State private var sideSwitchAcknowledgedForGameIndex = -1
     @State private var sideSwitchAcknowledgedViaCorrectionForGameIndex = -1
@@ -56,10 +56,7 @@ struct ScoringView: View {
         } message: {
             Text("The score so far will be lost. This can't be undone.")
         }
-        .sheet(isPresented: Binding(
-            get: { correctingTeam != nil },
-            set: { isPresented in if !isPresented { correctingTeam = nil } }
-        ), onDismiss: {
+        .sheet(isPresented: $isShowingScoreCorrection, onDismiss: {
             // The side-switch check has a same-transaction presentation race:
             // `PickleballGame.correctScore` also calls `checkSideSwitch()`, so a
             // correction that crosses the threshold flips `hasSideSwitched`
@@ -76,19 +73,22 @@ struct ScoringView: View {
             // the onChange handler's own alert silently failed to present.
             if let match = activeMatchController.match {
                 let gameIndex = match.completedGames.count
-                if match.currentGame.state.hasSideSwitched, sideSwitchAcknowledgedViaCorrectionForGameIndex != gameIndex {
+                if match.currentGame.state.hasSideSwitched, !match.isMatchOver, sideSwitchAcknowledgedViaCorrectionForGameIndex != gameIndex {
                     sideSwitchAcknowledgedViaCorrectionForGameIndex = gameIndex
                     sideSwitchAcknowledgedForGameIndex = gameIndex
                     showingSideSwitchAlert = true
                 }
             }
         }) {
-            if let match = activeMatchController.match, let team = correctingTeam {
+            if let match = activeMatchController.match {
                 ScoreCorrectionSheet(
-                    teamDisplayName: team == .teamA ? activeMatchController.teamAName : activeMatchController.teamBName,
-                    currentScore: match.currentGame.state.score(for: team),
-                    onCommit: { newScore in
-                        activeMatchController.correctScore(team: team, to: newScore)
+                    teamAName: activeMatchController.teamAName,
+                    teamBName: activeMatchController.teamBName,
+                    currentTeamAScore: match.currentGame.state.teamAScore,
+                    currentTeamBScore: match.currentGame.state.teamBScore,
+                    configuration: match.configuration,
+                    onCommit: { teamA, teamB in
+                        activeMatchController.correctScores(teamA: teamA, teamB: teamB)
                     }
                 )
             }
@@ -129,7 +129,7 @@ struct ScoringView: View {
         .onChange(of: activeMatchController.match?.currentGame.state.hasSideSwitched) { _, hasSideSwitched in
             guard let match = activeMatchController.match else { return }
             let gameIndex = match.completedGames.count
-            if hasSideSwitched == true, sideSwitchAcknowledgedForGameIndex != gameIndex {
+            if hasSideSwitched == true, !match.isMatchOver, sideSwitchAcknowledgedForGameIndex != gameIndex {
                 sideSwitchAcknowledgedForGameIndex = gameIndex
                 showingSideSwitchAlert = true
             }
@@ -238,66 +238,75 @@ struct ScoringView: View {
         let name = team == .teamA ? activeMatchController.teamAName : activeMatchController.teamBName
         let score = match.currentGame.state.score(for: team)
         let isServing = match.currentGame.state.servingTeam == team
-        return Button {
-            activeMatchController.recordPoint(for: team)
-        } label: {
-            VStack(spacing: 8) {
-                // A fixed-height slot whether or not this team is serving
-                // — if the receiving side just left it empty with nothing
-                // reserving the space, its card's content would sit lower
-                // than the serving side's, breaking the side-by-side
-                // alignment the two cards are supposed to share.
-                Group {
-                    if isServing {
-                        Label("SERVING", systemImage: "circle.grid.cross.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(Color.accentColor)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.accentColor.opacity(0.18), in: Capsule())
-                    } else {
-                        Color.clear
-                    }
+        return VStack(spacing: 8) {
+            // A fixed-height slot whether or not this team is serving
+            // — if the receiving side just left it empty with nothing
+            // reserving the space, its card's content would sit lower
+            // than the serving side's, breaking the side-by-side
+            // alignment the two cards are supposed to share.
+            Group {
+                if isServing {
+                    Label("SERVING", systemImage: "circle.grid.cross.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.accentColor.opacity(0.18), in: Capsule())
+                } else {
+                    Color.clear
                 }
-                .frame(height: 28)
-
-                Spacer()
-
-                // Both sides stay full .primary contrast — the serving
-                // card's border, tint, and badge already distinguish it,
-                // and dimming the receiving side's score actively hurts
-                // the courtside-glare legibility this screen is built
-                // for (see the type above). Sizes pushed up (name to
-                // .title, score to 108pt) to actually use the height
-                // these full-height cards have to give.
-                Text(name)
-                    .font(.title.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                Text("\(score)")
-                    .font(.system(size: 108, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-
-                Spacer()
-
-                Text("Tap to Score")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.tertiary)
             }
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(isServing ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(isServing ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: isServing ? 2 : 1)
-            )
-            .contentShape(Rectangle())
+            .frame(height: 28)
+
+            Spacer()
+
+            // Both sides stay full .primary contrast — the serving
+            // card's border, tint, and badge already distinguish it,
+            // and dimming the receiving side's score actively hurts
+            // the courtside-glare legibility this screen is built
+            // for (see the type above). Sizes pushed up (name to
+            // .title, score to 108pt) to actually use the height
+            // these full-height cards have to give.
+            Text(name)
+                .font(.title.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text("\(score)")
+                .font(.system(size: 108, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            Text("Tap to Score")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(isServing ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(isServing ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: isServing ? 2 : 1)
+        )
+        .contentShape(Rectangle())
+        // Tap to score, long-press to correct. Two gestures on a plain view —
+        // NOT a Button: with a Button, its own press handling beat an outer
+        // `.onLongPressGesture`, so the correction sheet could never be opened
+        // (verified under XCUITest: a long press neither opened it nor scored).
+        // SwiftUI resolves tap vs. long press exclusively here, so a long press
+        // never also scores a point.
+        .onTapGesture {
+            guard !match.isMatchOver else { return }
+            activeMatchController.recordPoint(for: team)
+        }
+        .onLongPressGesture {
+            guard !match.isMatchOver else { return }
+            isShowingScoreCorrection = true
+        }
         // Spec §3.7 scopes haptics into this phase's ScoringView work. The
         // condition closure both respects the user's toggle and limits firing
         // to actual score increases, so an unrelated re-render or an undo
@@ -305,10 +314,9 @@ struct ScoringView: View {
         .sensoryFeedback(.impact, trigger: score) { oldValue, newValue in
             appSettings.hapticsEnabled && newValue > oldValue
         }
-        .onLongPressGesture {
-            correctingTeam = team
-        }
         .disabled(match.isMatchOver)
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("scoreZone.\(team.rawValue)")
         .accessibilityLabel("\(name), \(score) points. Tap to score, double tap and hold to correct.")
     }

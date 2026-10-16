@@ -201,12 +201,6 @@ final class ActiveMatchController {
         persistSnapshot()
     }
 
-    func correctScore(team: Team, to newScore: Int) {
-        match?.correctScore(team: team, to: newScore)
-        syncGameCompletionDates()
-        persistSnapshot()
-    }
-
     func correctScores(teamA: Int, teamB: Int) {
         match?.correctScores(teamA: teamA, teamB: teamB)
         syncGameCompletionDates()
