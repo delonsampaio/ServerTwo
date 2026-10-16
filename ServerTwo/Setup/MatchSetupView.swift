@@ -357,7 +357,11 @@ struct MatchSetupView: View {
         // `$isShowingQuickLog` binding (which creates no dependency), and
         // the sheet presents with a closure captured before
         // `presentQuickLogSheet()` set the state — an empty sheet.
-        .sheet(isPresented: $isShowingQuickLog) { [quickLogState] in
+        // `onDismiss` clears focus AFTER dismissal completes — SwiftUI
+        // restores the parent's last-focused name field during dismissal,
+        // so clearing earlier (in `resetSetupFields()`) loses the race and
+        // the keyboard returns over the reset form.
+        .sheet(isPresented: $isShowingQuickLog, onDismiss: { focusedField = nil }) { [quickLogState] in
             quickLogSheet(quickLogState)
         }
         .onChange(of: pendingRematch) { _, newValue in
@@ -880,6 +884,10 @@ struct MatchSetupView: View {
             isShowingQuickLog = false
             resetSetupFields()
         } catch {
+            // Discard the failed save's pending inserts (match/sides/games) so
+            // a retry doesn't duplicate them. Upserted SavedPlayers are
+            // already persisted by their own save, so they survive this.
+            modelContext.rollback()
             quickLogSaveErrorMessage = "Couldn't save this match. Please try again."
         }
     }
