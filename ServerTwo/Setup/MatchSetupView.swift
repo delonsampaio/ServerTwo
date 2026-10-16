@@ -3,15 +3,24 @@ import SwiftData
 import PickleballKit
 import UIKit
 
+/// Digits only, max 2 characters — guards against pasted non-numeric input
+/// slipping past .keyboardType(.numberPad), and against runaway length. No
+/// real pickleball score needs 3+ digits.
+fileprivate func quickLogSanitizedScoreText(_ text: String) -> String {
+    String(text.filter(\.isNumber).prefix(2))
+}
+
 fileprivate struct QuickLogGameEntry: Identifiable {
     let id: Int  // 1-based game number — stable for the life of the sheet
     var teamAText: String = ""
     var teamBText: String = ""
 }
 
-/// Pure, unit-testable Quick Log row state: which scores have been
-/// committed (validated, not just typed) so far, whether the match is
-/// decided, and which rows should be visible. This type has no idea when
+/// Quick Log row state: which scores have been committed (validated, not
+/// just typed) so far, whether the match is decided, and which rows should
+/// be visible. It is a plain value type with no UIKit/SwiftUI dependencies,
+/// but it is `fileprivate` and has no unit tests of its own — it is
+/// exercised only through the UI tests. This type has no idea when
 /// it's safe to call `commit()` — that discipline (immediately for
 /// unambiguous edits, after a short debounce for an ambiguous single
 /// digit, never on a stale mid-keystroke value) lives entirely in
@@ -143,6 +152,24 @@ struct MatchSetupView: View {
     // rapid cross-field edits (e.g. an external keyboard tabbing between
     // fields) are handled correctly by a single, always-current task.
     @State private var quickLogCommitTask: Task<Void, Never>?
+    @State private var quickLogSaveErrorMessage: String?
+
+    /// How long an ambiguous single digit waits before committing. 350ms in
+    /// release; debug builds let UI tests widen/narrow it with
+    /// `-UITest-QuickLogDebounceMs <int>` (same debug-only launch-argument
+    /// style as `-UITest-DemoMatchLimit` in MyApp), so timing-sensitive
+    /// assertions don't depend on simulator speed.
+    private static let quickLogDebounce: Duration = {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "-UITest-QuickLogDebounceMs"),
+           index + 1 < arguments.count,
+           let milliseconds = Int(arguments[index + 1]) {
+            return .milliseconds(milliseconds)
+        }
+        #endif
+        return .milliseconds(350)
+    }()
 
     private enum ScoringFormatKind: String, CaseIterable, Identifiable {
         case sideOut = "Side-Out"
@@ -693,13 +720,19 @@ struct MatchSetupView: View {
                 return team == .teamA ? entry.teamAText : entry.teamBText
             },
             set: { newValue in
-                // Digits only, max 2 characters — guards against pasted
-                // non-numeric input slipping past .keyboardType(.numberPad),
-                // and against runaway length. No real pickleball score
-                // needs 3+ digits.
-                let sanitized = String(newValue.filter(\.isNumber).prefix(2))
-                quickLogState?.updateText(gameID: gameID, team: team, text: sanitized)
-                scheduleQuickLogCommit(gameID: gameID, team: team)
+                // The raw text is stored as-is (even if it needs trimming)
+                // so the state really changes and the TextField is pushed
+                // the trimmed value by `QuickLogRow`'s `.onChange`
+                // normalization below. Storing the sanitized text here
+                // instead left the stored value unchanged when a 3rd digit
+                // was typed after "13", so the field kept DISPLAYING
+                // "135" while the state held "13". A commit is scheduled
+                // only for already-sanitized text — the normalization's own
+                // write re-enters this setter with the trimmed value.
+                quickLogState?.updateText(gameID: gameID, team: team, text: newValue)
+                if newValue == quickLogSanitizedScoreText(newValue) {
+                    scheduleQuickLogCommit(gameID: gameID, team: team)
+                }
             }
         )
     }
@@ -710,8 +743,10 @@ struct MatchSetupView: View {
     /// different, independently-valid outcome; everything else (blank,
     /// invalid, multi-digit, or an unextendable single digit) commits at
     /// once. Driven purely by text-binding changes — deliberately not by
-    /// `@FocusState`, which doesn't reliably sync for fields inside
-    /// `.sheet` content.
+    /// `@FocusState`: an earlier @FocusState-based commit trigger was
+    /// observed unreliable here (possibly the stale sheet-closure capture
+    /// rather than FocusState itself); this text-driven design doesn't
+    /// depend on focus.
     private func scheduleQuickLogCommit(gameID: Int, team: Team) {
         quickLogCommitTask?.cancel()
         guard let entry = quickLogState?.entries.first(where: { $0.id == gameID }) else { return }
@@ -721,7 +756,7 @@ struct MatchSetupView: View {
         if let otherScore = Int(otherText.trimmingCharacters(in: .whitespaces)),
            isAmbiguousSingleDigit(text, otherScore: otherScore, configuration: quickLogConfiguration) {
             quickLogCommitTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(350))
+                try? await Task.sleep(for: Self.quickLogDebounce)
                 guard !Task.isCancelled else { return }
                 commitQuickLogRow()
             }
@@ -797,6 +832,17 @@ struct MatchSetupView: View {
                 }
             }
         }
+        // Attached inside the sheet content: the sheet is its own
+        // presentation context, so an alert on the parent view wouldn't
+        // appear over it.
+        .alert("Save Failed", isPresented: Binding(
+            get: { quickLogSaveErrorMessage != nil },
+            set: { isPresented in if !isPresented { quickLogSaveErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(quickLogSaveErrorMessage ?? "")
+        }
         .presentationDetents([.medium, .large])
     }
 
@@ -818,17 +864,24 @@ struct MatchSetupView: View {
             ? resolvedPlayers((teamBPlayer1, teamBPlayer1ID), (teamBPlayer2, teamBPlayer2ID))
             : resolvedPlayers((teamBPlayer1, teamBPlayer1ID))
         let repository = MatchRepository(modelContext: modelContext)
-        _ = try? repository.saveQuickLoggedMatch(
-            configuration: quickLogConfiguration,
-            matchFormat: matchFormat,
-            teamAName: quickLogTeamAName,
-            teamBName: quickLogTeamBName,
-            gameScores: state.committedScores,
-            teamAPlayers: teamAPlayers,
-            teamBPlayers: teamBPlayers
-        )
-        isShowingQuickLog = false
-        resetSetupFields()
+        // A failed save must not look like success: keep the sheet open and
+        // the typed scores intact so the user can retry (mirrors the Finish
+        // Match "Save Failed" alert in ScoringView).
+        do {
+            _ = try repository.saveQuickLoggedMatch(
+                configuration: quickLogConfiguration,
+                matchFormat: matchFormat,
+                teamAName: quickLogTeamAName,
+                teamBName: quickLogTeamBName,
+                gameScores: state.committedScores,
+                teamAPlayers: teamAPlayers,
+                teamBPlayers: teamBPlayers
+            )
+            isShowingQuickLog = false
+            resetSetupFields()
+        } catch {
+            quickLogSaveErrorMessage = "Couldn't save this match. Please try again."
+        }
     }
 
     /// Mirrors what finishing a *live* match does for free today —
@@ -851,8 +904,9 @@ struct MatchSetupView: View {
 
 /// Takes its two fields' text as plain Bindings — no focus tracking at
 /// all, since commit timing is driven entirely by each field's text
-/// changes (focus-based commit was abandoned for this sheet because
-/// `@FocusState` doesn't reliably sync for fields inside `.sheet` content).
+/// changes (an earlier @FocusState-based commit trigger was observed
+/// unreliable here — possibly the stale sheet-closure capture rather than
+/// FocusState itself — so this text-driven design doesn't depend on focus).
 fileprivate struct QuickLogRow: View {
     let gameID: Int
     @Binding var teamAText: String
@@ -867,12 +921,20 @@ fileprivate struct QuickLogRow: View {
             TextField("0", text: $teamAText)
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)
+                .onChange(of: teamAText) { _, newValue in
+                    let sanitized = quickLogSanitizedScoreText(newValue)
+                    if sanitized != newValue { teamAText = sanitized }
+                }
                 .accessibilityIdentifier("QuickLog.Game\(gameID).TeamAScore")
             Text("–")
                 .foregroundStyle(.secondary)
             TextField("0", text: $teamBText)
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)
+                .onChange(of: teamBText) { _, newValue in
+                    let sanitized = quickLogSanitizedScoreText(newValue)
+                    if sanitized != newValue { teamBText = sanitized }
+                }
                 .accessibilityIdentifier("QuickLog.Game\(gameID).TeamBScore")
         }
     }

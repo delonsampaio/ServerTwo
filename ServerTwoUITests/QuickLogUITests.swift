@@ -39,9 +39,10 @@ final class QuickLogUITests: XCTestCase {
         // "7" is unambiguous against Team A's already-committed "11", so
         // typing it commits immediately — Save is already enabled before
         // this tap. "Done" here just dismisses the keyboard before
-        // interacting with the nav bar, matching realistic use; it's no
-        // longer load-bearing for Save's enabled state (see Task 4's
-        // commit-timing note for why).
+        // interacting with the nav bar, matching realistic use. Tapping it
+        // is harmless (it only re-commits the same already-committed
+        // scores) and nothing below depends on it: Save would be enabled
+        // without it.
         app.buttons["QuickLog.Done"].tap()
 
         // Default match format is Best of 1 — committing Game 1 alone
@@ -78,6 +79,8 @@ final class QuickLogUITests: XCTestCase {
         matchRow.tap()
 
         XCTAssertTrue(app.staticTexts["Game 1"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["11"].exists, "the logged Team A score should show on the detail screen")
+        XCTAssertTrue(app.staticTexts["7"].exists, "the logged Team B score should show on the detail screen")
         XCTAssertFalse(app.staticTexts["Delon scored"].exists, "a quick-logged game has no point-by-point log to show")
         XCTAssertFalse(app.staticTexts["Katie scored"].exists)
     }
