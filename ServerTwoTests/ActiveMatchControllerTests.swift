@@ -193,17 +193,18 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 0)
     }
 
-    func testCorrectScorePersistsSnapshot() throws {
+    func testCorrectScoresPersistsSnapshot() throws {
         let suite = UUID().uuidString
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         start(controller, teamAName: "A", teamBName: "B")
-        controller.correctScore(team: .teamA, to: 7)
+        controller.correctScores(teamA: 7, teamB: 4)
 
         let reread = try MatchRepository(modelContext: ModelContext(container))
             .loadInProgressMatch(proUnlocked: controller.proUnlocked, demoPointCap: nil)
         XCTAssertEqual(reread?.match.currentGame.state.teamAScore, 7)
+        XCTAssertEqual(reread?.match.currentGame.state.teamBScore, 4)
     }
 
     func testRequestTimeoutPersistsSnapshotOnlyWhenTimeoutActuallyStarts() throws {
@@ -496,22 +497,23 @@ final class ActiveMatchControllerTests: XCTestCase {
         )
     }
 
-    /// `correctScore(team:to:)` calls `syncGameCompletionDates()` the same
-    /// as `recordPoint`/`undo`, but only those other two call sites were
-    /// covered by a test — this exercises the sync helper via the third
-    /// call site so a future change that breaks `correctScore`'s sync call
-    /// specifically (without touching the other two) would be caught.
-    func testCorrectScoreGrowsGameCompletionDatesWhenItWinsAGame() throws {
+    /// `correctScores(teamA:teamB:)` calls `syncGameCompletionDates()` the
+    /// same as `recordPoint`/`undo`, but only those two call sites were
+    /// covered by a test — this exercises the sync helper via the correction
+    /// call site, including the two-team flow that motivated the atomic API:
+    /// 9-9 -> 12-11 must NOT complete a game (no date), and 12-10 must.
+    func testCorrectScoresGrowsGameCompletionDatesOnlyWhenItWinsAGame() throws {
         let (controller, _) = try makeController()
         let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
         start(controller, configuration: config, matchFormat: .bestOfThree, teamAName: "A", teamBName: "B")
         XCTAssertEqual(controller.gameCompletionDates.count, 0)
 
-        // Push team A's score directly to the game-winning value via
-        // correctScore, rather than recordPoint — this must grow
-        // completedGames (and therefore gameCompletionDates) by one, same
-        // as it would via normal point-by-point scoring.
-        controller.correctScore(team: .teamA, to: 11)
+        controller.correctScores(teamA: 9, teamB: 9)
+        controller.correctScores(teamA: 12, teamB: 11)   // in progress: no game completed
+        XCTAssertEqual(controller.match?.completedGames.count, 0)
+        XCTAssertEqual(controller.gameCompletionDates.count, 0)
+
+        controller.correctScores(teamA: 12, teamB: 10)   // completed: game 1 ends
         XCTAssertEqual(controller.match?.completedGames.count, 1)
         XCTAssertEqual(controller.gameCompletionDates.count, 1)
     }

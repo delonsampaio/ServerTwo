@@ -207,6 +207,12 @@ final class ActiveMatchController {
         persistSnapshot()
     }
 
+    func correctScores(teamA: Int, teamB: Int) {
+        match?.correctScores(teamA: teamA, teamB: teamB)
+        syncGameCompletionDates()
+        persistSnapshot()
+    }
+
     @discardableResult
     func requestTimeout(for team: Team) -> Bool {
         guard let match else { return false }
@@ -288,7 +294,7 @@ final class ActiveMatchController {
         try? repository.deleteAllSavedPlayers()
     }
 
-    /// Called from `recordPoint`/`undo`/`correctScore` only — each of
+    /// Called from `recordPoint`/`undo`/`correctScores` only — each of
     /// those can move `completedGames.count` by exactly one in either
     /// direction, so a plain grow-by-one/shrink-by-one here is correct;
     /// it would NOT be correct if called from anywhere that could skip
