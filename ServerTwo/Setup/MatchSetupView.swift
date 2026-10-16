@@ -33,8 +33,8 @@ fileprivate struct QuickLogState {
     private(set) var entries: [QuickLogGameEntry]
     private(set) var committedScores: [(teamA: Int, teamB: Int)] = []
     private(set) var isDecided = false
-    private let matchFormat: MatchFormat
-    private let configuration: GameConfiguration
+    let matchFormat: MatchFormat
+    let configuration: GameConfiguration
 
     init(matchFormat: MatchFormat, configuration: GameConfiguration) {
         self.matchFormat = matchFormat
@@ -591,12 +591,7 @@ struct MatchSetupView: View {
             winByTwo: winByTwo,
             timeoutsPerTeam: trackTimeouts ? winningScore.standardTimeoutsPerTeam : 0
         )
-        let teamAPlayers = playMode == .doubles
-            ? resolvedPlayers((teamAPlayer1, teamAPlayer1ID), (teamAPlayer2, teamAPlayer2ID))
-            : resolvedPlayers((teamAPlayer1, teamAPlayer1ID))
-        let teamBPlayers = playMode == .doubles
-            ? resolvedPlayers((teamBPlayer1, teamBPlayer1ID), (teamBPlayer2, teamBPlayer2ID))
-            : resolvedPlayers((teamBPlayer1, teamBPlayer1ID))
+        let players = resolvedTeamPlayers()
         // Who serves first isn't decided yet — that happens on the
         // coin-flip screen `RootTabView` shows next, once this is staged.
         activeMatchController.stageMatch(PendingMatchSetup(
@@ -604,8 +599,8 @@ struct MatchSetupView: View {
             matchFormat: matchFormat,
             teamAName: combinedName(teamAPlayer1, teamAPlayer2),
             teamBName: combinedName(teamBPlayer1, teamBPlayer2),
-            teamAPlayerIDs: teamAPlayers.map(\.id),
-            teamBPlayerIDs: teamBPlayers.map(\.id)
+            teamAPlayerIDs: players.teamA.map(\.id),
+            teamBPlayerIDs: players.teamB.map(\.id)
         ))
     }
 
@@ -626,6 +621,19 @@ struct MatchSetupView: View {
             return existing
         }
         return try? repository.upsertSavedPlayer(name: name)
+    }
+
+    /// Resolves both teams' players from the typed name fields — one player per
+    /// side in singles, two in doubles. Shared by `startMatch()` and
+    /// `saveQuickLoggedMatch()`.
+    private func resolvedTeamPlayers() -> (teamA: [SavedPlayer], teamB: [SavedPlayer]) {
+        let teamA = playMode == .doubles
+            ? resolvedPlayers((teamAPlayer1, teamAPlayer1ID), (teamAPlayer2, teamAPlayer2ID))
+            : resolvedPlayers((teamAPlayer1, teamAPlayer1ID))
+        let teamB = playMode == .doubles
+            ? resolvedPlayers((teamBPlayer1, teamBPlayer1ID), (teamBPlayer2, teamBPlayer2ID))
+            : resolvedPlayers((teamBPlayer1, teamBPlayer1ID))
+        return (teamA, teamB)
     }
 
     private func resolvedPlayers(_ pairs: (String, UUID?)...) -> [SavedPlayer] {
@@ -753,12 +761,12 @@ struct MatchSetupView: View {
     /// depend on focus.
     private func scheduleQuickLogCommit(gameID: Int, team: Team) {
         quickLogCommitTask?.cancel()
-        guard let entry = quickLogState?.entries.first(where: { $0.id == gameID }) else { return }
+        guard let state = quickLogState, let entry = state.entries.first(where: { $0.id == gameID }) else { return }
         let text = team == .teamA ? entry.teamAText : entry.teamBText
         let otherText = team == .teamA ? entry.teamBText : entry.teamAText
 
         if let otherScore = Int(otherText.trimmingCharacters(in: .whitespaces)),
-           isAmbiguousSingleDigit(text, otherScore: otherScore, configuration: quickLogConfiguration) {
+           isAmbiguousSingleDigit(text, otherScore: otherScore, configuration: state.configuration) {
             quickLogCommitTask = Task { @MainActor in
                 try? await Task.sleep(for: Self.quickLogDebounce)
                 guard !Task.isCancelled else { return }
@@ -861,25 +869,20 @@ struct MatchSetupView: View {
         quickLogState?.commit()
         guard let state = quickLogState, state.isDecided else { return }
 
-        let teamAPlayers = playMode == .doubles
-            ? resolvedPlayers((teamAPlayer1, teamAPlayer1ID), (teamAPlayer2, teamAPlayer2ID))
-            : resolvedPlayers((teamAPlayer1, teamAPlayer1ID))
-        let teamBPlayers = playMode == .doubles
-            ? resolvedPlayers((teamBPlayer1, teamBPlayer1ID), (teamBPlayer2, teamBPlayer2ID))
-            : resolvedPlayers((teamBPlayer1, teamBPlayer1ID))
+        let players = resolvedTeamPlayers()
         let repository = MatchRepository(modelContext: modelContext)
         // A failed save must not look like success: keep the sheet open and
         // the typed scores intact so the user can retry (mirrors the Finish
         // Match "Save Failed" alert in ScoringView).
         do {
             _ = try repository.saveQuickLoggedMatch(
-                configuration: quickLogConfiguration,
-                matchFormat: matchFormat,
+                configuration: state.configuration,
+                matchFormat: state.matchFormat,
                 teamAName: quickLogTeamAName,
                 teamBName: quickLogTeamBName,
                 gameScores: state.committedScores,
-                teamAPlayers: teamAPlayers,
-                teamBPlayers: teamBPlayers
+                teamAPlayers: players.teamA,
+                teamBPlayers: players.teamB
             )
             isShowingQuickLog = false
             resetSetupFields()
