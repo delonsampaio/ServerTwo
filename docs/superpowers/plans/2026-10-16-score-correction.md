@@ -1323,10 +1323,11 @@ final class ScoreCorrectionUITests: XCTestCase {
 
         // The correction crosses the side-switch threshold on an in-progress
         // game, so the alert legitimately appears.
+        // Asserted (not optional): this also proves the new `!match.isMatchOver`
+        // guard does not suppress the alert for an in-progress game.
         let sideSwitchAlert = app.alerts["Side Switch"]
-        if sideSwitchAlert.waitForExistence(timeout: 3) {
-            sideSwitchAlert.buttons["OK"].tap()
-        }
+        XCTAssertTrue(sideSwitchAlert.waitForExistence(timeout: 5), "the correction crosses the side-switch threshold on a live game")
+        sideSwitchAlert.buttons["OK"].tap()
 
         // Both scores applied at once, and the game did NOT end mid-edit.
         XCTAssertTrue(teamAZone.label.contains("12 points"), "got \(teamAZone.label)")
