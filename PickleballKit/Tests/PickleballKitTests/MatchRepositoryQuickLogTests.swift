@@ -114,4 +114,41 @@ final class MatchRepositoryQuickLogTests: XCTestCase {
         let history = try repository.fetchMatchHistory()
         XCTAssertEqual(history.count, 1)
     }
+
+    func testTeamBWinningTheOnlyGameIsRecordedAsTheMatchWinner() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+
+        let saved = try repository.saveQuickLoggedMatch(
+            configuration: config,
+            matchFormat: .bestOfOne,
+            teamAName: "A",
+            teamBName: "B",
+            gameScores: [(teamA: 7, teamB: 11)]
+        )
+
+        XCTAssertEqual(saved.winningTeam, .teamB)
+        let game = try XCTUnwrap(saved.games?.first)
+        XCTAssertEqual(game.winningTeam, .teamB)
+        XCTAssertEqual(game.teamAFinalScore, 7)
+        XCTAssertEqual(game.teamBFinalScore, 11)
+    }
+
+    func testAnEmptyGameScoresListThrowsMatchNotOver() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+
+        XCTAssertThrowsError(try repository.saveQuickLoggedMatch(
+            configuration: config,
+            matchFormat: .bestOfOne,
+            teamAName: "A",
+            teamBName: "B",
+            gameScores: []
+        )) { error in
+            XCTAssertEqual(error as? MatchRepositoryError, .matchNotOver)
+        }
+        XCTAssertTrue(try repository.fetchMatchHistory().isEmpty, "nothing may be saved on a rejected entry")
+    }
 }

@@ -120,7 +120,12 @@ public final class MatchRepository {
         var gameRecords: [GameRecord] = []
         var gameNumber = 0
         for game in match.completedGames {
-            guard let gameWinner = game.gameWinner else { continue }
+            // `gameWinner` is nil only for a game decided at a score the strict
+            // completed-score rule no longer recognises (a legacy in-progress
+            // snapshot). Fall back to the higher score rather than silently
+            // dropping the game — it is already counted in `gamesWon`.
+            let gameWinner = game.gameWinner
+                ?? (game.state.teamAScore > game.state.teamBScore ? Team.teamA : Team.teamB)
             gameNumber += 1
             let gameRecord = GameRecord(
                 gameNumber: gameNumber,

@@ -106,6 +106,46 @@ final class MatchRepositoryHistoryTests: XCTestCase {
         }
     }
 
+    func testSaveCompletedMatchKeepsAGameWhoseScoreNoLongerCountsAsCompleted() throws {
+        // A match restored from an in-progress snapshot saved BEFORE the strict
+        // completed-score rule can hold a decided game at a score the rule no
+        // longer recognises (12-9 with win-by-2: only reachable via an old
+        // lenient correction). That game must be saved with the higher score
+        // as its winner, not silently dropped.
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
+        let finalState = GameState(
+            teamAScore: 12, teamBScore: 9,
+            servingTeam: .teamA, serverNumber: .one,
+            teamATimeoutsRemaining: 2, teamBTimeoutsRemaining: 2,
+            hasSideSwitched: true, lastPointWonWhileServing: true
+        )
+        func makeLegacyGame() -> PickleballGame {
+            PickleballGame(configuration: config, state: finalState, history: [], proUnlocked: true, demoPointCap: nil)
+        }
+        XCTAssertNil(makeLegacyGame().gameWinner, "sanity: 12-9 is not a completed score under the strict rule")
+
+        let match = PickleballMatch(
+            configuration: config,
+            matchFormat: .bestOfOne,
+            completedGames: [makeLegacyGame()],
+            currentGame: makeLegacyGame(),
+            gamesWon: [.teamA: 1, .teamB: 0],
+            currentGameIsCounted: true
+        )
+
+        let saved = try repository.saveCompletedMatch(match, teamAName: "A", teamBName: "B", startedAt: Date())
+
+        XCTAssertEqual(saved.winningTeam, .teamA)
+        let games = try XCTUnwrap(saved.games)
+        XCTAssertEqual(games.count, 1, "the legacy game must not be dropped")
+        let game = try XCTUnwrap(games.first)
+        XCTAssertEqual(game.teamAFinalScore, 12)
+        XCTAssertEqual(game.teamBFinalScore, 9)
+        XCTAssertEqual(game.winningTeam, .teamA)
+    }
+
     func testFetchMatchHistoryReturnsNewestFirst() throws {
         let context = try makeInMemoryContext()
         let repository = MatchRepository(modelContext: context)
