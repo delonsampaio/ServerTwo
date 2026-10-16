@@ -560,30 +560,6 @@ struct MatchSetupView: View {
             winByTwo: winByTwo,
             timeoutsPerTeam: trackTimeouts ? winningScore.standardTimeoutsPerTeam : 0
         )
-        let repository = MatchRepository(modelContext: modelContext)
-        // Prefers the exact SavedPlayer the user selected via a
-        // suggestion chip (re-verified against the current text, in case
-        // anything slipped past `trackedTextBinding`'s invalidation) over
-        // a fresh name-based upsert — this is what correctly disambiguates
-        // two different SavedPlayers that happen to share a name (the
-        // spec's "Two Mikes" case), instead of an arbitrary name lookup.
-        func resolvedPlayer(name: String, selectedID: UUID?) -> SavedPlayer? {
-            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let selectedID,
-               let existing = try? repository.fetchAllSavedPlayers().first(where: { $0.id == selectedID }),
-               existing.name.caseInsensitiveCompare(trimmed) == .orderedSame {
-                return existing
-            }
-            return try? repository.upsertSavedPlayer(name: name)
-        }
-        func resolvedPlayers(_ pairs: (String, UUID?)...) -> [SavedPlayer] {
-            // Dedupe by id: a doubles side with the same name typed into
-            // both fields must not double-count that one player in
-            // `timesPlayed`/stats attribution.
-            var seen = Set<UUID>()
-            return pairs.compactMap { resolvedPlayer(name: $0.0, selectedID: $0.1) }
-                .filter { seen.insert($0.id).inserted }
-        }
         let teamAPlayers = playMode == .doubles
             ? resolvedPlayers((teamAPlayer1, teamAPlayer1ID), (teamAPlayer2, teamAPlayer2ID))
             : resolvedPlayers((teamAPlayer1, teamAPlayer1ID))
@@ -600,6 +576,34 @@ struct MatchSetupView: View {
             teamAPlayerIDs: teamAPlayers.map(\.id),
             teamBPlayerIDs: teamBPlayers.map(\.id)
         ))
+    }
+
+    /// Prefers the exact SavedPlayer the user selected via a suggestion
+    /// chip (re-verified against the current text, in case anything
+    /// slipped past `trackedTextBinding`'s invalidation) over a fresh
+    /// name-based upsert — this is what correctly disambiguates two
+    /// different SavedPlayers that happen to share a name (the "Two
+    /// Mikes" case), instead of an arbitrary name lookup. Shared by
+    /// `startMatch()` and `saveQuickLoggedMatch()` — both resolve players
+    /// from the same typed name fields the same way.
+    private func resolvedPlayer(name: String, selectedID: UUID?) -> SavedPlayer? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repository = MatchRepository(modelContext: modelContext)
+        if let selectedID,
+           let existing = try? repository.fetchAllSavedPlayers().first(where: { $0.id == selectedID }),
+           existing.name.caseInsensitiveCompare(trimmed) == .orderedSame {
+            return existing
+        }
+        return try? repository.upsertSavedPlayer(name: name)
+    }
+
+    private func resolvedPlayers(_ pairs: (String, UUID?)...) -> [SavedPlayer] {
+        // Dedupe by id: a doubles side with the same name typed into both
+        // fields must not double-count that one player in
+        // `timesPlayed`/stats attribution.
+        var seen = Set<UUID>()
+        return pairs.compactMap { resolvedPlayer(name: $0.0, selectedID: $0.1) }
+            .filter { seen.insert($0.id).inserted }
     }
 
     /// Shown while the field is focused (even empty, so tapping an empty
@@ -796,9 +800,52 @@ struct MatchSetupView: View {
         .presentationDetents([.medium, .large])
     }
 
-    // Temporary stub — Task 5 replaces this with the real persistence call.
     private func saveQuickLoggedMatch() {
+        // Defensive re-commit: cancels any pending debounced commit (up to
+        // ~350ms away, e.g. the user just backspaced "13" to "1") so it
+        // can't fire against the sheet after this save has already
+        // consumed the state, then re-derives isDecided fresh right before
+        // using it — Save either acts on genuinely-current data or safely
+        // no-ops, never on stale data.
+        quickLogCommitTask?.cancel()
+        quickLogState?.commit()
+        guard let state = quickLogState, state.isDecided else { return }
+
+        let teamAPlayers = playMode == .doubles
+            ? resolvedPlayers((teamAPlayer1, teamAPlayer1ID), (teamAPlayer2, teamAPlayer2ID))
+            : resolvedPlayers((teamAPlayer1, teamAPlayer1ID))
+        let teamBPlayers = playMode == .doubles
+            ? resolvedPlayers((teamBPlayer1, teamBPlayer1ID), (teamBPlayer2, teamBPlayer2ID))
+            : resolvedPlayers((teamBPlayer1, teamBPlayer1ID))
+        let repository = MatchRepository(modelContext: modelContext)
+        _ = try? repository.saveQuickLoggedMatch(
+            configuration: quickLogConfiguration,
+            matchFormat: matchFormat,
+            teamAName: quickLogTeamAName,
+            teamBName: quickLogTeamBName,
+            gameScores: state.committedScores,
+            teamAPlayers: teamAPlayers,
+            teamBPlayers: teamBPlayers
+        )
         isShowingQuickLog = false
+        resetSetupFields()
+    }
+
+    /// Mirrors what finishing a *live* match does for free today —
+    /// RootTabView tears down and rebuilds MatchSetupView when it switches
+    /// back to it after finishMatch(), which is what naturally clears its
+    /// fields. Quick Log's sheet never leaves this view (no live match is
+    /// ever created), so there's no teardown to rely on — this makes that
+    /// reset explicit instead.
+    private func resetSetupFields() {
+        teamAPlayer1 = ""
+        teamAPlayer1ID = nil
+        teamAPlayer2 = ""
+        teamAPlayer2ID = nil
+        teamBPlayer1 = ""
+        teamBPlayer1ID = nil
+        teamBPlayer2 = ""
+        teamBPlayer2ID = nil
     }
 }
 
