@@ -156,14 +156,23 @@ public final class PickleballGame {
         state = previous
     }
 
-    public func correctScore(team: Team, to newScore: Int) {
+    /// Sets BOTH teams' scores in one step — one undo-history entry, one
+    /// side-switch check — so a two-team correction never passes through an
+    /// intermediate board the engine would act on. Does not validate that
+    /// the pair is reachable (the UI gates that via
+    /// `GameConfiguration.isReachableGameScore`).
+    public func correctScores(teamA: Int, teamB: Int) {
         history.append(state)
-        if team == .teamA {
-            state.teamAScore = max(0, newScore)
-        } else {
-            state.teamBScore = max(0, newScore)
-        }
+        state.teamAScore = max(0, teamA)
+        state.teamBScore = max(0, teamB)
         checkSideSwitch()
         state.lastPointWonWhileServing = true
+    }
+
+    public func correctScore(team: Team, to newScore: Int) {
+        correctScores(
+            teamA: team == .teamA ? newScore : state.teamAScore,
+            teamB: team == .teamB ? newScore : state.teamBScore
+        )
     }
 }

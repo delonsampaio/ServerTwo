@@ -54,4 +54,23 @@ public struct GameConfiguration: Codable, Sendable, Equatable {
         if case .rally(let freeze) = scoringFormat, freeze { return true }  // see doc comment
         return winByTwo && (winner - loser == 2)
     }
+
+    /// Whether `teamA`/`teamB` is a score live play could actually produce:
+    /// a legal completed final (see `isCompletedGameScore`) or a legal
+    /// in-progress score. Used to gate manual score correction, so a
+    /// correction can never leave a game that ends mid-edit or can never end
+    /// by scoring more points.
+    ///
+    /// `.rally(freeze: true)` is deliberately permissive for scores above the
+    /// target — same stance as `isCompletedGameScore`, since freeze's margin
+    /// depends on serve-sequence state this pure check can't see.
+    public func isReachableGameScore(teamA: Int, teamB: Int) -> Bool {
+        guard teamA >= 0, teamB >= 0 else { return false }
+        if isCompletedGameScore(teamA: teamA, teamB: teamB) { return true }
+        if max(teamA, teamB) < winningScore.rawValue { return true }
+        if case .rally(let freeze) = scoringFormat, freeze { return true }
+        // At/above the target in a non-freeze game, play only continues when
+        // win-by-2 is on and the score is tied or one ahead.
+        return winByTwo && abs(teamA - teamB) <= 1
+    }
 }
