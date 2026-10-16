@@ -58,7 +58,7 @@ struct ScoringView: View {
         }
         .sheet(isPresented: $isShowingScoreCorrection, onDismiss: {
             // The side-switch check has a same-transaction presentation race:
-            // `PickleballGame.correctScore` also calls `checkSideSwitch()`, so a
+            // `PickleballGame.correctScores` also calls `checkSideSwitch()`, so a
             // correction that crosses the threshold flips `hasSideSwitched`
             // inside the sheet's `onCommit`, immediately before its own
             // `dismiss()`. The `.onChange(of: ...hasSideSwitched)` handler below
@@ -317,6 +317,14 @@ struct ScoringView: View {
         .disabled(match.isMatchOver)
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            guard !match.isMatchOver else { return }
+            activeMatchController.recordPoint(for: team)
+        }
+        .accessibilityAction(named: "Correct score") {
+            guard !match.isMatchOver else { return }
+            isShowingScoreCorrection = true
+        }
         .accessibilityIdentifier("scoreZone.\(team.rawValue)")
         .accessibilityLabel("\(name), \(score) points. Tap to score, double tap and hold to correct.")
     }

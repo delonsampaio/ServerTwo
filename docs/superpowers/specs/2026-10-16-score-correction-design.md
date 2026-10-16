@@ -89,3 +89,16 @@ Hand-checked cases (11-point game): `12-9` unreachable (margin 3, overtime, not 
 - Correcting timeouts, serving team, or server number.
 - `PickleballMatch.undo()` Branch 3 (pop the previous completed game) is not reconciled; and `undo()` is not changed for the old-snapshot impossible-score case (see section 4).
 - A discard-confirmation flow for Quick Log's swipe-dismiss.
+
+## As built
+
+- `ScoringView.scoreZone` was restructured from `Button` + outer `.onLongPressGesture` to a plain view with `.onTapGesture` + `.onLongPressGesture` (both guarded by `!match.isMatchOver`). A diagnostic showed the original long-press never opened the sheet under XCUITest and never scored either, so the correction sheet was effectively unreachable. The alternative `.simultaneousGesture(LongPressGesture)` was rejected because the Button also fired on release (a stray +1 point).
+- Because the plain view loses the Button's built-in activation, explicit `.accessibilityAction` (score) and `.accessibilityAction(named: "Correct score")` were added.
+- The UI test taps the steppers' inner buttons by their propagated identifiers `ScoreCorrection.TeamAStepper-Increment` / `ScoreCorrection.TeamBStepper-Increment`.
+- `undo()` Branch 3 does not reconcile and remains a documented limitation; it is UI-unreachable because the score zones guard on `isMatchOver`.
+- A two-score correction that raises both scores logs a single "Team A scored" point event in match detail (within the existing "corrections aren't distinguished" limitation).
+- Known follow-ups needing a real-device check:
+  - Press-down visual feedback (the Button's highlight) is lost.
+  - A tap held longer than 0.5s opens the sheet instead of scoring.
+  - VoiceOver activation of the score zone and the "Correct score" action.
+  - The "Game Over" alert for a game completed by a correction in a best-of-N match: the correction sets `showingGameOverAlert` while the sheet is dismissing, with no onDismiss fallback like the side-switch one.

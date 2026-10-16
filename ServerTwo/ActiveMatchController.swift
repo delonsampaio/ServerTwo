@@ -289,7 +289,7 @@ final class ActiveMatchController {
     }
 
     /// Called from `recordPoint`/`undo`/`correctScores` only — each of
-    /// those can move `completedGames.count` by exactly one in either
+    /// those can move `completedGames.count` by at most one in either
     /// direction, so a plain grow-by-one/shrink-by-one here is correct;
     /// it would NOT be correct if called from anywhere that could skip
     /// multiple games at once.

@@ -83,5 +83,14 @@ final class ScoreCorrectionUITests: XCTestCase {
         XCTAssertTrue(teamBZone.label.contains("11 points"), "got \(teamBZone.label)")
         XCTAssertTrue(teamAZone.isEnabled)
         XCTAssertTrue(teamBZone.isEnabled)
+
+        // Reopen from the OTHER zone: the sheet must start at the CURRENT scores
+        // (a stale read is invisible at 0-0), and Save is off while unchanged.
+        teamBZone.press(forDuration: 1.0)
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        XCTAssertTrue(teamAStepper.label.hasSuffix(": 12"), "got \(teamAStepper.label)")
+        XCTAssertTrue(teamBStepper.label.hasSuffix(": 11"), "got \(teamBStepper.label)")
+        XCTAssertFalse(save.isEnabled)
+        app.buttons["ScoreCorrection.Cancel"].tap()
     }
 }

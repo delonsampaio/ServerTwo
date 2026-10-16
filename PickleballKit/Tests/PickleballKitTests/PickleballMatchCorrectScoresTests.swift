@@ -115,7 +115,7 @@ final class PickleballMatchCorrectScoresTests: XCTestCase {
     }
 
     // MARK: - Engine-only paths (UI-unreachable, but real invariants)
-    // The next three FAIL against the pre-fix undo() — see Step 4.
+    // Written first; each of these failed against the pre-reconcile undo().
 
     func testUndoingACorrectionThatUncountedADecidedGameRecountsIt() {
         let match = makeMatch(.bestOfOne)
