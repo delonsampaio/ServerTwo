@@ -94,17 +94,20 @@ public final class PickleballMatch {
         if currentGameIsCounted {
             // The match ended on this exact game. Undoing the match-deciding
             // point must also reverse the win count, not just revert the
-            // score.
-            completedGames.removeLast()
-            if let winner = currentGame.gameWinner {
-                gamesWon[winner, default: 0] -= 1
-            }
+            // score. Reconciling (rather than assuming the undone action was
+            // the winning point) also handles undoing a CORRECTION that left
+            // this game decided — same winner or a flipped one.
+            let previousWinner = currentGame.gameWinner
             currentGame.undo()
-            currentGameIsCounted = false
+            reconcileCurrentGame(wasCounted: true, previousWinner: previousWinner)
             return
         }
         if currentGame.canUndo {
             currentGame.undo()
+            // Undoing a correction that un-counted a decided game restores a
+            // decided score; reconcile re-counts it. For ordinary points this
+            // is a no-op (an in-progress game stays in progress).
+            reconcileCurrentGame(wasCounted: false, previousWinner: nil)
             return
         }
         guard let previousGame = completedGames.popLast() else { return }
@@ -116,12 +119,32 @@ public final class PickleballMatch {
         currentGameIsCounted = false
     }
 
-    public func correctScore(team: Team, to newScore: Int) {
+    /// Sets BOTH scores of the current game in one step and evaluates the
+    /// win/loss bookkeeping ONCE afterwards (see `reconcileCurrentGame`), so a
+    /// two-team correction never ends — or archives — a game on an
+    /// intermediate board. One undo restores both scores and the bookkeeping.
+    public func correctScores(teamA: Int, teamB: Int) {
         let wasCounted = currentGameIsCounted
         let previousWinner = wasCounted ? currentGame.gameWinner : nil
 
-        currentGame.correctScore(team: team, to: newScore)
+        currentGame.correctScores(teamA: teamA, teamB: teamB)
 
+        reconcileCurrentGame(wasCounted: wasCounted, previousWinner: previousWinner)
+    }
+
+    public func correctScore(team: Team, to newScore: Int) {
+        correctScores(
+            teamA: team == .teamA ? newScore : currentGame.state.teamAScore,
+            teamB: team == .teamB ? newScore : currentGame.state.teamBScore
+        )
+    }
+
+    /// Brings `gamesWon`/`completedGames`/`currentGame` back in line with
+    /// `currentGame.gameWinner` after the current game's score changed
+    /// through a correction or an undo. `previousWinner` is the winner the
+    /// match had ALREADY counted for `currentGame` before the change (nil when
+    /// `currentGame` wasn't counted).
+    private func reconcileCurrentGame(wasCounted: Bool, previousWinner: Team?) {
         let newWinner = currentGame.gameWinner
 
         guard previousWinner != newWinner else { return }
