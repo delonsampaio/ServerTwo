@@ -32,7 +32,7 @@ From the official **2026 USA Pickleball Official Rulebook** PDF (the user suppli
 3. **Add "Second server."** (Rule 17.D.4), doubles side-out only, before the call when the same team keeps the serve and the server number goes from 1 to 2, FORWARD move only. (An earlier draft skipped it as redundant with the trailing "2"; the official rulebook lists it as a referee call, and the point of this change is a more official sound.)
 4. **Official-style endings:**
    - Best of 1: `"Game and match, <winner>, <winner score> to <loser score>."`
-   - Best of 3/5 clincher: `"Game <N> to <winner>, <winner score> to <loser score>. Game and match, <winner>, <winner games> to <loser games>."` Wording for the games tally is spoken as "2 games to 1" (not "2 to 1") so it is not mistaken for a point score.
+   - Best of 3/5 clincher: `"Game <N> to <winner>, <winner score> to <loser score>. Game and match, <winner>, <winner games> games to <loser games>."` The tally is spoken as "2 games to 1" (not "2 to 1") so it is not mistaken for a point score.
 5. **Change of ends follows the rule:**
    - Mid-game "Switch Sides" / "Switch back" prompt and the spoken "Switch sides." / "Switch back." apply ONLY when the current game is the last game of the match format (best of 1: the only game; best of 3: game 3; best of 5: game 5).
    - After every completed game that does not end the match, the Game Over sheet says teams change ends, and the spoken game line says "Change ends." before "Next game, ...".
@@ -60,17 +60,29 @@ From the official **2026 USA Pickleball Official Rulebook** PDF (the user suppli
 
 ### Game point rule
 
-Let `target = winningScore`, a team is "at game point" when it can end the game by scoring the next point.
+A team "can win on the next point" when, after adding one to ITS score and leaving the other unchanged, (1) its new score is strictly greater than the opponent's AND (2) `configuration.isCompletedGameScore(teamA:teamB:)` is true for the resulting pair. **Condition (1) is required**: `isCompletedGameScore` is symmetric (it looks at `max`/`min`), so without it a trailing serving team would be reported at game point whenever the OTHER team already holds a winning-looking score. That state is reachable in `.rally(freeze: true)`, where a receiving team can reach or pass the target with a lead without the game ending until it wins a rally on serve (e.g. 13-10 with the 10-point team serving: 10+1 = 11, `isCompletedGameScore(13, 11)` is true, but the serving team is still losing).
 
-- **Side-out scoring and rally freeze:** only the SERVING team can end the game on the next rally (a receiving team's rally win is only a side-out), so game point exists only for the serving team. Condition: `configuration.isCompletedGameScore` is true for the serving team's score + 1 with the other score unchanged. This reuses the existing win-by-2 / overtime logic.
-- **Rally without freeze:** either team can end the game on any rally, so game point applies if EITHER team satisfies the condition for itself.
-- **Match point:** game point AND the team that would win the game has `gamesWon + 1 >= matchFormat.gamesToWin`.
-- Spoken after the call (so the score is never delayed). It is a description of the board, so it is also spoken after an undo or correction that lands on such a board (when a call is spoken).
+Eligible teams:
+- **Side-out scoring and rally freeze:** only the SERVING team can end the game on the next rally.
+- **Rally without freeze:** either team can, so both are checked.
+
+"Game point." is spoken when an eligible team can win on the next point. **"Match point." replaces it** when ANY eligible team that can win on the next point also has `gamesWon + 1 >= matchFormat.gamesToWin` (so a rally non-freeze 10-10, win-by-one board in a game that would clinch for one team and only win a game for the other is "Match point."). Best of 1: every game point is match point.
+
+Stakes are evaluated and spoken ONLY when a score call is spoken for the change (inside the "call changed" branch), never on their own. So undoing a timeout on a game-point board stays silent, and a timeout itself speaks only "Timeout, <team>.".
+
+### Composition order (one same-game change, at most these four slots, in this order)
+
+1. Optional prefix, at most one, only when the move count rose AND the scores are unchanged AND scoring is side-out: `"Side out."` if the serving team changed, else `"Second server."` if (doubles) the serving team kept the serve and the server number went 1 → 2.
+2. The score call (when the call changed): `"<call>."`
+3. Optional switch line (only in the last game of the format): `"Switch sides."` (flag false → true) or `"Switch back."` (true → false).
+4. Optional stakes line (only when the call changed): `"Match point."` or `"Game point."`.
+
+Examples: side-out into game point: `["Side out.", "10, 8, 1.", "Game point."]`; second server on game point: `["Second server.", "10, 8, 2.", "Game point."]`; a correction from 0-0 to 10-8 in a deciding game: `["10, 8, 1.", "Switch sides.", "Game point."]` (the call's server number depends on the board).
 
 ### Change of ends in the UI
 
 - `ScoringView`'s side-switch prompt logic (`syncSideSwitchPrompt` and the correction sheet's `onDismiss` re-check) only enqueues a side-switch prompt when the current game index equals `matchFormat.rawValue - 1` (the last game of the format). The per-game-index tracker, queue, stale-drop and resume seeding stay as built.
-- The Game Over sheet's caption changes from "Next game starts at 0-0." to "Teams change ends. Next game starts at 0-0."
+- The Game Over sheet gains a SEPARATE line "Teams change ends." above the existing line, which stays exactly "Next game starts at 0-0." (an existing UI test, `ScoringPromptsUITests`, asserts that exact text, so it must remain its own element).
 - The engine's `hasSideSwitched` flag is unchanged; it simply is not acted on in non-last games.
 
 ### Resume and undo
@@ -82,7 +94,7 @@ Let `target = winningScore`, a team is "at game point" when it can end the game 
 
 - `AnnouncementSnapshot` gains `moveCount: Int` (`match.currentGame.history.count`). `AnnouncementPlanner.plan` already receives `matchFormat` and `configuration`; it computes the last-game gate (`new.gameIndex == matchFormat.rawValue - 1`), game/match point, and the side-out line itself. No new parameters on `plan`.
 - A tiny pure helper on `MatchFormat` (app target) names the gate once, so the planner and `ScoringView` share it: `isLastGame(index:)`.
-- `ScoringPromptSheet`'s Game Over caption text becomes a testable static helper with the new wording.
+- `ScoringPromptSheet`'s Game Over sheet adds the "Teams change ends." line; the new text is a testable static helper.
 - No PickleballKit changes.
 
 ## Edge cases to handle
@@ -92,12 +104,12 @@ Let `target = winningScore`, a team is "at game point" when it can end the game 
 - A correction landing on a game-point board speaks the call plus "Game point." (descriptive).
 - An undo that restores the serving team does NOT say "Side out." (move count fell).
 - The first game of a best of 3 reaching 6: no "Switch sides." and no prompt; game 3 reaching 6: both.
-- Existing UI tests: the scoring-prompt and score-correction UI tests use the default best-of-1, where the prompt still applies; the Game Over UI test uses best-of-3 game 1 and is unaffected except the caption text if it asserts it.
+- Existing tests that will change or must be re-checked: `AnnouncementPlannerTests` lines asserting `"Delon wins, 11 to 5."` and `"Delon wins the match, 2 to 0."` (new endings); `ScoringPromptsUITests` asserts `staticTexts["Next game starts at 0-0."]` (kept as its own element) and dismisses "Switch Sides" (the implementer must confirm that flow uses the last game of its format, best of 1, otherwise the test must change to a deciding game); the score-correction UI test asserts the Side Switch sheet in the default format.
 - Rally freeze serving-only vs non-freeze either-team (above).
 
 ## Testing
 
-- Planner unit tests (exact strings): "Side out." forward in singles and doubles side-out; not on undo; not in rally; game point for the serving team only (side-out), either team (rally non-freeze); not at 8-10 with the 10-point team receiving; overtime cases; match point; the three ending wordings; "Change ends." line; switch lines gated by last game for best of 1/3/5.
+- Planner unit tests (exact strings): "Side out." forward in singles and doubles side-out; not on undo; not in rally; "Second server." forward only; game point for the serving team only (side-out), either team (rally non-freeze); not at 8-10 with the 10-point team receiving; overtime cases (10-10 no, 11-10 serving yes, 12-11 yes); match point and its precedence when both teams can win in non-freeze rally; the three ending wordings (winner first for Team B); "Change ends." line; switch lines gated by last game for best of 1/3/5; composition cases: side-out into game point `["Side out.", "10, 8, 1.", "Game point."]`, second server on game point, undoing a timeout on a game-point board is `[]`, rally-freeze 13-10 with the 10-point team serving has NO game point, a correction landing on game point.
 - A pure test of `MatchFormat.isLastGame(index:)`.
 - A test of the new Game Over caption helper.
 - `ScoringView` gating covered by one UI test: a best-of-3 game 1 corrected to 6-0 shows NO Side Switch sheet (assert absence), while the existing best-of-1 test still shows it. Keep the UI test count low: extend an existing test where possible.
