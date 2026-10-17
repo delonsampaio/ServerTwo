@@ -25,6 +25,12 @@ final class ScoringPromptsUITests: XCTestCase {
         flipCoinButton.tap()
         let beginMatchButton = app.buttons["Begin Match"]
         XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 3))
+        // Learn who the coin flip picked to serve game 1 first ("<name> serves
+        // first"; names are blank so the teams are Team A / Team B).
+        let coinFlipResult = app.staticTexts["FirstServeResult"].label
+        let game1FirstServer = coinFlipResult.hasPrefix("Team A") ? "Team A" : "Team B"
+        let game2FirstServer = game1FirstServer == "Team A" ? "Team B" : "Team A"
+        XCTAssertEqual(coinFlipResult, "\(game1FirstServer) serves first")
         beginMatchButton.tap()
 
         let teamAZone = app.buttons["scoreZone.teamA"]
@@ -60,6 +66,12 @@ final class ScoringPromptsUITests: XCTestCase {
         XCTAssertTrue(
             app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'First serve:'")).firstMatch.exists,
             "the Game Over sheet names who serves first"
+        )
+        // And it names WHICH team: the opponent of game 1's first server,
+        // not the winner (Team A won game 1 here).
+        XCTAssertTrue(
+            app.staticTexts["First serve: \(game2FirstServer)."].exists,
+            "game 2 is first served by \(game2FirstServer), the opponent of game 1's first server"
         )
         XCTAssertEqual(dismissButton.label, "Start Game 2")
         dismissButton.tap()

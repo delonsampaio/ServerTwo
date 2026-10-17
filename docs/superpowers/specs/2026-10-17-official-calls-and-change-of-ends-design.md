@@ -135,6 +135,6 @@ Initial-service alternation between games (Open question 2), "Point" before each
 - `MatchFormat.isLastGame(index:)` gates both the spoken "Switch sides."/"Switch back." and `ScoringView.syncSideSwitchPrompt`; in every other game no mid-game switch prompt or line is produced.
 - The Game Over sheet shows a separate "Teams switch sides." line above the unchanged "Next game starts at 0-0."; the spoken game line says "Switch sides." before "Next game, ...".
 - Match endings are "Game and match, <winner>, <w> to <l>." (best of 1) and "Game N to <winner>, <w> to <l>." + "Game and match, <winner>, <wg> games to <lg>." (best of 3/5).
-- Not changed: initial service between games (Open question 2), still "winner serves first".
+- Not changed: initial service between games (Open question 2), still "winner serves first". (superseded: built in 2026-10-17-initial-service-alternation-design.md)
 - Device checks owed: best of 3, game 1 passing 6 is silent and shows no sheet, game 3 passing 6 says "Switch sides." and shows the sheet; between games "Switch sides." is spoken and shown; "Side out." on a side-out and "Second server." when the first server loses, neither after undo; "Game point." when serving at 10-8 (not when receiving at 8-10); "Match point." in a clincher; a game ending says "Game and match, ...".
 - Undo from a later game back into an earlier game speaks the restored call, plus "Game point."/"Match point." when the restored board is one (no prefix, no switch line).

@@ -1,7 +1,7 @@
 # Initial Service Alternation Design
 
 **Date:** 2026-10-17
-**Status:** Draft for review (Gemini review, then user review, before a plan is written)
+**Status:** Approved and built (see "As built")
 **Builds on:** `docs/superpowers/specs/2026-10-17-official-calls-and-change-of-ends-design.md` (Open question 2 there)
 
 ## Goal

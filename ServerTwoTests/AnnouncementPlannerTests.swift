@@ -300,6 +300,14 @@ final class AnnouncementPlannerTests: XCTestCase {
         XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 3.", "Switch sides.", "Next game, Delon serving, 0, 0, 2."])
     }
 
+    func testTheNextGameNamesTheFirstServerNotTheWinner() {
+        // Team A won game 1, but Team B serves first in game 2 (Rule 21.F.2).
+        let old = snap(index: 0, a: 10, b: 3)
+        let new = snap(index: 1, a: 0, b: 0, serving: .teamB, gamesA: 1,
+                       last: .init(teamAScore: 11, teamBScore: 3, winner: .teamA))
+        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 3.", "Switch sides.", "Next game, Fred serving, 0, 0, 2."])
+    }
+
     func testTeamBWinningAGameSpeaksTheWinnersScoreFirst() {
         let old = snap(index: 1, a: 7, b: 10, gamesA: 1)
         let new = snap(index: 2, a: 0, b: 0, serving: .teamB, gamesA: 1, gamesB: 1,
