@@ -52,9 +52,10 @@ final class AppSettings {
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        self.voiceAnnouncerEnabled = userDefaults.object(forKey: Keys.voiceAnnouncerEnabled) == nil
-            ? true
-            : userDefaults.bool(forKey: Keys.voiceAnnouncerEnabled)
+        // Off until the user turns it on: it speaks through the silent switch
+        // and ducks other audio, which should be a deliberate choice.
+        // (`bool(forKey:)` is false when the key was never set.)
+        self.voiceAnnouncerEnabled = userDefaults.bool(forKey: Keys.voiceAnnouncerEnabled)
         self.hapticsEnabled = userDefaults.object(forKey: Keys.hapticsEnabled) == nil
             ? true
             : userDefaults.bool(forKey: Keys.hapticsEnabled)

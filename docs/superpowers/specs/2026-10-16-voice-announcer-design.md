@@ -13,7 +13,7 @@ Today `AppSettings.voiceAnnouncerEnabled` is stored (default `true`) but nothing
 
 1. **Scope: score call plus events** (not score call only, not events only).
 2. **Audio behaviour: speak even when the phone is on silent, and duck other audio** (music/podcast dips while a call plays, then returns). The Settings toggle is the opt-out.
-3. **Default stays ON** (the toggle already defaults to `true`; unchanged).
+3. **Default OFF** (changed 2026-10-17 at the user's request after trying it: `AppSettings.voiceAnnouncerEnabled` now defaults to `false`; a user who turns it on keeps their choice).
 
 ## What is spoken
 
