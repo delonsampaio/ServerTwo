@@ -6,15 +6,18 @@ struct ScoringView: View {
     @Environment(AppSettings.self) private var appSettings
 
     @State private var isShowingScoreCorrection = false
-    @State private var showingSideSwitchAlert = false
     @State private var sideSwitchAcknowledgedForGameIndex = -1
     @State private var sideSwitchAcknowledgedViaCorrectionForGameIndex = -1
-    @State private var showingGameOverAlert = false
     @State private var gameOverAcknowledgedForGameIndex = -1
-    @State private var gameOverMessage = ""
     @State private var showingFinishConfirmation = false
     @State private var finishErrorMessage: String?
-    @State private var showingCancelConfirmation = false
+    // SwiftUI can present only one sheet from a view at a time and silently
+    // drops or clobbers the second. Game Over / Side Switch usually fire while
+    // the Correct Score sheet is still on screen (the correction commits, then
+    // dismisses), so prompts are queued FIFO and only shown once no other
+    // sheet is up (see `presentNextPromptIfPossible`).
+    @State private var prompt: ScoringPrompt?
+    @State private var pendingPrompts: [ScoringPrompt] = []
 
     var body: some View {
         Group {
@@ -33,7 +36,17 @@ struct ScoringView: View {
             // fall back on otherwise.
             ToolbarItem(placement: .topBarLeading) {
                 Button("Cancel Match", role: .destructive) {
-                    showingCancelConfirmation = true
+                    if let match = activeMatchController.match {
+                        enqueue(.cancelMatch(
+                            teamAName: activeMatchController.teamAName,
+                            teamBName: activeMatchController.teamBName,
+                            teamAScore: match.currentGame.state.teamAScore,
+                            teamBScore: match.currentGame.state.teamBScore,
+                            teamAGames: match.gamesWon(for: .teamA),
+                            teamBGames: match.gamesWon(for: .teamB),
+                            completedGameCount: match.completedGames.count
+                        ))
+                    }
                 }
                 .accessibilityIdentifier("Cancel Match")
             }
@@ -46,15 +59,6 @@ struct ScoringView: View {
                 .disabled(!canUndo)
                 .accessibilityLabel("Undo")
             }
-        }
-        .alert("Cancel Match?", isPresented: $showingCancelConfirmation) {
-            Button("Cancel Match", role: .destructive) {
-                activeMatchController.cancelActiveMatch()
-            }
-            .accessibilityIdentifier("Confirm Cancel Match")
-            Button("Keep Playing", role: .cancel) { }
-        } message: {
-            Text("The score so far will be lost. This can't be undone.")
         }
         .sheet(isPresented: $isShowingScoreCorrection, onDismiss: {
             // The side-switch check has a same-transaction presentation race:
@@ -70,15 +74,22 @@ struct ScoringView: View {
             // guard, it would already have consumed it by the time this check
             // runs, defeating the fallback in exactly the scenario it exists
             // for. A separate variable means this check still fires even when
-            // the onChange handler's own alert silently failed to present.
+            // the onChange handler's own prompt silently failed to present.
             if let match = activeMatchController.match {
                 let gameIndex = match.completedGames.count
                 if match.currentGame.state.hasSideSwitched, !match.isMatchOver, sideSwitchAcknowledgedViaCorrectionForGameIndex != gameIndex {
                     sideSwitchAcknowledgedViaCorrectionForGameIndex = gameIndex
                     sideSwitchAcknowledgedForGameIndex = gameIndex
-                    showingSideSwitchAlert = true
+                    // Queued prompts don't race the dismissal, so the onChange
+                    // handler's own enqueue (made while this sheet was still
+                    // up) is waiting in the queue; adding a second one here
+                    // would show the same side switch twice.
+                    if !pendingPrompts.contains(where: { $0.id == "sideSwitch" }), prompt?.id != "sideSwitch" {
+                        enqueue(sideSwitchPrompt(for: match))
+                    }
                 }
             }
+            presentNextPromptIfPossible()
         }) {
             if let match = activeMatchController.match {
                 ScoreCorrectionSheet(
@@ -95,11 +106,14 @@ struct ScoringView: View {
         }
         .onChange(of: activeMatchController.match.map(ObjectIdentifier.init)) { _, _ in
             // A new match (including a fresh one right after finishing the
-            // previous one) must re-arm the side-switch alert — without this,
+            // previous one) must re-arm the side-switch prompt — without this,
             // acknowledging the side switch in one match can suppress the
-            // alert for every subsequent match's first side switch, since
+            // prompt for every subsequent match's first side switch, since
             // completedGames.count restarts at 0 each time and would otherwise
-            // collide with a previously-acknowledged index.
+            // collide with a previously-acknowledged index. Queued/visible
+            // prompts belong to the old match too (e.g. a cancelled one).
+            prompt = nil
+            pendingPrompts = []
             sideSwitchAcknowledgedForGameIndex = -1
             sideSwitchAcknowledgedViaCorrectionForGameIndex = -1
             gameOverAcknowledgedForGameIndex = -1
@@ -114,35 +128,34 @@ struct ScoringView: View {
             guard let match = activeMatchController.match, let newCount else { return }
             guard newCount > gameOverAcknowledgedForGameIndex + 1, !match.isMatchOver else { return }
             gameOverAcknowledgedForGameIndex = newCount - 1
+            // `completedGames.last` is the game just finished; the prompt
+            // carries its own final score because the live score has already
+            // reset to 0-0 for the next game.
             if let finishedGame = match.completedGames.last {
-                let aScore = finishedGame.state.teamAScore
-                let bScore = finishedGame.state.teamBScore
-                gameOverMessage = """
-                    Game \(newCount): \(activeMatchController.teamAName) \(aScore) - \(activeMatchController.teamBName) \(bScore).
-                    Games: \(match.gamesWon(for: .teamA)) – \(match.gamesWon(for: .teamB)). Next game starts at 0-0.
-                    """
-            } else {
-                gameOverMessage = "Next game starts at 0-0."
+                enqueue(.gameOver(
+                    gameNumber: newCount,
+                    teamAName: activeMatchController.teamAName,
+                    teamBName: activeMatchController.teamBName,
+                    teamAScore: finishedGame.state.teamAScore,
+                    teamBScore: finishedGame.state.teamBScore,
+                    winner: finishedGame.gameWinner,
+                    teamAGames: match.gamesWon(for: .teamA),
+                    teamBGames: match.gamesWon(for: .teamB)
+                ))
             }
-            showingGameOverAlert = true
         }
         .onChange(of: activeMatchController.match?.currentGame.state.hasSideSwitched) { _, hasSideSwitched in
             guard let match = activeMatchController.match else { return }
             let gameIndex = match.completedGames.count
             if hasSideSwitched == true, !match.isMatchOver, sideSwitchAcknowledgedForGameIndex != gameIndex {
                 sideSwitchAcknowledgedForGameIndex = gameIndex
-                showingSideSwitchAlert = true
+                enqueue(sideSwitchPrompt(for: match))
             }
         }
-        .alert("Side Switch", isPresented: $showingSideSwitchAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("Time to switch sides of the court.")
-        }
-        .alert("Game Over", isPresented: $showingGameOverAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(gameOverMessage)
+        .sheet(item: $prompt, onDismiss: { presentNextPromptIfPossible() }) { item in
+            ScoringPromptSheet(prompt: item, onCancelMatch: {
+                activeMatchController.cancelActiveMatch()
+            })
         }
         .alert("Save Failed", isPresented: Binding(
             get: { finishErrorMessage != nil },
@@ -152,7 +165,7 @@ struct ScoringView: View {
         } message: {
             Text(finishErrorMessage ?? "")
         }
-        .sheet(isPresented: $showingFinishConfirmation) {
+        .sheet(isPresented: $showingFinishConfirmation, onDismiss: { presentNextPromptIfPossible() }) {
             if let match = activeMatchController.match, let winningTeam = match.matchWinner {
                 FinishMatchSheet(
                     teamAName: activeMatchController.teamAName,
@@ -176,6 +189,30 @@ struct ScoringView: View {
                 )
             }
         }
+    }
+
+    private func sideSwitchPrompt(for match: PickleballMatch) -> ScoringPrompt {
+        .sideSwitch(
+            teamAName: activeMatchController.teamAName,
+            teamBName: activeMatchController.teamBName,
+            teamAScore: match.currentGame.state.teamAScore,
+            teamBScore: match.currentGame.state.teamBScore
+        )
+    }
+
+    private func enqueue(_ newPrompt: ScoringPrompt) {
+        pendingPrompts.append(newPrompt)
+        presentNextPromptIfPossible()
+    }
+
+    /// Shows the next queued prompt unless something is already on screen.
+    /// Called after every enqueue and whenever a sheet this view owns is
+    /// dismissed, so a prompt that had to wait appears right after the sheet
+    /// that blocked it.
+    private func presentNextPromptIfPossible() {
+        guard prompt == nil, !isShowingScoreCorrection, !showingFinishConfirmation,
+              !pendingPrompts.isEmpty else { return }
+        prompt = pendingPrompts.removeFirst()
     }
 
     private var canUndo: Bool {

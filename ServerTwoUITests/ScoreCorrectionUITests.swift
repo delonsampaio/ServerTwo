@@ -70,12 +70,18 @@ final class ScoreCorrectionUITests: XCTestCase {
         save.tap()
 
         // The correction crosses the side-switch threshold on an in-progress
-        // game, so the alert legitimately appears.
+        // game, so the Side Switch prompt (a sheet, queued until the
+        // correction sheet is gone) legitimately appears.
         // Asserted (not optional): this also proves the new `!match.isMatchOver`
-        // guard does not suppress the alert for an in-progress game.
-        let sideSwitchAlert = app.alerts["Side Switch"]
-        XCTAssertTrue(sideSwitchAlert.waitForExistence(timeout: 5), "the correction crosses the side-switch threshold on a live game")
-        sideSwitchAlert.buttons["OK"].tap()
+        // guard does not suppress the prompt for an in-progress game.
+        let sideSwitchPrompt = app.otherElements["Prompt.SideSwitch"]
+        let sideSwitchDismiss = app.buttons["Prompt.Dismiss"]
+        XCTAssertTrue(sideSwitchDismiss.waitForExistence(timeout: 5), "the correction crosses the side-switch threshold on a live game")
+        XCTAssertTrue(sideSwitchPrompt.exists)
+        XCTAssertTrue(app.staticTexts["Switch Sides"].exists)
+        sideSwitchDismiss.tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: sideSwitchDismiss)
+        waitForExpectations(timeout: 3)
 
         // Both scores applied at once, and the game did NOT end mid-edit.
         XCTAssertTrue(teamAZone.label.contains("12 points"), "got \(teamAZone.label)")
