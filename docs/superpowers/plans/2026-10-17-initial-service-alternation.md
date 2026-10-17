@@ -403,7 +403,7 @@ In `ServerTwoTests/ScoringPromptSheetTests.swift`: both existing `ScoringPrompt.
     }
 ```
 
-Run `-only-testing:ServerTwoTests/AnnouncementPlannerTests -only-testing:ServerTwoTests/ScoringPromptSheetTests` (bundle `/tmp/svc2.xcresult`). Expected: compile error / failures (the new associated value and the new wording do not exist yet).
+Before editing, run `grep -n "Side out\.\|Next game," ServerTwoTests/AnnouncementPlannerTests.swift` and confirm every match is covered by the edits above (there should be exactly the 10 listed expectations plus the live-match test; update any extra match the same way). Run `-only-testing:ServerTwoTests/AnnouncementPlannerTests -only-testing:ServerTwoTests/ScoringPromptSheetTests` (bundle `/tmp/svc2.xcresult`). Expected: compile error / failures (the new associated value and the new wording do not exist yet).
 
 - [ ] **Step 2: Planner**
 
@@ -498,6 +498,7 @@ In `ServerTwo/Scoring/ScoringPromptSheet.swift`:
 ```
 
 - The `#Preview("Game Over")` call gains `firstServerName: "Fred"`.
+- Before building, run `grep -rn "\.gameOver" --include='*.swift' ServerTwo ServerTwoTests ServerTwoUITests` and confirm every place that BINDS the associated values by position is updated (the plan lists the declaration, the rendering `switch`, the preview, the `ScoringView` construction and the two `ScoringPromptSheetTests` constructions; the `id` and detent switches use `case .gameOver:` without bindings and need no change). Any other arity-bound pattern the grep finds must also get the new last value.
 - The fixed Game Over detent (`case .gameOver: 420`): the extra line adds about 20 pt. Capture a temporary screenshot of the Game Over sheet (a UI test reaches it; use `xcrun simctl io 3C7D4B7A-F035-4AD7-89FF-B08256AF2516 screenshot /tmp/gameover.png` while it is up) and LOOK at it: nothing clipped, the dismiss button fully visible. If it clips, raise the detent by the smallest amount that fixes it. Remove temporary screenshot code before committing.
 
 In `ServerTwo/Scoring/ScoringView.swift` only the `.gameOver(` construction (in the `completedGames.count` handler) changes: add a last argument
