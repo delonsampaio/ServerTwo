@@ -6,7 +6,12 @@ import PickleballKit
 /// sit in a queue until another sheet is dismissed, so it has to describe that
 /// moment, not read live match state when it finally appears.
 enum ScoringPrompt: Identifiable, Equatable {
+    /// `gameIndex` and `direction` let a queued prompt be recognised as stale
+    /// (see `isStale`); `threshold` is the score the side switch happens at.
     case sideSwitch(
+        gameIndex: Int,
+        direction: SideSwitchDirection,
+        threshold: Int,
         teamAName: String, teamBName: String,
         teamAScore: Int, teamBScore: Int
     )
@@ -23,6 +28,45 @@ enum ScoringPrompt: Identifiable, Equatable {
         teamAGames: Int, teamBGames: Int,
         completedGameCount: Int
     )
+
+    /// `switchBack` is the undo/correction case: the engine restores the whole
+    /// earlier game state including `hasSideSwitched`, so dropping back under
+    /// the threshold puts the teams back on their starting ends.
+    enum SideSwitchDirection: Equatable {
+        case switchSides
+        case switchBack
+    }
+
+    /// What (if anything) the user needs telling, given the live
+    /// `hasSideSwitched` flag and the value they were last prompted about for
+    /// this game. Equal means they already know the current state of the court.
+    static func sideSwitchDirection(hasSwitched: Bool, promptedState: Bool) -> SideSwitchDirection? {
+        switch (hasSwitched, promptedState) {
+        case (true, false): .switchSides
+        case (false, true): .switchBack
+        default: nil
+        }
+    }
+
+    /// A side-switch prompt can sit in the queue behind another sheet; by the
+    /// time it would show, the game may have moved on (the same save that
+    /// crossed the threshold also finished the game) or the flag may have
+    /// flipped again. Showing it then would describe a court state that no
+    /// longer exists.
+    static func isSideSwitchStale(
+        gameIndex: Int, direction: SideSwitchDirection,
+        currentGameIndex: Int, hasSideSwitched: Bool
+    ) -> Bool {
+        gameIndex != currentGameIndex || (direction == .switchSides) != hasSideSwitched
+    }
+
+    func isStale(currentGameIndex: Int, hasSideSwitched: Bool) -> Bool {
+        guard case let .sideSwitch(gameIndex, direction, _, _, _, _, _) = self else { return false }
+        return Self.isSideSwitchStale(
+            gameIndex: gameIndex, direction: direction,
+            currentGameIndex: currentGameIndex, hasSideSwitched: hasSideSwitched
+        )
+    }
 
     var id: String {
         switch self {
@@ -79,6 +123,10 @@ struct ScoringPromptSheet: View {
         "\(teamAName) \(teamAScore) – \(teamBScore) \(teamBName)"
     }
 
+    static func switchBackBody(threshold: Int) -> String {
+        "The score is back under \(threshold), so teams return to their starting ends."
+    }
+
     static func matchupLine(teamAName: String, teamBName: String) -> String {
         "\(teamAName) vs \(teamBName)"
     }
@@ -98,8 +146,12 @@ struct ScoringPromptSheet: View {
     var body: some View {
         Group {
             switch prompt {
-            case let .sideSwitch(teamAName, teamBName, teamAScore, teamBScore):
-                sideSwitch(teamAName: teamAName, teamBName: teamBName, teamAScore: teamAScore, teamBScore: teamBScore)
+            case let .sideSwitch(_, direction, threshold, teamAName, teamBName, teamAScore, teamBScore):
+                sideSwitch(
+                    direction: direction, threshold: threshold,
+                    teamAName: teamAName, teamBName: teamBName,
+                    teamAScore: teamAScore, teamBScore: teamBScore
+                )
             case let .gameOver(gameNumber, teamAName, teamBName, teamAScore, teamBScore, winner, teamAGames, teamBGames):
                 gameOver(
                     gameNumber: gameNumber, teamAName: teamAName, teamBName: teamBName,
@@ -136,6 +188,7 @@ struct ScoringPromptSheet: View {
 
     private var detentHeight: CGFloat {
         switch prompt {
+        case .sideSwitch(_, .switchBack, _, _, _, _, _): 340
         case .sideSwitch: 300
         case .gameOver: 420
         case .cancelMatch: 380
@@ -145,13 +198,22 @@ struct ScoringPromptSheet: View {
     // MARK: Prompts
 
     private func sideSwitch(
+        direction: ScoringPrompt.SideSwitchDirection, threshold: Int,
         teamAName: String, teamBName: String, teamAScore: Int, teamBScore: Int
     ) -> some View {
         VStack(spacing: 16) {
-            badge(systemName: "arrow.left.arrow.right", tint: Color.accentColor)
-            title("Switch Sides")
+            switch direction {
+            case .switchSides:
+                badge(systemName: "arrow.left.arrow.right", tint: Color.accentColor)
+                title("Switch Sides")
+            case .switchBack:
+                badge(systemName: "arrow.uturn.backward", tint: .orange)
+                title("Switch Back")
+            }
             VStack(spacing: 6) {
-                Text("Teams swap ends of the court.")
+                Text(direction == .switchSides
+                    ? "Teams swap ends of the court."
+                    : Self.switchBackBody(threshold: threshold))
                     .font(.body)
                 Text(Self.sideSwitchScoreLine(
                     teamAName: teamAName, teamBName: teamBName,
@@ -353,7 +415,10 @@ struct ScoringPromptSheet: View {
 #Preview("Side Switch") {
     Color.clear.sheet(isPresented: .constant(true)) {
         ScoringPromptSheet(
-            prompt: .sideSwitch(teamAName: "Delon", teamBName: "Fred", teamAScore: 6, teamBScore: 3),
+            prompt: .sideSwitch(
+                gameIndex: 0, direction: .switchSides, threshold: 6,
+                teamAName: "Delon", teamBName: "Fred", teamAScore: 6, teamBScore: 3
+            ),
             onCancelMatch: {}
         )
     }

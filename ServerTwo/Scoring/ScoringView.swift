@@ -6,8 +6,14 @@ struct ScoringView: View {
     @Environment(AppSettings.self) private var appSettings
 
     @State private var isShowingScoreCorrection = false
-    @State private var sideSwitchAcknowledgedForGameIndex = -1
-    @State private var sideSwitchAcknowledgedViaCorrectionForGameIndex = -1
+    // Per game index, the last `hasSideSwitched` value the user was prompted
+    // about (missing = false, a fresh game's value). A plain "already prompted
+    // for this game" flag isn't enough: undo and score correction restore the
+    // whole earlier game state including `hasSideSwitched`, so dropping back
+    // under the threshold and crossing it again flips the court's sides again
+    // and must prompt again. Per-index (not one value) so undoing from game 2
+    // back into game 1, whose flag is still true, doesn't prompt spuriously.
+    @State private var sideSwitchPromptedState: [Int: Bool] = [:]
     @State private var gameOverAcknowledgedForGameIndex = -1
     @State private var showingFinishConfirmation = false
     @State private var finishErrorMessage: String?
@@ -61,34 +67,14 @@ struct ScoringView: View {
             }
         }
         .sheet(isPresented: $isShowingScoreCorrection, onDismiss: {
-            // The side-switch check has a same-transaction presentation race:
-            // `PickleballGame.correctScores` also calls `checkSideSwitch()`, so a
-            // correction that crosses the threshold flips `hasSideSwitched`
-            // inside the sheet's `onCommit`, immediately before its own
-            // `dismiss()`. The `.onChange(of: ...hasSideSwitched)` handler below
-            // is kept as-is for the `recordPoint` path (which has no such race);
-            // this is an ADDITIONAL, race-free trigger for the correction-sheet
-            // path only. It uses its OWN tracking variable, not the onChange
-            // handler's — `onChange` fires as part of the same transaction that
-            // triggers this race (before `onDismiss` runs), so if it shared the
-            // guard, it would already have consumed it by the time this check
-            // runs, defeating the fallback in exactly the scenario it exists
-            // for. A separate variable means this check still fires even when
-            // the onChange handler's own prompt silently failed to present.
-            if let match = activeMatchController.match {
-                let gameIndex = match.completedGames.count
-                if match.currentGame.state.hasSideSwitched, !match.isMatchOver, sideSwitchAcknowledgedViaCorrectionForGameIndex != gameIndex {
-                    sideSwitchAcknowledgedViaCorrectionForGameIndex = gameIndex
-                    sideSwitchAcknowledgedForGameIndex = gameIndex
-                    // Queued prompts don't race the dismissal, so the onChange
-                    // handler's own enqueue (made while this sheet was still
-                    // up) is waiting in the queue; adding a second one here
-                    // would show the same side switch twice.
-                    if !pendingPrompts.contains(where: { $0.id == "sideSwitch" }), prompt?.id != "sideSwitch" {
-                        enqueue(sideSwitchPrompt(for: match))
-                    }
-                }
-            }
+            // `PickleballGame.correctScores` also calls `checkSideSwitch()`, so
+            // a correction can flip `hasSideSwitched` inside the sheet's
+            // `onCommit`, in the same transaction as its own `dismiss()`. The
+            // `.onChange(of: ...hasSideSwitched)` handler below normally
+            // catches that and queues the prompt, but this idempotent re-check
+            // guarantees it once the sheet is really gone; if the handler
+            // already queued it, the tracker sees nothing left to announce.
+            syncSideSwitchPrompt()
             presentNextPromptIfPossible()
         }) {
             if let match = activeMatchController.match {
@@ -114,8 +100,7 @@ struct ScoringView: View {
             // prompts belong to the old match too (e.g. a cancelled one).
             prompt = nil
             pendingPrompts = []
-            sideSwitchAcknowledgedForGameIndex = -1
-            sideSwitchAcknowledgedViaCorrectionForGameIndex = -1
+            sideSwitchPromptedState = [:]
             gameOverAcknowledgedForGameIndex = -1
         }
         .onChange(of: activeMatchController.match?.completedGames.count) { _, newCount in
@@ -144,13 +129,8 @@ struct ScoringView: View {
                 ))
             }
         }
-        .onChange(of: activeMatchController.match?.currentGame.state.hasSideSwitched) { _, hasSideSwitched in
-            guard let match = activeMatchController.match else { return }
-            let gameIndex = match.completedGames.count
-            if hasSideSwitched == true, !match.isMatchOver, sideSwitchAcknowledgedForGameIndex != gameIndex {
-                sideSwitchAcknowledgedForGameIndex = gameIndex
-                enqueue(sideSwitchPrompt(for: match))
-            }
+        .onChange(of: activeMatchController.match?.currentGame.state.hasSideSwitched) { _, _ in
+            syncSideSwitchPrompt()
         }
         .sheet(item: $prompt, onDismiss: { presentNextPromptIfPossible() }) { item in
             ScoringPromptSheet(prompt: item, onCancelMatch: {
@@ -191,13 +171,26 @@ struct ScoringView: View {
         }
     }
 
-    private func sideSwitchPrompt(for match: PickleballMatch) -> ScoringPrompt {
-        .sideSwitch(
+    /// Idempotent: prompts only when the live `hasSideSwitched` differs from
+    /// what the user was last told for this game, so it can be called from
+    /// every place the flag might have changed without double-prompting.
+    private func syncSideSwitchPrompt() {
+        guard let match = activeMatchController.match, !match.isMatchOver else { return }
+        let gameIndex = match.completedGames.count
+        let current = match.currentGame.state.hasSideSwitched
+        guard let direction = ScoringPrompt.sideSwitchDirection(
+            hasSwitched: current, promptedState: sideSwitchPromptedState[gameIndex] ?? false
+        ) else { return }
+        sideSwitchPromptedState[gameIndex] = current
+        enqueue(.sideSwitch(
+            gameIndex: gameIndex,
+            direction: direction,
+            threshold: match.configuration.winningScore.sideSwitchThreshold,
             teamAName: activeMatchController.teamAName,
             teamBName: activeMatchController.teamBName,
             teamAScore: match.currentGame.state.teamAScore,
             teamBScore: match.currentGame.state.teamBScore
-        )
+        ))
     }
 
     private func enqueue(_ newPrompt: ScoringPrompt) {
@@ -210,8 +203,23 @@ struct ScoringView: View {
     /// dismissed, so a prompt that had to wait appears right after the sheet
     /// that blocked it.
     private func presentNextPromptIfPossible() {
-        guard prompt == nil, !isShowingScoreCorrection, !showingFinishConfirmation,
-              !pendingPrompts.isEmpty else { return }
+        guard prompt == nil, !isShowingScoreCorrection, !showingFinishConfirmation else { return }
+        if let match = activeMatchController.match {
+            // Drop side-switch prompts that went stale while waiting (e.g. the
+            // same save crossed the threshold and ended the game). The tracker
+            // is re-synced to the live flag so the dropped one can't leave it
+            // claiming the user was told something they never saw.
+            let gameIndex = match.completedGames.count
+            let live = match.currentGame.state.hasSideSwitched
+            pendingPrompts.removeAll { queued in
+                guard queued.isStale(currentGameIndex: gameIndex, hasSideSwitched: live) else { return false }
+                if case let .sideSwitch(queuedIndex, _, _, _, _, _, _) = queued, queuedIndex == gameIndex {
+                    sideSwitchPromptedState[queuedIndex] = live
+                }
+                return true
+            }
+        }
+        guard !pendingPrompts.isEmpty else { return }
         prompt = pendingPrompts.removeFirst()
     }
 

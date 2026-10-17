@@ -67,7 +67,10 @@ final class ScoringPromptSheetTests: XCTestCase {
     }
 
     func testPromptIdsAreStablePerCase() {
-        XCTAssertEqual(ScoringPrompt.sideSwitch(teamAName: "A", teamBName: "B", teamAScore: 1, teamBScore: 0).id, "sideSwitch")
+        XCTAssertEqual(ScoringPrompt.sideSwitch(
+                gameIndex: 0, direction: .switchSides, threshold: 6,
+                teamAName: "A", teamBName: "B", teamAScore: 1, teamBScore: 0
+            ).id, "sideSwitch")
         XCTAssertEqual(
             ScoringPrompt.gameOver(
                 gameNumber: 1, teamAName: "A", teamBName: "B", teamAScore: 11, teamBScore: 0,
@@ -82,5 +85,53 @@ final class ScoringPromptSheetTests: XCTestCase {
             ).id,
             "cancelMatch"
         )
+    }
+
+    func testSwitchBackBodyNamesTheThreshold() {
+        XCTAssertEqual(
+            ScoringPromptSheet.switchBackBody(threshold: 6),
+            "The score is back under 6, so teams return to their starting ends."
+        )
+        XCTAssertEqual(
+            ScoringPromptSheet.switchBackBody(threshold: 8),
+            "The score is back under 8, so teams return to their starting ends."
+        )
+    }
+
+    func testSideSwitchDirectionFromFlagAndPromptedState() {
+        XCTAssertEqual(ScoringPrompt.sideSwitchDirection(hasSwitched: true, promptedState: false), .switchSides)
+        XCTAssertEqual(ScoringPrompt.sideSwitchDirection(hasSwitched: false, promptedState: true), .switchBack)
+        XCTAssertNil(ScoringPrompt.sideSwitchDirection(hasSwitched: true, promptedState: true))
+        XCTAssertNil(ScoringPrompt.sideSwitchDirection(hasSwitched: false, promptedState: false))
+    }
+
+    func testSideSwitchPromptIsStaleWhenGameOrFlagMovedOn() {
+        // Still describes the live court.
+        XCTAssertFalse(ScoringPrompt.isSideSwitchStale(
+            gameIndex: 1, direction: .switchSides, currentGameIndex: 1, hasSideSwitched: true))
+        XCTAssertFalse(ScoringPrompt.isSideSwitchStale(
+            gameIndex: 1, direction: .switchBack, currentGameIndex: 1, hasSideSwitched: false))
+        // The save that crossed the threshold also ended the game.
+        XCTAssertTrue(ScoringPrompt.isSideSwitchStale(
+            gameIndex: 0, direction: .switchSides, currentGameIndex: 1, hasSideSwitched: false))
+        // Flag flipped again before the prompt could show.
+        XCTAssertTrue(ScoringPrompt.isSideSwitchStale(
+            gameIndex: 1, direction: .switchSides, currentGameIndex: 1, hasSideSwitched: false))
+        XCTAssertTrue(ScoringPrompt.isSideSwitchStale(
+            gameIndex: 1, direction: .switchBack, currentGameIndex: 1, hasSideSwitched: true))
+    }
+
+    func testOnlySideSwitchPromptsCanBeStale() {
+        let gameOver = ScoringPrompt.gameOver(
+            gameNumber: 1, teamAName: "A", teamBName: "B", teamAScore: 11, teamBScore: 0,
+            winner: .teamA, teamAGames: 1, teamBGames: 0
+        )
+        XCTAssertFalse(gameOver.isStale(currentGameIndex: 5, hasSideSwitched: false))
+        let sideSwitch = ScoringPrompt.sideSwitch(
+            gameIndex: 0, direction: .switchSides, threshold: 6,
+            teamAName: "A", teamBName: "B", teamAScore: 6, teamBScore: 0
+        )
+        XCTAssertFalse(sideSwitch.isStale(currentGameIndex: 0, hasSideSwitched: true))
+        XCTAssertTrue(sideSwitch.isStale(currentGameIndex: 1, hasSideSwitched: true))
     }
 }

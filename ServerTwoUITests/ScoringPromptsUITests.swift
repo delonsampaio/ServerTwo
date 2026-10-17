@@ -72,4 +72,56 @@ final class ScoringPromptsUITests: XCTestCase {
         waitForExpectations(timeout: 5)
         scrollUntilVisible(app.buttons["Start Match"], in: app)
     }
+
+    /// Undo restores the earlier game state including the side-switch flag, so
+    /// crossing the threshold again must prompt again (and undoing below it
+    /// must say the teams switch back) — not silently flip the court.
+    func testSideSwitchPromptsAgainAfterUndoAndRecrossing() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITest-ResetState"]
+        app.launch()
+        dismissOnboardingIfPresented(app)
+
+        app.tabBars.buttons["Play"].tap()
+        let startMatchButton = app.buttons["Start Match"]
+        scrollUntilVisible(startMatchButton, in: app)
+        startMatchButton.tap()
+        let flipCoinButton = app.buttons["Flip Coin"]
+        XCTAssertTrue(flipCoinButton.waitForExistence(timeout: 3))
+        flipCoinButton.tap()
+        let beginMatchButton = app.buttons["Begin Match"]
+        XCTAssertTrue(beginMatchButton.waitForExistence(timeout: 3))
+        beginMatchButton.tap()
+
+        let teamAZone = app.buttons["scoreZone.teamA"]
+        XCTAssertTrue(teamAZone.waitForExistence(timeout: 3))
+        let save = app.buttons["ScoreCorrection.Save"]
+        let teamAIncrement = app.buttons["ScoreCorrection.TeamAIncrement"]
+        let dismissButton = app.buttons["Prompt.Dismiss"]
+
+        func dismissPrompt(titled title: String, file: StaticString = #filePath, line: UInt = #line) {
+            XCTAssertTrue(dismissButton.waitForExistence(timeout: 5), "no \(title) prompt", file: file, line: line)
+            XCTAssertTrue(app.staticTexts[title].exists, "expected \(title)", file: file, line: line)
+            dismissButton.tap()
+            expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: dismissButton)
+            waitForExpectations(timeout: 3)
+        }
+
+        func correctToSixNil() {
+            teamAZone.press(forDuration: 1.0)
+            XCTAssertTrue(save.waitForExistence(timeout: 3))
+            for _ in 0..<6 { teamAIncrement.tap() }
+            save.tap()
+        }
+
+        correctToSixNil()
+        dismissPrompt(titled: "Switch Sides")
+
+        app.buttons["Undo"].tap()
+        dismissPrompt(titled: "Switch Back")
+
+        correctToSixNil()
+        dismissPrompt(titled: "Switch Sides")
+        XCTAssertFalse(dismissButton.exists, "exactly one prompt per crossing")
+    }
 }
