@@ -584,13 +584,13 @@ EOF
 
 **Interfaces:**
 - Consumes: nothing from Task 2 (independent).
-- Produces (used by Task 4):
+- Produces (used by Task 4; every callback/closure type is explicitly `@MainActor` so isolation does not depend on how the compiler infers it under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`):
   - `protocol SpeechOutput { func speak(_ text: String); func stop() }`; `struct NullSpeechOutput: SpeechOutput`.
   - `protocol SpeechSynthesizing: AnyObject { var onUtteranceEnded: ((UUID) -> Void)? { get set }; func speak(_ text: String, id: UUID, preDelay: TimeInterval); func stop() }`.
   - `protocol AudioSessionControlling { func activate(); func deactivate() }`.
-  - `typealias DelayedActionScheduler = (Duration, @escaping () -> Void) -> () -> Void` (returns a cancel closure).
+  - `typealias DelayedActionScheduler = @MainActor (Duration, @escaping @MainActor () -> Void) -> () -> Void` (returns a cancel closure).
   - `final class SystemSpeechOutput: SpeechOutput` with `init(synthesizer:session:quietWindow:scheduler:)`, `static func live() -> SystemSpeechOutput`, `static let taskScheduler: DelayedActionScheduler`.
-  - `@Observable final class VoiceAnnouncer` with `init(output: SpeechOutput, isEnabled: @escaping () -> Bool, isVoiceOverRunning: @escaping () -> Bool = { UIAccessibility.isVoiceOverRunning })`, `func announce(_ lines: [String])`, `func stop()`.
+  - `@Observable final class VoiceAnnouncer` with `init(output: SpeechOutput, isEnabled: @escaping @MainActor () -> Bool, isVoiceOverRunning: @escaping @MainActor () -> Bool = { UIAccessibility.isVoiceOverRunning })`, `func announce(_ lines: [String])`, `func stop()`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -603,7 +603,7 @@ import XCTest
 @MainActor
 final class SystemSpeechOutputTests: XCTestCase {
     private final class FakeSynthesizer: SpeechSynthesizing {
-        var onUtteranceEnded: ((UUID) -> Void)?
+        var onUtteranceEnded: (@MainActor (UUID) -> Void)?
         struct Spoken { let text: String; let id: UUID; let preDelay: TimeInterval }
         var spoken: [Spoken] = []
         var stopCount = 0
@@ -622,11 +622,11 @@ final class SystemSpeechOutputTests: XCTestCase {
 
     /// Captures scheduled actions; `fire()` runs every one that was not cancelled.
     private final class FakeScheduler {
-        private struct Entry { var action: () -> Void; var done: Bool }
+        private struct Entry { var action: @MainActor () -> Void; var done: Bool }
         private var entries: [Entry] = []
         /// Actions scheduled and neither cancelled nor run yet.
         var scheduledCount: Int { entries.filter { !$0.done }.count }
-        func schedule(_ delay: Duration, _ action: @escaping () -> Void) -> () -> Void {
+        func schedule(_ delay: Duration, _ action: @escaping @MainActor () -> Void) -> () -> Void {
             entries.append(Entry(action: action, done: false))
             let index = entries.count - 1
             return { [unowned self] in self.entries[index].done = true }
@@ -707,6 +707,16 @@ final class SystemSpeechOutputTests: XCTestCase {
         scheduler.fire()
         XCTAssertEqual(session.deactivateCount, 0)
         XCTAssertEqual(session.activateCount, 1)
+    }
+
+    func testStopWhenNothingIsActiveDoesNothing() {
+        let (output, synth, session, scheduler) = makeOutput()
+        output.stop()
+        XCTAssertEqual(synth.stopCount, 0)
+        XCTAssertEqual(scheduler.scheduledCount, 0)
+        scheduler.fire()
+        XCTAssertEqual(session.deactivateCount, 0)
+        XCTAssertEqual(session.activateCount, 0)
     }
 
     func testStopCutsSpeechAndSchedulesDeactivation() {
@@ -811,7 +821,7 @@ struct NullSpeechOutput: SpeechOutput {
 /// Wraps `AVSpeechSynthesizer` so `SystemSpeechOutput`'s logic can be tested
 /// with a fake. Reports the end of an utterance (finished OR cancelled) by id.
 protocol SpeechSynthesizing: AnyObject {
-    var onUtteranceEnded: ((UUID) -> Void)? { get set }
+    var onUtteranceEnded: (@MainActor (UUID) -> Void)? { get set }
     func speak(_ text: String, id: UUID, preDelay: TimeInterval)
     func stop()
 }
@@ -824,7 +834,7 @@ protocol AudioSessionControlling {
 }
 
 /// Schedules `action` after a delay and returns a closure that cancels it.
-typealias DelayedActionScheduler = (Duration, @escaping () -> Void) -> () -> Void
+typealias DelayedActionScheduler = @MainActor (Duration, @escaping @MainActor () -> Void) -> () -> Void
 ```
 
 - [ ] **Step 4: Implement `SystemSpeechOutput`**
@@ -905,6 +915,9 @@ final class SystemSpeechOutput: SpeechOutput {
     }
 
     func stop() {
+        // Nothing spoken since the session was last released: leave the audio
+        // session alone (scene-phase changes call this on every backgrounding).
+        guard sessionActive else { return }
         synthesizer.stop()
         currentID = nil
         scheduleDeactivation()
@@ -942,7 +955,7 @@ import AVFoundation
 /// methods are `nonisolated` and hop back carrying only the utterance's
 /// `ObjectIdentifier`.
 final class AVSpeechSynthesizerAdapter: NSObject, SpeechSynthesizing, AVSpeechSynthesizerDelegate {
-    var onUtteranceEnded: ((UUID) -> Void)?
+    var onUtteranceEnded: (@MainActor (UUID) -> Void)?
 
     private let synthesizer = AVSpeechSynthesizer()
     private var ids: [ObjectIdentifier: UUID] = [:]
@@ -1020,13 +1033,13 @@ import UIKit
 @Observable
 final class VoiceAnnouncer {
     @ObservationIgnored private let output: SpeechOutput
-    @ObservationIgnored private let isEnabled: () -> Bool
-    @ObservationIgnored private let isVoiceOverRunning: () -> Bool
+    @ObservationIgnored private let isEnabled: @MainActor () -> Bool
+    @ObservationIgnored private let isVoiceOverRunning: @MainActor () -> Bool
 
     init(
         output: SpeechOutput,
-        isEnabled: @escaping () -> Bool,
-        isVoiceOverRunning: @escaping () -> Bool = { UIAccessibility.isVoiceOverRunning }
+        isEnabled: @escaping @MainActor () -> Bool,
+        isVoiceOverRunning: @escaping @MainActor () -> Bool = { UIAccessibility.isVoiceOverRunning }
     ) {
         self.output = output
         self.isEnabled = isEnabled
@@ -1051,7 +1064,7 @@ final class VoiceAnnouncer {
 - [ ] **Step 7: Run the tests**
 
 Run the Step 2 command again, then check with xcresulttool (see Task 2 Step 5).
-Expected: `Passed`, 12 tests (6 + 6), 0 failed. The app target must also build: no other file references these types yet.
+Expected: `Passed`, 13 tests (7 + 6), 0 failed. The app target must also build: no other file references these types yet.
 
 - [ ] **Step 8: Commit**
 
@@ -1165,7 +1178,7 @@ In `ServerTwo/Scoring/ScoringView.swift`:
 - [ ] **Step 4: Build and run the full app suite**
 
 Run: `rm -rf /tmp/voice-full.xcresult; xcodebuild test -scheme ServerTwo -destination 'platform=iOS Simulator,id=3C7D4B7A-F035-4AD7-89FF-B08256AF2516' -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 -resultBundlePath /tmp/voice-full.xcresult > /tmp/voice-full.log 2>&1; xcrun xcresulttool get test-results summary --path /tmp/voice-full.xcresult | python3 -c "import sys,json; d=json.load(sys.stdin); print({k:d.get(k) for k in ('result','passedTests','failedTests','skippedTests','totalTestCount')})"`
-Expected: `Passed`, 0 failed. The previous full run had 94 tests; this plan adds 35 (23 planner + 6 coordinator + 6 announcer), plus the ones from the polish commit (`TapOrHoldModifierTests`), so report the exact total. All existing UI tests (golden path, score correction, scoring prompts, Quick Log, gestures) must pass unchanged. Also run PickleballKit once more: from `PickleballKit/`, `swift test 2>&1 | grep -E "Executed|error" | tail -2` → 162 tests, 0 failures.
+Expected: `Passed`, 0 failed. The previous full run had 94 tests; this plan adds 36 (23 planner + 7 coordinator + 6 announcer), plus the ones from the polish commit (`TapOrHoldModifierTests`), so report the exact total. All existing UI tests (golden path, score correction, scoring prompts, Quick Log, gestures) must pass unchanged. Also run PickleballKit once more: from `PickleballKit/`, `swift test 2>&1 | grep -E "Executed|error" | tail -2` → 162 tests, 0 failures.
 
 - [ ] **Step 5: Append "As built" to the spec**
 
@@ -1179,7 +1192,7 @@ Append to `docs/superpowers/specs/2026-10-16-voice-announcer-design.md`:
 - Open question 5 resolved: `PickleballGame.correctScores` now derives `hasSideSwitched` from the corrected scores (flag = max score ≥ threshold), so a downward correction clears a switch like undo does; undo restores the flag.
 - New code is under `ServerTwo/Voice/`: `AnnouncementSnapshot`, `AnnouncementPlanner`, `SpeechOutput` (+ `NullSpeechOutput`), `SystemSpeechOutput` (identity-checked callbacks, 1.2 s debounced deactivation, 0.15 s cold-start lead-in), `AVSpeechAdapters` (device-verified only), `VoiceAnnouncer`.
 - `MyApp` owns the announcer, stops speech when the toggle turns off or the scene leaves `.active`, and uses `NullSpeechOutput` for any `-UITest-` launch argument in Debug builds. `ScoringView` runs the planner from one `.onChange` on the snapshot.
-- Device checks still owed (not verifiable in the simulator): calls audible in a doubles game; "Switch sides." / "Switch back." / "Timeout, <team>." / game and match lines; music ducks and returns; a podcast pauses and resumes; AirPods/Bluetooth first number not clipped; silent switch on still speaks; toggle off silences; a resumed match is silent until the next change; VoiceOver on = silent.
+- Device checks still owed (not verifiable in the simulator): calls audible in a doubles game; "Switch sides." / "Switch back." / "Timeout, <team>." / game and match lines; music ducks and returns; a podcast pauses and resumes; AirPods/Bluetooth first number not clipped; silent switch on still speaks; toggle off silences; a resumed match is silent until the next change; VoiceOver on = silent; a downward Correct Score edit under the threshold is spoken ("... Switch back.") and shows the Switch Back sheet after the Correct Score sheet closes.
 ```
 
 - [ ] **Step 6: Commit**
