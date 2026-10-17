@@ -423,16 +423,25 @@ struct ScoringView: View {
 /// `.onTapGesture` + `.onLongPressGesture` pair left a dead zone: a press
 /// longer than a quick tap but shorter than the long-press duration did
 /// nothing, silently dropping points on a slightly slow tap.
-private struct TapOrHoldModifier: ViewModifier {
+struct TapOrHoldModifier: ViewModifier {
     let holdDuration: Duration
     let onTap: () -> Void
     let onHold: () -> Void
 
-    private enum Phase { case idle, pressing, holdFired }
+    /// Travel beyond this many points means the touch is a drag, not a tap or
+    /// a hold. Internal (not private) so the boundary can be unit-tested.
+    static let tapMovementThreshold: CGFloat = 20
+
+    static func isMovementBeyondTapThreshold(translation: CGSize) -> Bool {
+        hypot(translation.width, translation.height) > tapMovementThreshold
+    }
+
+    private enum Phase { case idle, pressing, holdFired, moved }
     @State private var phase: Phase = .idle
-    // Resets to false automatically when the touch ends OR is cancelled
-    // (`DragGesture.Value` has no `startTime` to tell touches apart), so a
-    // touch that never delivers `onEnded` can't leave the zone stuck.
+    // Resets to false automatically when the touch ends OR is cancelled, so a
+    // touch that never delivers `onEnded` can't leave the zone stuck. A plain
+    // phase flag can't do that: it only changes in `onChanged`/`onEnded`,
+    // neither of which runs for a cancelled touch.
     @GestureState private var touchActive = false
     @State private var holdTask: Task<Void, Never>?
 
@@ -442,7 +451,16 @@ private struct TapOrHoldModifier: ViewModifier {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .updating($touchActive) { _, state, _ in state = true }
-                    .onChanged { _ in
+                    .onChanged { value in
+                        // Dragging past the tap threshold while still pressing
+                        // cancels the pending hold; releasing then does nothing.
+                        if phase == .pressing,
+                           Self.isMovementBeyondTapThreshold(translation: value.translation) {
+                            holdTask?.cancel()
+                            holdTask = nil
+                            phase = .moved
+                            return
+                        }
                         // Only the first change of a touch starts a press.
                         guard phase == .idle else { return }
                         holdTask?.cancel()
@@ -459,7 +477,7 @@ private struct TapOrHoldModifier: ViewModifier {
                         holdTask = nil
                         let wasPressing = phase == .pressing
                         phase = .idle
-                        let moved = hypot(value.translation.width, value.translation.height) > 20
+                        let moved = Self.isMovementBeyondTapThreshold(translation: value.translation)
                         guard wasPressing, !moved else { return }
                         onTap()
                     }
@@ -468,6 +486,12 @@ private struct TapOrHoldModifier: ViewModifier {
                 // Touch cancelled without `onEnded` (e.g. the sheet appeared):
                 // drop any pending hold and un-stick the zone.
                 guard !active, phase != .idle else { return }
+                holdTask?.cancel()
+                holdTask = nil
+                phase = .idle
+            }
+            .onDisappear {
+                // A stale timer must not fire `onHold` after the screen is gone.
                 holdTask?.cancel()
                 holdTask = nil
                 phase = .idle
