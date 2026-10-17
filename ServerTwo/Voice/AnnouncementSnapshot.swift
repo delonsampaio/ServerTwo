@@ -19,6 +19,10 @@ struct AnnouncementSnapshot: Equatable {
     var isMatchOver: Bool
     /// Final score and winner of the most recently completed game, if any.
     var lastCompleted: CompletedGame?
+    /// `currentGame.history.count`: rises with every forward move (point,
+    /// timeout, correction) and falls on undo, so the planner can tell
+    /// "Side out." (a forward move) from an undo that restored the serve.
+    var moveCount: Int
 
     struct CompletedGame: Equatable {
         var teamAScore: Int
@@ -48,7 +52,8 @@ extension AnnouncementSnapshot {
                     teamBScore: $0.state.teamBScore,
                     winner: $0.gameWinner
                 )
-            }
+            },
+            moveCount: match.currentGame.history.count
         )
     }
 }
