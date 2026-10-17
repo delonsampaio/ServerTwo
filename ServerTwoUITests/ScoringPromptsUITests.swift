@@ -54,7 +54,7 @@ final class ScoringPromptsUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Game 1 goes to Team A"].exists)
         XCTAssertTrue(app.staticTexts["Games 1 – 0"].exists)
         XCTAssertTrue(app.staticTexts["Next game starts at 0-0."].exists)
-        XCTAssertTrue(app.staticTexts["Teams change ends."].exists)
+        XCTAssertTrue(app.staticTexts["Teams switch sides."].exists)
         XCTAssertEqual(dismissButton.label, "Start Game 2")
         dismissButton.tap()
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: dismissButton)

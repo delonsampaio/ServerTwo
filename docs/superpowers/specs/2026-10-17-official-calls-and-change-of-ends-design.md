@@ -25,6 +25,8 @@ From the official **2026 USA Pickleball Official Rulebook** PDF (the user suppli
 - **"Game point" / "Match point"** are not rulebook calls (the only mention of "match point" is a remark that every point is equally important). They are a pro-tour broadcast convention, per Gemini, kept as an optional courtesy.
 - **Out of scope, now verified:** 21.F.2 says initial service also changes with each game. The app gives the next game's first serve to the previous game's winner. See Open question 2.
 
+> **Wording note (2026-10-17):** the rulebook calls this "change ends" (Rules 21.B, 21.F.2). The app says "switch sides" everywhere, mid-game and between games, because that is what players say; wherever this spec says `"Change ends."` or `"Teams change ends."` the shipped text is `"Switch sides."` / `"Teams switch sides."` (replaced below).
+
 ## Decisions
 
 1. **Add "Side out."** (Rule 17.D.5) before the new score call when possession changes. Side-out scoring only (rally scoring has no side-outs). Spoken only on a FORWARD move, never on undo or correction.
@@ -35,7 +37,7 @@ From the official **2026 USA Pickleball Official Rulebook** PDF (the user suppli
    - Best of 3/5 clincher: `"Game <N> to <winner>, <winner score> to <loser score>. Game and match, <winner>, <winner games> games to <loser games>."` The tally is spoken as "2 games to 1" (not "2 to 1") so it is not mistaken for a point score.
 5. **Change of ends follows the rule:**
    - Mid-game "Switch Sides" / "Switch back" prompt and the spoken "Switch sides." / "Switch back." apply ONLY when the current game is the last game of the match format (best of 1: the only game; best of 3: game 3; best of 5: game 5).
-   - After every completed game that does not end the match, the Game Over sheet says teams change ends, and the spoken game line says "Change ends." before "Next game, ...".
+   - After every completed game that does not end the match, the Game Over sheet says teams change ends, and the spoken game line says "Switch sides." before "Next game, ...".
 6. **No setting** to switch the old (every game) behaviour back (YAGNI). If casual players want it, it is a later toggle.
 7. Engine unchanged except one read-only use of existing public API (`PickleballGame.history.count`) for the move count.
 
@@ -48,7 +50,7 @@ From the official **2026 USA Pickleball Official Rulebook** PDF (the user suppli
 | Serving team changed, scores unchanged, same game, side-out scoring, FORWARD move | `"Side out."`, then the score call |
 | Same serving team, server number 1 → 2, scores unchanged, same game, doubles side-out, FORWARD move | `"Second server."`, then the score call |
 | Same-game score/serve change where the serving team can win on the next point | the score call, then `"Game point."`; or `"Match point."` when winning would also win the match |
-| Game completed, match continues | `"Game <N> to <winner>, <w> to <l>."`, `"Change ends."`, `"Next game, <call>."` |
+| Game completed, match continues | `"Game <N> to <winner>, <w> to <l>."`, `"Switch sides."`, `"Next game, <call>."` |
 | Match over, best of 1 | `"Game and match, <winner>, <w> to <l>."` |
 | Match over, best of 3/5 | `"Game <N> to <winner>, <w> to <l>."`, `"Game and match, <winner>, <wg> games to <lg>."` |
 | Flag false → true, current game is the last game of the format | the score call, then `"Switch sides."` |
@@ -82,7 +84,7 @@ Examples: side-out into game point: `["Side out.", "10, 8, 1.", "Game point."]`;
 ### Change of ends in the UI
 
 - `ScoringView`'s side-switch prompt logic (`syncSideSwitchPrompt` and the correction sheet's `onDismiss` re-check) only enqueues a side-switch prompt when the current game index equals `matchFormat.rawValue - 1` (the last game of the format). The per-game-index tracker, queue, stale-drop and resume seeding stay as built.
-- The Game Over sheet gains a SEPARATE line "Teams change ends." above the existing line, which stays exactly "Next game starts at 0-0." (an existing UI test, `ScoringPromptsUITests`, asserts that exact text, so it must remain its own element).
+- The Game Over sheet gains a SEPARATE line "Teams switch sides." above the existing line, which stays exactly "Next game starts at 0-0." (an existing UI test, `ScoringPromptsUITests`, asserts that exact text, so it must remain its own element).
 - The engine's `hasSideSwitched` flag is unchanged; it simply is not acted on in non-last games.
 
 ### Resume and undo
@@ -95,7 +97,7 @@ Examples: side-out into game point: `["Side out.", "10, 8, 1.", "Game point."]`;
 
 - `AnnouncementSnapshot` gains `moveCount: Int` (`match.currentGame.history.count`). `AnnouncementPlanner.plan` already receives `matchFormat` and `configuration`; it computes the last-game gate (`new.gameIndex == matchFormat.rawValue - 1`), game/match point, and the side-out line itself. No new parameters on `plan`.
 - A tiny pure helper on `MatchFormat` (app target) names the gate once, so the planner and `ScoringView` share it: `isLastGame(index:)`.
-- `ScoringPromptSheet`'s Game Over sheet adds the "Teams change ends." line; the new text is a testable static helper.
+- `ScoringPromptSheet`'s Game Over sheet adds the "Teams switch sides." line; the new text is a testable static helper.
 - No PickleballKit changes.
 
 ## Edge cases to handle
@@ -110,11 +112,11 @@ Examples: side-out into game point: `["Side out.", "10, 8, 1.", "Game point."]`;
 
 ## Testing
 
-- Planner unit tests (exact strings): "Side out." forward in singles and doubles side-out; not on undo; not in rally; "Second server." forward only; game point for the serving team only (side-out), either team (rally non-freeze); not at 8-10 with the 10-point team receiving; overtime cases (10-10 no, 11-10 serving yes, 12-11 yes); match point and its precedence when both teams can win in non-freeze rally; the three ending wordings (winner first for Team B); "Change ends." line; switch lines gated by last game for best of 1/3/5; composition cases: side-out into game point `["Side out.", "10, 8, 1.", "Game point."]`, second server on game point, undoing a timeout on a game-point board is `[]`, rally-freeze 13-10 with the 10-point team serving has NO game point, a correction landing on game point.
+- Planner unit tests (exact strings): "Side out." forward in singles and doubles side-out; not on undo; not in rally; "Second server." forward only; game point for the serving team only (side-out), either team (rally non-freeze); not at 8-10 with the 10-point team receiving; overtime cases (10-10 no, 11-10 serving yes, 12-11 yes); match point and its precedence when both teams can win in non-freeze rally; the three ending wordings (winner first for Team B); "Switch sides." line; switch lines gated by last game for best of 1/3/5; composition cases: side-out into game point `["Side out.", "10, 8, 1.", "Game point."]`, second server on game point, undoing a timeout on a game-point board is `[]`, rally-freeze 13-10 with the 10-point team serving has NO game point, a correction landing on game point.
 - A pure test of `MatchFormat.isLastGame(index:)`.
 - A test of the new Game Over caption helper.
 - `ScoringView` gating covered by one UI test: a best-of-3 game 1 corrected to 6-0 shows NO Side Switch sheet (assert absence), while the existing best-of-1 test still shows it. Keep the UI test count low: extend an existing test where possible.
-- Manual (user): best of 3, game 1 passing 6 → silent; game 3 passing 6 → "Switch sides."; game over between games says "Change ends."; "Side out." on a side-out and not after undo; "Game point." when serving at 10-8; "Match point." in a clincher.
+- Manual (user): best of 3, game 1 passing 6 → silent; game 3 passing 6 → "Switch sides."; game over between games says "Switch sides."; "Side out." on a side-out and not after undo; "Game point." when serving at 10-8; "Match point." in a clincher.
 
 ## Out of scope
 
@@ -124,15 +126,15 @@ Initial-service alternation between games (Open question 2), "Point" before each
 
 1. ~~Verify the change-of-ends rule against the official rulebook~~ **Done** against the 2026 PDF (Rules 21.B and 21.F above).
 2. **Initial service between games (Rule 21.F.2) is verified official, and the app deviates.** `PickleballMatch.recordPoint` creates the next game with `firstServingTeam: winner`. The rule says the initial service changes each game, so after the team that serves first in game 1, the OTHER team serves first in game 2, and the original team in game 3. Fixing it touches the engine and needs the match to remember who served first in game 1 (and persisted in-progress matches). Default: NOT part of this spec; recommend a separate small spec, because it changes persisted-match behaviour and many users play "winner serves".
-3. **"Change ends." on every game break** even for players who do not follow the rule. Default: yes (Rule 21.F.2).
+3. **"Switch sides." on every game break** even for players who do not follow the rule. Default: yes (Rule 21.F.2).
 4. **Optional courtesy calls.** "Game point." / "Match point." are not rulebook calls. Default: keep (the user asked for a more official, informative announcer); serving team only in side-out.
 
 ## As built
 
 - `AnnouncementSnapshot.moveCount` (`currentGame.history.count`) distinguishes forward moves from undo; `AnnouncementPlanner.plan` composes prefix, call, switch line and stakes in that order; `pointStakes` requires the team to be strictly ahead after the point (the score check is symmetric) and uses serving-team-only eligibility for side-out and rally freeze, either team for rally without freeze.
 - `MatchFormat.isLastGame(index:)` gates both the spoken "Switch sides."/"Switch back." and `ScoringView.syncSideSwitchPrompt`; in every other game no mid-game switch prompt or line is produced.
-- The Game Over sheet shows a separate "Teams change ends." line above the unchanged "Next game starts at 0-0."; the spoken game line says "Change ends." before "Next game, ...".
+- The Game Over sheet shows a separate "Teams switch sides." line above the unchanged "Next game starts at 0-0."; the spoken game line says "Switch sides." before "Next game, ...".
 - Match endings are "Game and match, <winner>, <w> to <l>." (best of 1) and "Game N to <winner>, <w> to <l>." + "Game and match, <winner>, <wg> games to <lg>." (best of 3/5).
 - Not changed: initial service between games (Open question 2), still "winner serves first".
-- Device checks owed: best of 3, game 1 passing 6 is silent and shows no sheet, game 3 passing 6 says "Switch sides." and shows the sheet; between games "Change ends." is spoken and shown; "Side out." on a side-out and "Second server." when the first server loses, neither after undo; "Game point." when serving at 10-8 (not when receiving at 8-10); "Match point." in a clincher; a game ending says "Game and match, ...".
+- Device checks owed: best of 3, game 1 passing 6 is silent and shows no sheet, game 3 passing 6 says "Switch sides." and shows the sheet; between games "Switch sides." is spoken and shown; "Side out." on a side-out and "Second server." when the first server loses, neither after undo; "Game point." when serving at 10-8 (not when receiving at 8-10); "Match point." in a clincher; a game ending says "Game and match, ...".
 - Undo from a later game back into an earlier game speaks the restored call, plus "Game point."/"Match point." when the restored board is one (no prefix, no switch line).

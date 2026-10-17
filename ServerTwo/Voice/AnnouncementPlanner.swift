@@ -45,7 +45,7 @@ enum AnnouncementPlanner {
             // Teams change ends after every completed game (Rule 21.F.2).
             return [
                 "Game \(new.gameIndex) to \(name(winner)), \(winnerScore) to \(loserScore).",
-                "Change ends.",
+                "Switch sides.",
                 "Next game, \(scoreCall(new, configuration: configuration)).",
             ]
         }
