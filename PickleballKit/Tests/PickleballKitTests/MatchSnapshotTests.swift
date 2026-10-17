@@ -14,10 +14,10 @@ final class MatchSnapshotTests: XCTestCase {
         let resumed = PickleballMatch(resuming: decoded, proUnlocked: true, demoPointCap: nil)
 
         // Game 2: teamB serves first at Server 2 (Rule 21.F.2: the other team
-        // serves first, not the winner). teamA's first recordPoint is a full
-        // side-out (no score, serve passes to teamA); teamA's second
-        // recordPoint is then a real score as the new server. (Roles mirrored
-        // from the old winner-serves test, so the intent is unchanged.)
+        // serves first, not the winner), so Team A is the receiver. teamA's
+        // first recordPoint is a full side-out (no score, serve passes to
+        // teamA); teamA's second recordPoint is then a real score as the new
+        // server.
         XCTAssertEqual(resumed.completedGames.count, 1)
         XCTAssertEqual(resumed.gamesWon(for: .teamA), 1)
         XCTAssertEqual(resumed.currentGame.state.teamAScore, 1)

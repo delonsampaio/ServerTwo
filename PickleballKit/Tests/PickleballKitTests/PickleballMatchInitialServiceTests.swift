@@ -59,9 +59,11 @@ final class PickleballMatchInitialServiceTests: XCTestCase {
             GameConfiguration(playMode: .doubles, scoringFormat: .rally(freeze: true)),
         ]
         for config in configs {
-            let match = makeMatch(first: .teamA, config: config)
-            playOutGame(match, winner: .teamA)
-            XCTAssertEqual(match.currentGame.initialServingTeam, .teamB, "\(config.scoringFormat) \(config.playMode)")
+            for winner in Team.allCases {
+                let match = makeMatch(first: .teamA, config: config)
+                playOutGame(match, winner: winner)
+                XCTAssertEqual(match.currentGame.initialServingTeam, .teamB, "\(config.scoringFormat) \(config.playMode), game 1 won by \(winner)")
+            }
         }
     }
 
@@ -131,21 +133,40 @@ final class PickleballMatchInitialServiceTests: XCTestCase {
         XCTAssertEqual(resumed.currentGame.initialServingTeam, .teamA)
     }
 
-    func testAMatchSavedUnderTheOldWinnerServesRuleFollowsTheStoredGameFromThenOn() {
+    func testAResumedMidGameMatchKeepsTheGamesFirstServer() {
+        let match = makeMatch(first: .teamA)
+        playOutGame(match, winner: .teamA)     // game 2 starts with B serving
+        match.recordPoint(for: .teamA)         // A is receiving: a side-out, serve passes to A
+        match.recordPoint(for: .teamA)         // A is now serving: a real score
+        let snapshot = match.snapshot(startedAt: Date(timeIntervalSince1970: 0))
+
+        let resumed = PickleballMatch(resuming: snapshot, proUnlocked: true, demoPointCap: nil)
+        XCTAssertEqual(resumed.currentGame.state.servingTeam, .teamA)
+        // They differ on purpose: the persisted history, not the live state, carries the first server.
+        XCTAssertEqual(resumed.currentGame.initialServingTeam, .teamB)
+
+        playOutGame(resumed, winner: .teamB)   // 1-1
+        XCTAssertEqual(resumed.currentGame.initialServingTeam, .teamA, "game 3 starts with game 1's first server")
+    }
+
+    func testAMatchSavedUnderTheOldRuleFollowsTheStoredFirstServerOfTheCurrentGame() {
         // Old build: game 1 started with A and A won; game 2 started with the
-        // winner (A) serving. Only games created after the upgrade follow the
-        // new rule, derived from game 2's stored first server.
+        // winner (A) serving. Games created after the upgrade derive their first
+        // server from the stored first server of the game being replaced, so
+        // game 3 starts with B. (Best of five so that A winning game 2 does not
+        // end the match; the old winner-serves rule would give A here.)
         let config = GameConfiguration()
         let game1 = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
         for _ in 1...11 { game1.recordPoint(for: .teamA) }
         let game2 = PickleballGame(configuration: config, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
         let match = PickleballMatch(
-            configuration: config, matchFormat: .bestOfThree,
+            configuration: config, matchFormat: .bestOfFive,
             completedGames: [game1], currentGame: game2,
             gamesWon: [.teamA: 1, .teamB: 0], currentGameIsCounted: false
         )
 
-        playOutGame(match, winner: .teamB)   // 1-1
-        XCTAssertEqual(match.currentGame.initialServingTeam, .teamB, "game 2 began with A serving, so game 3 begins with B")
+        playOutGame(match, winner: .teamA)   // A serves first and wins game 2: 2-0
+        XCTAssertFalse(match.isMatchOver)
+        XCTAssertEqual(match.currentGame.initialServingTeam, .teamB, "game 2 began with A serving, so game 3 begins with B (the old rule would give A)")
     }
 }

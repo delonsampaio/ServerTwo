@@ -18,5 +18,9 @@ func playOutGame(
         match.recordPoint(for: winner)
         taps += 1
     }
-    XCTAssertEqual(match.completedGames.count, target, "the game never finished for \(winner)", file: file, line: line)
+    XCTAssertEqual(
+        match.completedGames.count, target,
+        "the game never finished for \(winner): completed \(match.completedGames.count) of \(target), score \(match.currentGame.state.teamAScore)-\(match.currentGame.state.teamBScore), match already over: \(match.isMatchOver)",
+        file: file, line: line
+    )
 }
