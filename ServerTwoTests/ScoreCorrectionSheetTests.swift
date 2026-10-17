@@ -62,4 +62,45 @@ final class ScoreCorrectionSheetTests: XCTestCase {
         )
         XCTAssertFalse(withoutWinByTwo.contains("win by 2"))
     }
+
+    // MARK: footerStatus
+
+    private func footer(
+        _ configuration: GameConfiguration, _ a: Int, _ b: Int, changed: Bool
+    ) -> ScoreCorrectionSheet.FooterStatus {
+        ScoreCorrectionSheet.footerStatus(configuration: configuration, teamA: a, teamB: b, isChanged: changed)
+    }
+
+    func testFooterIsUnreachableForAnImpossiblePair() {
+        guard case .unreachable(let text) = footer(elevenWinByTwo, 12, 9, changed: true) else {
+            return XCTFail("expected .unreachable")
+        }
+        XCTAssertTrue(text.contains("12"))
+    }
+
+    func testFooterShowsTheRuleForAReachableInProgressPair() {
+        XCTAssertEqual(footer(elevenWinByTwo, 12, 11, changed: true), .rule("Game to 11 • Win by 2"))
+    }
+
+    func testFooterWarnsThatSavingEndsTheGameForAChangedFinal() {
+        XCTAssertEqual(footer(elevenWinByTwo, 11, 9, changed: true), .endsGame)
+    }
+
+    func testFooterShowsTheRuleForAnUnchangedFinal() {
+        XCTAssertEqual(footer(elevenWinByTwo, 11, 9, changed: false), .rule("Game to 11 • Win by 2"))
+    }
+
+    func testFooterRuleOmitsWinByTwoWhenOff() {
+        let config = GameConfiguration(winningScore: .eleven, winByTwo: false)
+        guard case .rule(let text) = footer(config, 10, 9, changed: true) else {
+            return XCTFail("expected .rule")
+        }
+        XCTAssertEqual(text, "Game to 11")
+        XCTAssertFalse(text.contains("Win by 2"))
+    }
+
+    func testFooterEndsGameForAFreezeOvertimeFinal() {
+        let config = GameConfiguration(scoringFormat: .rally(freeze: true), winningScore: .eleven, winByTwo: true)
+        XCTAssertEqual(footer(config, 20, 3, changed: true), .endsGame)
+    }
 }

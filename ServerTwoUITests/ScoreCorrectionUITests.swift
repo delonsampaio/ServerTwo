@@ -29,17 +29,16 @@ final class ScoreCorrectionUITests: XCTestCase {
         teamAZone.press(forDuration: 1.0)
         XCTAssertTrue(save.waitForExistence(timeout: 3))
 
-        let teamAStepper = app.steppers["ScoreCorrection.TeamAStepper"]
-        let teamBStepper = app.steppers["ScoreCorrection.TeamBStepper"]
-        // The stepper's inner buttons are exposed as "<id>-Increment" (the
-        // inherited identifier replaces the default "Increment" one).
-        let teamAIncrement = app.buttons["ScoreCorrection.TeamAStepper-Increment"]
-        let teamBIncrement = app.buttons["ScoreCorrection.TeamBStepper-Increment"]
+        // The numerals expose the integer score as their accessibility value.
+        let teamAScore = app.staticTexts["ScoreCorrection.TeamAScore"]
+        let teamBScore = app.staticTexts["ScoreCorrection.TeamBScore"]
+        let teamAIncrement = app.buttons["ScoreCorrection.TeamAIncrement"]
+        let teamBIncrement = app.buttons["ScoreCorrection.TeamBIncrement"]
 
         // Starts at the current scores (0-0): nothing changed, so Save is off
         // and there is no hint.
-        XCTAssertTrue(teamAStepper.label.hasSuffix(": 0"), "got \(teamAStepper.label)")
-        XCTAssertTrue(teamBStepper.label.hasSuffix(": 0"), "got \(teamBStepper.label)")
+        XCTAssertEqual(teamAScore.value as? String, "0")
+        XCTAssertEqual(teamBScore.value as? String, "0")
         XCTAssertFalse(save.isEnabled)
         XCTAssertFalse(app.staticTexts["ScoreCorrection.Hint"].exists)
 
@@ -88,8 +87,8 @@ final class ScoreCorrectionUITests: XCTestCase {
         // (a stale read is invisible at 0-0), and Save is off while unchanged.
         teamBZone.press(forDuration: 1.0)
         XCTAssertTrue(save.waitForExistence(timeout: 3))
-        XCTAssertTrue(teamAStepper.label.hasSuffix(": 12"), "got \(teamAStepper.label)")
-        XCTAssertTrue(teamBStepper.label.hasSuffix(": 11"), "got \(teamBStepper.label)")
+        XCTAssertEqual(teamAScore.value as? String, "12")
+        XCTAssertEqual(teamBScore.value as? String, "11")
         XCTAssertFalse(save.isEnabled)
         app.buttons["ScoreCorrection.Cancel"].tap()
     }

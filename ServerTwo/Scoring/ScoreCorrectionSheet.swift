@@ -53,8 +53,32 @@ struct ScoreCorrectionSheet: View {
         return "\(teamA)–\(teamB) can't happen in a game to \(configuration.winningScore.rawValue)\(rule). Adjust either score."
     }
 
-    private var isReachable: Bool {
-        configuration.isReachableGameScore(teamA: newTeamAScore, teamB: newTeamBScore)
+    /// What the footer shows. Always rendered (fixed height) so the sheet
+    /// never jumps when the status changes. Only `.unreachable` carries the
+    /// `ScoreCorrection.Hint` identifier.
+    enum FooterStatus: Equatable {
+        case unreachable(String)
+        case endsGame
+        case rule(String)
+    }
+
+    static func footerStatus(
+        configuration: GameConfiguration,
+        teamA: Int, teamB: Int,
+        isChanged: Bool
+    ) -> FooterStatus {
+        if !configuration.isReachableGameScore(teamA: teamA, teamB: teamB) {
+            return .unreachable(hintText(configuration: configuration, teamA: teamA, teamB: teamB))
+        }
+        if isChanged, configuration.isCompletedGameScore(teamA: teamA, teamB: teamB) {
+            return .endsGame
+        }
+        let winBy = configuration.winByTwo ? " • Win by 2" : ""
+        return .rule("Game to \(configuration.winningScore.rawValue)\(winBy)")
+    }
+
+    private var isChanged: Bool {
+        newTeamAScore != currentTeamAScore || newTeamBScore != currentTeamBScore
     }
 
     private var canSave: Bool {
@@ -67,22 +91,23 @@ struct ScoreCorrectionSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    Stepper("\(teamAName): \(newTeamAScore)", value: $newTeamAScore, in: 0...99)
-                        .accessibilityIdentifier("ScoreCorrection.TeamAStepper")
-                    Stepper("\(teamBName): \(newTeamBScore)", value: $newTeamBScore, in: 0...99)
-                        .accessibilityIdentifier("ScoreCorrection.TeamBStepper")
+            VStack(spacing: 16) {
+                // Team A left, Team B right — same fixed order as ScoringView.
+                HStack(spacing: 12) {
+                    scoreColumn(
+                        name: teamAName, original: currentTeamAScore, score: $newTeamAScore,
+                        idPrefix: "ScoreCorrection.TeamA"
+                    )
+                    scoreColumn(
+                        name: teamBName, original: currentTeamBScore, score: $newTeamBScore,
+                        idPrefix: "ScoreCorrection.TeamB"
+                    )
                 }
-                if !isReachable {
-                    Section {
-                        Text(Self.hintText(configuration: configuration, teamA: newTeamAScore, teamB: newTeamBScore))
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .accessibilityIdentifier("ScoreCorrection.Hint")
-                    }
-                }
+                footer
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
             .navigationTitle("Correct Score")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -100,7 +125,105 @@ struct ScoreCorrectionSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.height(360), .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    /// One team's card. Accessibility: the numeral exposes the team name as
+    /// its label and the integer score as its VALUE (tests read `.value`);
+    /// the +/- buttons stay individually focusable with descriptive labels.
+    private func scoreColumn(
+        name: String, original: Int, score: Binding<Int>, idPrefix: String
+    ) -> some View {
+        let value = score.wrappedValue
+        let isModified = value != original
+        return VStack(spacing: 6) {
+            Text(name)
+                .font(.headline.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+
+            Text("\(value)")
+                .font(.system(size: 64, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .foregroundStyle(isModified ? Color.accentColor : Color.primary)
+                .accessibilityLabel(name)
+                .accessibilityValue("\(value)")
+                .accessibilityIdentifier("\(idPrefix)Score")
+
+            Text(isModified ? "Was \(original)" : "Current")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(isModified ? Color.accentColor : Color.secondary)
+                .padding(.bottom, 8)
+
+            HStack(spacing: 8) {
+                Button {
+                    if score.wrappedValue > 0 { score.wrappedValue -= 1 }
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.title3.weight(.bold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .disabled(value <= 0)
+                .accessibilityLabel("Decrease \(name)'s score")
+                .accessibilityIdentifier("\(idPrefix)Decrement")
+
+                Button {
+                    if score.wrappedValue < 99 { score.wrappedValue += 1 }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title3.weight(.bold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .disabled(value >= 99)
+                .accessibilityLabel("Increase \(name)'s score")
+                .accessibilityIdentifier("\(idPrefix)Increment")
+            }
+            .buttonStyle(.glass)
+            .buttonRepeatBehavior(.enabled)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(.secondarySystemFill))
+        )
+        .overlay {
+            if isModified {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1.5)
+            }
+        }
+        .sensoryFeedback(.selection, trigger: value)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var footer: some View {
+        Group {
+            switch Self.footerStatus(
+                configuration: configuration,
+                teamA: newTeamAScore, teamB: newTeamBScore,
+                isChanged: isChanged
+            ) {
+            case .unreachable(let text):
+                Label(text, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("ScoreCorrection.Hint")
+            case .endsGame:
+                Label("Saving ends this game", systemImage: "flag.checkered")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color.accentColor)
+            case .rule(let text):
+                Text(text)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, minHeight: 36)
     }
 }
 
