@@ -165,7 +165,13 @@ public final class PickleballGame {
         history.append(state)
         state.teamAScore = max(0, teamA)
         state.teamBScore = max(0, teamB)
-        checkSideSwitch()
+        // Unlike `recordPoint` (scores only rise, so `checkSideSwitch` only ever
+        // sets the flag), a correction can lower a score back under the
+        // threshold, which undoes a switch that had already happened. Derive
+        // the flag from the corrected scores so correcting down behaves like
+        // undoing down.
+        state.hasSideSwitched = max(state.teamAScore, state.teamBScore)
+            >= configuration.winningScore.sideSwitchThreshold
         state.lastPointWonWhileServing = true
     }
 

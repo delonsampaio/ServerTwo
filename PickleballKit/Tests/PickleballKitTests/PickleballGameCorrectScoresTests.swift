@@ -81,4 +81,53 @@ final class PickleballGameCorrectScoresTests: XCTestCase {
         XCTAssertEqual(game.state.teamAScore, 5)
         XCTAssertEqual(game.state.teamBScore, 3)
     }
+
+    // MARK: - The side-switch flag follows the corrected score
+
+    func testCorrectScoresBelowTheThresholdClearsASwitchThatAlreadyHappened() {
+        let game = makeGame()  // threshold 6
+        game.correctScores(teamA: 6, teamB: 2)
+        XCTAssertTrue(game.state.hasSideSwitched)
+
+        game.correctScores(teamA: 5, teamB: 2)
+        XCTAssertFalse(game.state.hasSideSwitched)
+    }
+
+    func testCorrectScoresBackAcrossTheThresholdSwitchesAgain() {
+        let game = makeGame()
+        game.correctScores(teamA: 6, teamB: 2)
+        game.correctScores(teamA: 5, teamB: 2)
+        game.correctScores(teamA: 6, teamB: 2)
+        XCTAssertTrue(game.state.hasSideSwitched)
+    }
+
+    func testCorrectScoresKeepsTheFlagWhileEitherTeamIsAtOrAboveTheThreshold() {
+        let game = makeGame()
+        game.correctScores(teamA: 8, teamB: 2)
+        game.correctScores(teamA: 3, teamB: 6)   // Team B now carries it
+        XCTAssertTrue(game.state.hasSideSwitched)
+        game.correctScores(teamA: 8, teamB: 7)
+        XCTAssertTrue(game.state.hasSideSwitched)
+    }
+
+    func testCorrectScoresUsesTheTargetsOwnThreshold() {
+        // A game to 15 switches at 8.
+        let game = makeGame(GameConfiguration(winningScore: .fifteen, winByTwo: true))
+        game.correctScores(teamA: 7, teamB: 0)
+        XCTAssertFalse(game.state.hasSideSwitched)
+        game.correctScores(teamA: 8, teamB: 0)
+        XCTAssertTrue(game.state.hasSideSwitched)
+    }
+
+    func testUndoingADownwardCorrectionRestoresTheSwitch() {
+        let game = makeGame()
+        game.correctScores(teamA: 6, teamB: 2)
+        game.correctScores(teamA: 5, teamB: 2)
+        XCTAssertFalse(game.state.hasSideSwitched)
+
+        game.undo()
+        XCTAssertTrue(game.state.hasSideSwitched)
+        XCTAssertEqual(game.state.teamAScore, 6)
+        XCTAssertEqual(game.state.teamBScore, 2)
+    }
 }

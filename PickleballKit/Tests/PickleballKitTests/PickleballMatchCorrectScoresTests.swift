@@ -169,4 +169,18 @@ final class PickleballMatchCorrectScoresTests: XCTestCase {
         XCTAssertEqual(match.completedGames.count, 1)
         XCTAssertTrue(match.currentGameIsCounted)
     }
+
+    func testADownwardCorrectionClearsTheSwitchFlagAndOneUndoRestoresIt() {
+        let match = makeMatch(.bestOfThree)
+        match.correctScores(teamA: 6, teamB: 2)
+        XCTAssertTrue(match.currentGame.state.hasSideSwitched)
+
+        match.correctScores(teamA: 5, teamB: 2)
+        XCTAssertFalse(match.currentGame.state.hasSideSwitched)
+
+        match.undo()
+        XCTAssertTrue(match.currentGame.state.hasSideSwitched)
+        XCTAssertEqual(match.currentGame.state.teamAScore, 6)
+        XCTAssertEqual(match.currentGame.state.teamBScore, 2)
+    }
 }

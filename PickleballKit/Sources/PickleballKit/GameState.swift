@@ -5,11 +5,14 @@ public struct GameState: Codable, Sendable, Equatable {
     public var serverNumber: ServerNumber
     public var teamATimeoutsRemaining: Int
     public var teamBTimeoutsRemaining: Int
-    /// A one-shot flag: once set `true`, it stays `true` for the rest of the
-    /// game and never resets. UI code binding to it directly will keep
-    /// showing an alert/notification state rather than firing once; callers
-    /// needing a one-time notification must track their own "already
-    /// acknowledged" state alongside this flag.
+    /// Set the first time either team's score reaches the game's side-switch
+    /// threshold. Live scoring only ever raises it, so it stays `true` for the
+    /// rest of the game; the two ways it goes back to `false` are `undo()`
+    /// (which restores the whole earlier state) and a score correction that
+    /// lowers both scores back under the threshold. UI code binding to it
+    /// directly will keep showing an alert/notification state rather than
+    /// firing once; callers needing a one-time notification must track their
+    /// own "already acknowledged" state alongside this flag.
     public var hasSideSwitched: Bool
 
     /// Only meaningful for `.rally(freeze: true)` games, where it gates
