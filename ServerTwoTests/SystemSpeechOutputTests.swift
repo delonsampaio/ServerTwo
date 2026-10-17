@@ -159,6 +159,24 @@ final class SystemSpeechOutputTests: XCTestCase {
         XCTAssertEqual(synth.spoken[1].preDelay, 0.15, accuracy: 0.0001)
     }
 
+    func testStopDuringDeactivationCancelsTheWaitingReactivation() {
+        let (output, synth, session, scheduler) = makeOutput()
+        speakCold("4, 2, 1.", output, session)
+        synth.onUtteranceEnded?(synth.spoken[0].id)
+        scheduler.fire()   // deactivating
+
+        output.speak("5, 2, 1.")   // waits for the deactivation
+        output.stop()              // e.g. the scene left the foreground
+        session.completeDeactivation(true)
+        XCTAssertEqual(session.activateCount, 1, "nothing to say: must not re-activate and duck music")
+
+        // The session is plainly inactive again: the next speak starts cold.
+        speakCold("6, 2, 1.", output, session)
+        XCTAssertEqual(session.activateCount, 2)
+        XCTAssertEqual(synth.spoken.last?.text, "6, 2, 1.")
+        XCTAssertEqual(synth.spoken.last?.preDelay ?? 0, 0.15, accuracy: 0.0001)
+    }
+
     func testSpeakingWhileAnotherUtteranceIsInFlightStopsItFirst() {
         let (output, synth, session, _) = makeOutput()
         speakCold("4, 2, 1.", output, session)
@@ -249,7 +267,7 @@ final class SystemSpeechOutputTests: XCTestCase {
         XCTAssertEqual(synth.spoken[1].preDelay, 0, accuracy: 0.0001)
         synth.onUtteranceEnded?(synth.spoken[1].id)
 
-        scheduler.fire()   // retry (rescheduled by the new utterance's end)
+        scheduler.fire()   // fresh first attempt: the intervening speak reset the retry flag
         session.completeDeactivation(true)
         XCTAssertEqual(session.deactivateCount, 2)
         speakCold("6, 2, 1.", output, session)

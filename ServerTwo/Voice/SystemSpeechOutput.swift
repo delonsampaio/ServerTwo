@@ -87,12 +87,16 @@ final class SystemSpeechOutput: SpeechOutput {
     func stop() {
         pendingText = nil
         switch state {
-        case .inactive, .deactivating, .activating:
+        case .deactivating:
+            // A `speak` may have asked for reactivation; with nothing left to
+            // say it would only duck music for the quiet window.
+            reactivateAfterDeactivation = false
+        case .inactive, .activating:
             // Nothing is playing. Idle: leave the audio session alone
             // (scene-phase changes call this on every backgrounding). While
             // activating, the completion finds no text and schedules the
             // deactivation itself.
-            return
+            break
         case .active:
             synthesizer.stop()
             currentID = nil
