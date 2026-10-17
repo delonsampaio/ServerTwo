@@ -55,6 +55,12 @@ final class ScoringPromptsUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Games 1 – 0"].exists)
         XCTAssertTrue(app.staticTexts["Next game starts at 0-0."].exists)
         XCTAssertTrue(app.staticTexts["Teams switch sides."].exists)
+        // The first server of game 2 is the OTHER team than game 1's first
+        // server (Rule 21.F.2), whichever team the coin flip picked.
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'First serve:'")).firstMatch.exists,
+            "the Game Over sheet names who serves first"
+        )
         XCTAssertEqual(dismissButton.label, "Start Game 2")
         dismissButton.tap()
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: dismissButton)

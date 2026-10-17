@@ -3,6 +3,27 @@ import SwiftData
 @testable import ServerTwo
 import PickleballKit
 
+/// Plays out one whole game for `winner` through the controller without
+/// assuming who serves first (Rule 21.F.2: the first server alternates, so a
+/// later game can start with the OTHER team serving and a winner who is
+/// receiving must first win side-outs). Bounded so a bug fails instead of
+/// hanging.
+@MainActor
+func playOutGame(
+    _ controller: ActiveMatchController,
+    winner: Team,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    let target = (controller.match?.completedGames.count ?? 0) + 1
+    var taps = 0
+    while (controller.match?.completedGames.count ?? 0) < target, taps < 200 {
+        controller.recordPoint(for: winner)
+        taps += 1
+    }
+    XCTAssertEqual(controller.match?.completedGames.count, target, "the game never finished for \(winner)", file: file, line: line)
+}
+
 @MainActor
 final class ActiveMatchControllerTests: XCTestCase {
     private func makeController(
@@ -382,7 +403,8 @@ final class ActiveMatchControllerTests: XCTestCase {
         // small, flakiness risk without an injected clock — the array being
         // correctly *sized* is this test's actual claim, not that it holds
         // literally non-equal timestamps.)
-        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        // Game 2 starts with the OTHER team serving (Rule 21.F.2), so Team A must win side-outs first; playOutGame doesn't assume a server.
+        playOutGame(controller, winner: .teamA)
         XCTAssertEqual(controller.gameCompletionDates.count, 2)
     }
 
@@ -407,7 +429,8 @@ final class ActiveMatchControllerTests: XCTestCase {
         // this test is the one that actually proves syncGameCompletionDates
         // is correct on the higher-risk path: undoing the point that wins
         // the entire match.
-        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        // Game 2 starts with the OTHER team serving (Rule 21.F.2), so Team A must win side-outs first; playOutGame doesn't assume a server.
+        playOutGame(controller, winner: .teamA)
         XCTAssertEqual(controller.gameCompletionDates.count, 2)
 
         // Undo the match-deciding point. This must shrink
@@ -466,7 +489,8 @@ final class ActiveMatchControllerTests: XCTestCase {
 
         // Winning game 2 from here must APPEND a real date for game 2, not
         // overwrite game 1's nil or reset the array.
-        for _ in 1...11 { resumedController.recordPoint(for: .teamA) }
+        // Game 2 starts with the OTHER team serving (Rule 21.F.2), so Team A must win side-outs first; playOutGame doesn't assume a server.
+        playOutGame(resumedController, winner: .teamA)
         XCTAssertEqual(resumedController.gameCompletionDates.count, 2)
         XCTAssertNil(resumedController.gameCompletionDates[0])
         XCTAssertNotNil(resumedController.gameCompletionDates[1])
@@ -488,7 +512,8 @@ final class ActiveMatchControllerTests: XCTestCase {
         // match 2-0, so both games have a real completion timestamp tracked
         // by the controller.
         for _ in 1...11 { controller.recordPoint(for: .teamA) }
-        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        // Game 2 starts with the OTHER team serving (Rule 21.F.2), so Team A must win side-outs first; playOutGame doesn't assume a server.
+        playOutGame(controller, winner: .teamA)
 
         let record = try controller.finishMatch()
         XCTAssertTrue(
