@@ -50,9 +50,15 @@ enum AnnouncementPlanner {
             ]
         }
 
-        // An undo that reopened the previous game: just the restored call.
+        // An undo that reopened the previous game: the restored call, plus the
+        // stakes when the restored board is game/match point (same as an undo
+        // inside a game). No prefix and no switch line.
         if new.gameIndex < old.gameIndex {
-            return [scoreCall(new, configuration: configuration) + "."]
+            var restored = [scoreCall(new, configuration: configuration) + "."]
+            if let stakes = pointStakes(new, configuration: configuration, matchFormat: matchFormat) {
+                restored.append(stakes)
+            }
+            return restored
         }
 
         var lines: [String] = []

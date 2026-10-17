@@ -232,7 +232,7 @@ final class AnnouncementPlannerTests: XCTestCase {
         XCTAssertNil(stakes(snap(a: 10, b: 10)))                       // 11-10 is not a win by two
         XCTAssertEqual(stakes(snap(a: 11, b: 10)), "Game point.")      // 12-10
         XCTAssertEqual(stakes(snap(a: 12, b: 11)), "Game point.")      // 13-11
-        XCTAssertNil(stakes(snap(a: 8, b: 10)))                        // 9 is not ahead of 10
+        XCTAssertNil(stakes(snap(a: 8, b: 10)))                        // 9 is behind 10 (the strictly-ahead guard itself is exercised by the rally-freeze 13-10 test below)
         XCTAssertNil(stakes(snap(a: 10, b: 8, serving: .teamB)))       // serving team has 8
         XCTAssertEqual(stakes(snap(a: 8, b: 10, serving: .teamB)), "Game point.")
     }
@@ -332,13 +332,20 @@ final class AnnouncementPlannerTests: XCTestCase {
         XCTAssertEqual(plan(old, new, format: .bestOfOne), ["Game and match, Delon, 11 to 9."])
     }
 
-    func testUndoingBackIntoThePreviousGameSpeaksOnlyTheRestoredCall() {
+    func testUndoingBackIntoThePreviousGameSpeaksTheRestoredCallAndStakesButNoSwitchLine() {
         // The restored game's flag is true; the game index fell, so no
-        // "Switch sides." / "Switch back." is spoken.
+        // "Switch sides." / "Switch back." is spoken. Stakes still describe the board.
         let old = snap(index: 1, a: 0, b: 0, switched: false, gamesA: 1,
                        last: .init(teamAScore: 11, teamBScore: 3, winner: .teamA))
         let new = snap(index: 0, a: 10, b: 3, server: .one, switched: true)
-        XCTAssertEqual(plan(old, new), ["10, 3, 1."])
+        XCTAssertEqual(plan(old, new), ["10, 3, 1.", "Game point."])
+    }
+
+    func testUndoingBackIntoAGameWithNoStakesSpeaksOnlyTheCall() {
+        let old = snap(index: 1, a: 0, b: 0, gamesA: 1,
+                       last: .init(teamAScore: 11, teamBScore: 3, winner: .teamA))
+        let new = snap(index: 0, a: 6, b: 3, server: .one, switched: true)
+        XCTAssertEqual(plan(old, new), ["6, 3, 1."])   // 6 + 1 = 7 is not a completed score
     }
 
     // MARK: - Snapshot from a real match

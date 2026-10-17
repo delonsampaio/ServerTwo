@@ -88,7 +88,8 @@ Examples: side-out into game point: `["Side out.", "10, 8, 1.", "Game point."]`;
 ### Resume and undo
 
 - A resumed match behaves the same: nothing is spoken or prompted on appearance.
-- Undo from the last game back into an earlier game (the game index falls) speaks only the restored call, as today.
+- Undo from the last game back into an earlier game (the game index falls) speaks the restored call, never a switch line.
+- Undo from a later game back into an earlier game speaks the restored call, plus "Game point."/"Match point." when the restored board is one (no prefix, no switch line).
 
 ## Architecture
 
@@ -134,3 +135,4 @@ Initial-service alternation between games (Open question 2), "Point" before each
 - Match endings are "Game and match, <winner>, <w> to <l>." (best of 1) and "Game N to <winner>, <w> to <l>." + "Game and match, <winner>, <wg> games to <lg>." (best of 3/5).
 - Not changed: initial service between games (Open question 2), still "winner serves first".
 - Device checks owed: best of 3, game 1 passing 6 is silent and shows no sheet, game 3 passing 6 says "Switch sides." and shows the sheet; between games "Change ends." is spoken and shown; "Side out." on a side-out and "Second server." when the first server loses, neither after undo; "Game point." when serving at 10-8 (not when receiving at 8-10); "Match point." in a clincher; a game ending says "Game and match, ...".
+- Undo from a later game back into an earlier game speaks the restored call, plus "Game point."/"Match point." when the restored board is one (no prefix, no switch line).

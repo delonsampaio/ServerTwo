@@ -115,7 +115,7 @@ struct ScoringView: View {
             didSeedSideSwitchTracker = seedSideSwitchTracker()
             gameOverAcknowledgedForGameIndex = -1
         }
-        .onChange(of: activeMatchController.match.map(AnnouncementSnapshot.init(match:))) { old, new in
+        .onChange(of: activeMatchController.match.map { AnnouncementSnapshot(match: $0) }) { old, new in
             // `onChange` does not fire for the initial value, so a resumed match
             // stays silent until its next change. Derived from state (not from
             // which button was pressed) so taps, undo, a Correct Score save and

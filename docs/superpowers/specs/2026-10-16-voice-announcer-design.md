@@ -17,6 +17,8 @@ Today `AppSettings.voiceAnnouncerEnabled` is stored (default `true`) but nothing
 
 ## What is spoken
 
+> **Superseded in part by `2026-10-17-official-calls-and-change-of-ends-design.md`:** the mid-game "Switch sides." / "Switch back." lines now apply only in the last game of the match format; match endings are "Game and match, ..." (not "<winner> wins ..."); "Change ends." is spoken between games; "Side out.", "Second server." and "Game point."/"Match point." were added. Do not revert the code to the wording below.
+
 The call format, from the in-app How to Play text ("serving team's score, receiving team's score, then which server is up (1 or 2)"):
 
 - **Doubles, side-out scoring:** three numbers: `"<serving team score>, <receiving team score>, <server number>"`, e.g. `"4, 2, 1"`.

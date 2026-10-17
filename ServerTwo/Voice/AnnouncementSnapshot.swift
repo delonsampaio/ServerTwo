@@ -20,8 +20,10 @@ struct AnnouncementSnapshot: Equatable {
     /// Final score and winner of the most recently completed game, if any.
     var lastCompleted: CompletedGame?
     /// `currentGame.history.count`: rises with every forward move (point,
-    /// timeout, correction) and falls on undo, so the planner can tell
-    /// "Side out." (a forward move) from an undo that restored the serve.
+    /// timeout, correction) and falls on undo within a game, so the planner can
+    /// tell "Side out." (a forward move) from an undo that restored the serve.
+    /// Across a game boundary it resets or is restored; the planner never reads
+    /// it there because the game-index branches return first.
     var moveCount: Int
 
     struct CompletedGame: Equatable {
