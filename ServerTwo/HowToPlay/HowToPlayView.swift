@@ -77,7 +77,7 @@ struct HowToPlayView: View {
                 ) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Standard games are played to 11 points, win by 2 — only the serving side can score. Server Two also supports games to 15 or 21, and a rally-scoring format where either side can score, if you'd rather play that way.")
-                        Text("In doubles, the score is called as three numbers: serving team's score, receiving team's score, then which server is up (1 or 2). Each team gets two servers per turn before a side-out — except the very first serve of the match, which starts at server 2 (\"0-0-2\"), since there's no partner who already lost a turn yet. Server Two tracks all of this automatically.")
+                        Text("In doubles, the score is called as three numbers: serving team's score, receiving team's score, then which server is up (1 or 2). Each team gets two servers per turn before a side-out — except the very first serve of every game, which starts at server 2 (\"0-0-2\"), since there's no partner who already lost a turn yet. Server Two tracks all of this automatically.")
                             .foregroundStyle(.secondary)
                         Text("When your team scores, the server switches to the other side of the court to serve the next point — you only switch sides when you score, never after losing a rally.")
                             .foregroundStyle(.secondary)

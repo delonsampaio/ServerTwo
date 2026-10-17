@@ -3,18 +3,17 @@ import SwiftData
 import PickleballKit
 
 /// Shown once at first launch. Deliberately a single screen, not a paged
-/// flow — of the three original onboarding pages, only this rule carried
-/// real information (a welcome page and a generic "you're ready" closer
-/// were pure friction). The full rulebook lives in Settings' "How to Play
-/// Pickleball" instead, which is a comprehensive reference rather than a
-/// one-time interruption.
+/// flow, and it says what the app does rather than teaching pickleball:
+/// people downloading a scorekeeper already know the rules, and the full
+/// rulebook lives in Settings' "How to Play Pickleball" for anyone who
+/// wants it.
 ///
-/// The optional name field below is the one addition to that minimal
-/// philosophy: without it, the only way to get personal stats working is
-/// to type your name into a match, then separately discover Settings →
-/// Manage Players → "Set as Me." Leaving it blank costs nothing — "Done"
-/// behaves exactly as before — so it doesn't reintroduce the friction
-/// this screen was trimmed to avoid.
+/// The optional name field below is the one piece of setup: without it,
+/// the only way to get personal stats working is to type your name into a
+/// match, then separately discover Settings → Manage Players → "Set as
+/// Me." Leaving it blank costs nothing — "Done" behaves exactly as before
+/// — so it doesn't reintroduce the friction this screen was trimmed to
+/// avoid.
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
     /// Explicitly passed in by `MyApp`, not read via `@Environment(\.modelContext)`.
@@ -33,47 +32,101 @@ struct OnboardingView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
-                Image(systemName: "2.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.tint)
-                Text("The First Game Starts at Server 2")
-                    .font(.title.bold())
-                    .multilineTextAlignment(.center)
-                Text("In doubles, every game after the first starts with Server 1. But the very first game of a match is the one exception: it starts at Server 2, since there's no partner who already served and lost their turn.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
-                Text("Server Two handles this automatically — just set up a match and start playing.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
-                Spacer()
-                VStack(spacing: 8) {
-                    TextField("Your Name (Optional)", text: $yourName)
-                        .textFieldStyle(.roundedBorder)
+            ScrollView {
+                VStack(spacing: 24) {
+                    Image(systemName: "figure.pickleball")
+                        .font(.system(size: 64))
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                    Text("Welcome to Server Two")
+                        .font(.title.bold())
                         .multilineTextAlignment(.center)
-                        .accessibilityIdentifier("Your Name")
-                    Text("Set this once so your personal win/loss record starts tracking automatically.")
-                        .font(.caption)
+                    Text("Score singles and doubles matches point by point. Server Two keeps track of who's serving, which side everyone's on, and your stats over time.")
+                        .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        featureRow(
+                            icon: "arrow.left.arrow.right.circle.fill",
+                            title: "Automatic Court Positions",
+                            detail: "Always know which partner belongs on the left or right court."
+                        )
+                        featureRow(
+                            icon: "hand.tap.fill",
+                            title: "Tap to Score, Hold to Correct",
+                            detail: "Tap a card to score a point, or press and hold to fix a disputed score."
+                        )
+                        featureRow(
+                            icon: "person.2.fill",
+                            title: "Partner & Rival Chemistry",
+                            detail: "See your record with every partner and against every rival."
+                        )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(spacing: 8) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "person.crop.circle.fill")
+                                .foregroundStyle(Color.accentColor)
+                                .accessibilityHidden(true)
+                            TextField("Your Name (Optional)", text: $yourName)
+                                .accessibilityIdentifier("Your Name")
+                        }
+                        .padding(14)
+                        .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        Text("Set this once so your personal win/loss record starts tracking automatically.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    // Deliberately NOT identified "Done": the toolbar button owns
+                    // that identifier, which every UI test's
+                    // `dismissOnboardingIfPresented` taps.
+                    Button {
+                        finish()
+                    } label: {
+                        Text("Get Started")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("Get Started")
                 }
-                .padding(.horizontal)
-                Spacer()
+                .padding()
             }
-            .padding()
+            .scrollBounceBehavior(.basedOnSize)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        saveYourNameIfProvided()
-                        dismiss()
+                        finish()
                     }
                     .accessibilityIdentifier("Done")
                 }
             }
         }
+    }
+
+    private func featureRow(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(.tint)
+                .frame(width: 32)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func finish() {
+        saveYourNameIfProvided()
+        dismiss()
     }
 
     private func saveYourNameIfProvided() {
