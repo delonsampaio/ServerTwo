@@ -47,7 +47,7 @@ From the official **2026 USA Pickleball Official Rulebook** PDF (the user suppli
 
 | Change (old → new) | Spoken |
 |---|---|
-| Serving team changed, scores unchanged, same game, side-out scoring, FORWARD move | `"Side out."`, then the score call |
+| Serving team changed, scores unchanged, same game, side-out scoring, FORWARD move | `"Side out."`, then (added by the initial-service spec) `"<new serving team> serving."`, then the score call |
 | Same serving team, server number 1 → 2, scores unchanged, same game, doubles side-out, FORWARD move | `"Second server."`, then the score call |
 | Same-game score/serve change where the serving team can win on the next point | the score call, then `"Game point."`; or `"Match point."` when winning would also win the match |
 | Game completed, match continues | `"Game <N> to <winner>, <w> to <l>."`, `"Switch sides."`, `"Next game, <call>."` |

@@ -6,7 +6,9 @@
 
 ## Goal
 
-Follow the official rule for who serves first in each game. The 2026 USA Pickleball Official Rulebook, Rule 21.F.2: "Singles players or doubles teams must change ends and initial service for the next game of the match." The app today gives the next game's first serve to the previous game's **winner** (`PickleballMatch` creates the next game with `firstServingTeam: winner`). Under the rule, initial service **alternates every game**: the team that served first in game 1 receives first in game 2 and serves first again in game 3.
+Two related changes about WHO is serving: (1) follow the official rule for who serves first in each game; (2) make the announcer name the team that has the serve after a side-out (user request, 2026-10-17).
+
+Part 1 first: follow the official rule for who serves first in each game. The 2026 USA Pickleball Official Rulebook, Rule 21.F.2: "Singles players or doubles teams must change ends and initial service for the next game of the match." The app today gives the next game's first serve to the previous game's **winner** (`PickleballMatch` creates the next game with `firstServingTeam: winner`). Under the rule, initial service **alternates every game**: the team that served first in game 1 receives first in game 2 and serves first again in game 3.
 
 The user approved "follow the rule by default, no setting to keep the old behaviour" (2026-10-17).
 
@@ -34,6 +36,18 @@ The user approved "follow the rule by default, no setting to keep the old behavi
   - The Game Over prompt carries the new first server's name (a new associated value on the prompt), computed from the live match when the prompt is created.
 - **How to Play** text (HowToPlayView) gains one sentence: after every game the teams switch sides and the other team serves first (Rule 21.F.2).
 
+### Name the serving team on a side-out (decided with the user: keep "Side out." and add the team)
+
+"Side out." tells the court that possession changed but not who has it. After a side-out the announcer now says the new serving team's name as its own sentence, between the official call and the score call:
+
+- Doubles or singles side-out scoring, forward move, serving team changed (the existing "Side out." condition): `["Side out.", "<new serving team name> serving.", "<call>."]`, e.g. `"Side out. Fred serving. 2, 4, 1."`.
+- "Second server." is unchanged (the SAME team keeps the serve, so no team name).
+- Slot order of one same-game change becomes: (1) prefix: `"Side out."` + `"<name> serving."` (two sentences) or `"Second server."`, (2) score call, (3) switch line, (4) stakes. Example with stakes: `["Side out.", "Delon serving.", "10, 8, 1.", "Game point."]`.
+- Same forward-move-only rule as "Side out." (never after undo or correction), side-out scoring only; rally scoring never says "Side out." or a serving team name.
+- Names are spoken as entered (the combined doubles name, or the "Team A"/"Team B" fallback).
+- The new-game line already names the first server: `"Next game, Fred serving, 0, 0, 2."`; both uses of the phrase are "<name> serving".
+- Planner tests: side-out in doubles and singles with Team A and Team B as the new server (the name is the NEW server's), side-out into game point (four lines), undo of a side-out stays silent, second server has no team name, rally has none.
+
 ## Edge cases
 
 - Correction that ends game 1 (non-final) from a state: next game's first server = opponent of game 1's first server, not the winner.
@@ -49,6 +63,8 @@ The user approved "follow the rule by default, no setting to keep the old behavi
 PickleballKit unit tests (fast, exact): alternation across games for best of 3 and best of 5 with Team A and Team B winning in different orders; a game won by the first server's opponent and by the first server both give the same next first server; singles and rally; `initialServingTeam` for a fresh game, after moves, after all moves undone, after a correction, and after a snapshot round-trip; a correction that flips a decided game's winner does not change the next first server; undo then replay recreates the same first server; resume mid-match then finish the game keeps alternating. Update the existing tests that assert "winner serves next game" (`PickleballMatchTests` lines ~21 and ~107 and any similar assertion in `PickleballMatchCorrectScoresTests` / `ActiveMatchControllerTests`) to the alternation expectations with explicit reasons. App tests: planner test for the new spoken wording; Game Over sheet static-text test for the new line; the existing UI test that reaches the Game Over sheet asserts the new line (`"<name> serves first."` for the default names). Manual (user): best of 3, coin flip gives Team A first serve; after game 1 the Game Over sheet says Team B serves first even if Team A won; game 3 starts with Team A; the spoken line names the server.
 
 ## Out of scope
+
+Naming the serving team on a scoring point or on "Second server." (only on a side-out and at a new game);
 
 A setting for the old behaviour; choosing the starting server (which partner) per game (Rule 21.F.3); a new coin toss for a deciding game; any change to saved match history; point-by-point event derivation.
 
