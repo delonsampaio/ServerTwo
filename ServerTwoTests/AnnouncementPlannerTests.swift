@@ -147,13 +147,14 @@ final class AnnouncementPlannerTests: XCTestCase {
     }
 
     func testGameCompletedWinsOverASideSwitchInTheSameChange() {
-        // One correction from 0-0 to 11-3: crosses the threshold AND ends the
-        // game. The new game's flag is false and the game index moved, so only
-        // the game lines apply.
+        // One correction from 0-0 to 11-9 ends a best-of-1 match. The finished
+        // game's flag is true (the correction crossed the threshold), so a
+        // planner that checked the side switch before the game index would
+        // add "Switch sides." Only the match line may be spoken.
         let old = snap(index: 0, a: 0, b: 0, switched: false)
-        let new = snap(index: 1, a: 0, b: 0, switched: false, gamesA: 1,
-                       last: .init(teamAScore: 11, teamBScore: 3, winner: .teamA))
-        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 3.", "Next game, 0, 0, 2."])
+        let new = snap(index: 1, a: 11, b: 9, switched: true, gamesA: 1, over: true,
+                       last: .init(teamAScore: 11, teamBScore: 9, winner: .teamA))
+        XCTAssertEqual(plan(old, new, format: .bestOfOne), ["Delon wins, 11 to 9."])
     }
 
     func testUndoingBackIntoThePreviousGameSpeaksOnlyTheRestoredCall() {
