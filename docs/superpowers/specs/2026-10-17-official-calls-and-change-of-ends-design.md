@@ -1,7 +1,7 @@
 # Official Calls and Change of Ends Design
 
 **Date:** 2026-10-17
-**Status:** Draft for review (Gemini review, then user review, before a plan is written)
+**Status:** Draft for review (Gemini review, then user review, before a plan is written). Rule text verified against the official 2026 USA Pickleball Official Rulebook PDF supplied by the user (see "Verified rule text").
 **Builds on:** `docs/superpowers/specs/2026-10-16-voice-announcer-design.md` (the announcer as built)
 
 ## Goal
@@ -15,23 +15,21 @@ The user delegated the choices to the controller ("for 1 and 2 do what is best")
 
 ## Verified rule text
 
-From a third-party reproduction of the 2025 USA Pickleball rulebook, Section 5 (https://www.playpickleball.com/2025-usa-pickleball-rules-section-5-service-and-end-selection-rules/). The official PDF could not be fetched, so the wording below should be confirmed against the official rulebook before release; the rule numbers are as printed on that page.
+From the official **2026 USA Pickleball Official Rulebook** PDF (the user supplied it; text extracted locally). The earlier Gemini answers and a third-party reproduction used different rule numbers; ONLY the numbers below, taken from the PDF, are to be cited anywhere in this project.
 
-- **5.B.1:** "Teams change ends and initial service upon the completion of each game."
-- **5.B.2:** Two minutes are allowed between games.
-- **5.B.3:** "In matches that consist of a single game, the teams will change ends at the midpoint based on the match format" (6 in a game to 11, 8 to 15, 11 to 21). Serve remains with the player holding serve.
-- **5.B.4:** In a multi-game match, ends change at the midpoint of the LAST game, based on the match format (example 6 in a game to 11).
-- **5.B.5:** One minute is allowed to change ends during a game.
-
-Not verified, deliberately NOT part of this spec: the same rule says "initial service" also changes after each game (the team that served first does not serve first again); the app currently gives the next game's first serve to the previous game's winner. See Open question 2.
-
-Conventions (not rulebook text, per two Gemini answers and no counter-evidence found): "Side out", "Game point", "Match point", "Game and match" are referee/broadcast conventions. No rule numbers for them are cited anywhere in this project.
+- **Calling the score, Rule 6.B:** the server normally calls the score. 6.B.1 singles: two numbers, server's score then receiver's, starting "zero – zero". 6.B.2 doubles: three numbers, serving team's score, receiving team's score, server number, starting "zero – zero – two". The entire score is called before the serve (Rule 6.C, "When to Serve").
+- **Rally scoring, provisional Rule 14.A:** the score is called as two numbers, server's score then receiver's.
+- **Referee calls, Rules 17.D.3 to 17.D.5** (the referee, during a match): "point" after each point; "second server" (or "second serve") after the first server's team loses a rally (doubles); "side out" when a singles player or the second server loses the serve. So "Side out" and "Second server" are official referee calls, not just conventions.
+- **End Change Time-Out, Rule 21.B:** in a **single game or tie-breaker game** the players change ends when the first singles player or doubles team reaches 6 (game to 11), 8 (to 15), 11 (to 21). The rulebook elsewhere speaks of "the tie-breaker game of a multiple-game match", i.e. the deciding game (game 3 of a best of 3, game 5 of a best of 5). 21.B.4: after the change, play continues with the same server. 21.B.5: a maximum of one minute to change ends during a game.
+- **Time-Out Between Games, Rule 21.F:** 21.F.1 a maximum of two minutes is allowed to change ends between games. **21.F.2: "Singles players or doubles teams must change ends and initial service for the next game of the match."** 21.F.3: teams may change the starting server between games.
+- **"Game point" / "Match point"** are not rulebook calls (the only mention of "match point" is a remark that every point is equally important). They are a pro-tour broadcast convention, per Gemini, kept as an optional courtesy.
+- **Out of scope, now verified:** 21.F.2 says initial service also changes with each game. The app gives the next game's first serve to the previous game's winner. See Open question 2.
 
 ## Decisions
 
-1. **Add "Side out."** before the new score call when possession changes. Side-out scoring only (rally scoring has no side-outs). Spoken only on a FORWARD move, never on undo or correction.
+1. **Add "Side out."** (Rule 17.D.5) before the new score call when possession changes. Side-out scoring only (rally scoring has no side-outs). Spoken only on a FORWARD move, never on undo or correction.
 2. **Add "Game point." / "Match point."** after the score call. See "Game point rule" below.
-3. **Skip "Second server."** The call already ends in "2"; it would fire every time the first server loses.
+3. **Add "Second server."** (Rule 17.D.4), doubles side-out only, before the call when the same team keeps the serve and the server number goes from 1 to 2, FORWARD move only. (An earlier draft skipped it as redundant with the trailing "2"; the official rulebook lists it as a referee call, and the point of this change is a more official sound.)
 4. **Official-style endings:**
    - Best of 1: `"Game and match, <winner>, <winner score> to <loser score>."`
    - Best of 3/5 clincher: `"Game <N> to <winner>, <winner score> to <loser score>. Game and match, <winner>, <winner games> to <loser games>."` Wording for the games tally is spoken as "2 games to 1" (not "2 to 1") so it is not mistaken for a point score.
@@ -48,6 +46,7 @@ Conventions (not rulebook text, per two Gemini answers and no counter-evidence f
 | Change (old → new) | Spoken |
 |---|---|
 | Serving team changed, scores unchanged, same game, side-out scoring, FORWARD move | `"Side out."`, then the score call |
+| Same serving team, server number 1 → 2, scores unchanged, same game, doubles side-out, FORWARD move | `"Second server."`, then the score call |
 | Same-game score/serve change where the serving team can win on the next point | the score call, then `"Game point."`; or `"Match point."` when winning would also win the match |
 | Game completed, match continues | `"Game <N> to <winner>, <w> to <l>."`, `"Change ends."`, `"Next game, <call>."` |
 | Match over, best of 1 | `"Game and match, <winner>, <w> to <l>."` |
@@ -106,10 +105,11 @@ Let `target = winningScore`, a team is "at game point" when it can end the game 
 
 ## Out of scope
 
-Initial-service alternation between games (Open question 2), "Second server", "Fault", "Let", medical timeouts, a settings toggle for the old switching behaviour, an announcement or prompt for the 2-minute / 1-minute change-of-ends timers.
+Initial-service alternation between games (Open question 2), "Point" before each score, "Fault", "Let", medical timeouts, a settings toggle for the old switching behaviour, an announcement or prompt for the 2-minute / 1-minute change-of-ends timers.
 
 ## Open questions with proposed defaults
 
-1. **Verify the change-of-ends rule against the official 2026 rulebook PDF** before release (only a third-party reproduction of the 2025 text was available). Default: implement as above.
-2. **Initial service between games.** Rule 5.B.1 says initial service changes with each game, while the app gives the next game's first serve to the previous game's winner (`PickleballMatch.recordPoint` creates the next game with `firstServingTeam: winner`). Default: leave unchanged, record in the roadmap as a possible follow-up, since it changes engine behaviour and persisted matches.
-3. **"Change ends." on every game break** even for players who do not follow the rule. Default: yes (it is the rule).
+1. ~~Verify the change-of-ends rule against the official rulebook~~ **Done** against the 2026 PDF (Rules 21.B and 21.F above).
+2. **Initial service between games (Rule 21.F.2) is verified official, and the app deviates.** `PickleballMatch.recordPoint` creates the next game with `firstServingTeam: winner`. The rule says the initial service changes each game, so after the team that serves first in game 1, the OTHER team serves first in game 2, and the original team in game 3. Fixing it touches the engine and needs the match to remember who served first in game 1 (and persisted in-progress matches). Default: NOT part of this spec; recommend a separate small spec, because it changes persisted-match behaviour and many users play "winner serves".
+3. **"Change ends." on every game break** even for players who do not follow the rule. Default: yes (Rule 21.F.2).
+4. **Optional courtesy calls.** "Game point." / "Match point." are not rulebook calls. Default: keep (the user asked for a more official, informative announcer); serving team only in side-out.
