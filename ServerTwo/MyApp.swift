@@ -8,7 +8,9 @@ struct MyApp: App {
 
     private let modelContainer: ModelContainer
     @State private var activeMatchController: ActiveMatchController
-    @State private var appSettings = AppSettings()
+    @State private var appSettings: AppSettings
+    @State private var voiceAnnouncer: VoiceAnnouncer
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let container: ModelContainer
@@ -19,6 +21,12 @@ struct MyApp: App {
         }
         self.modelContainer = container
         _activeMatchController = State(initialValue: ActiveMatchController(modelContext: ModelContext(container)))
+        let settings = AppSettings()
+        _appSettings = State(initialValue: settings)
+        _voiceAnnouncer = State(initialValue: VoiceAnnouncer(
+            output: MyApp.makeSpeechOutput(),
+            isEnabled: { settings.voiceAnnouncerEnabled }
+        ))
     }
 
     var body: some Scene {
@@ -26,6 +34,13 @@ struct MyApp: App {
             RootTabView(initialTab: activeMatchController.match != nil ? .play : .home)
                 .environment(activeMatchController)
                 .environment(appSettings)
+                .environment(voiceAnnouncer)
+                .onChange(of: appSettings.voiceAnnouncerEnabled) { _, enabled in
+                    if !enabled { voiceAnnouncer.stop() }
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase != .active { voiceAnnouncer.stop() }
+                }
                 .modelContainer(modelContainer)
                 .preferredColorScheme(appSettings.theme.colorScheme)
                 .sheet(isPresented: Binding(
@@ -40,6 +55,17 @@ struct MyApp: App {
                     applyTestOverridesIfNeeded()
                 }
         }
+    }
+
+    /// UI tests must never touch the audio session: any `-UITest-` launch
+    /// argument (Debug builds only) swaps real speech for a no-op output.
+    private static func makeSpeechOutput() -> SpeechOutput {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("-UITest-") }) {
+            return NullSpeechOutput()
+        }
+        #endif
+        return SystemSpeechOutput.live()
     }
 
     /// Test-only seam: lets XCUITests force a clean slate, a locked

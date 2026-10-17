@@ -4,6 +4,7 @@ import PickleballKit
 struct ScoringView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
     @Environment(AppSettings.self) private var appSettings
+    @Environment(VoiceAnnouncer.self) private var voiceAnnouncer
 
     @State private var isShowingScoreCorrection = false
     @State private var sideSwitchTracker = SideSwitchPromptTracker()
@@ -113,6 +114,19 @@ struct ScoringView: View {
             pendingPrompts = []
             didSeedSideSwitchTracker = seedSideSwitchTracker()
             gameOverAcknowledgedForGameIndex = -1
+        }
+        .onChange(of: activeMatchController.match.map(AnnouncementSnapshot.init(match:))) { old, new in
+            // `onChange` does not fire for the initial value, so a resumed match
+            // stays silent until its next change. Derived from state (not from
+            // which button was pressed) so taps, undo, a Correct Score save and
+            // accessibility actions all announce the same way.
+            guard let match = activeMatchController.match, let old, let new else { return }
+            voiceAnnouncer.announce(AnnouncementPlanner.plan(
+                from: old, to: new,
+                configuration: match.configuration, matchFormat: match.matchFormat,
+                teamAName: activeMatchController.teamAName,
+                teamBName: activeMatchController.teamBName
+            ))
         }
         .onChange(of: activeMatchController.match?.completedGames.count) { _, newCount in
             // A completed game that doesn't end the match silently resets the
