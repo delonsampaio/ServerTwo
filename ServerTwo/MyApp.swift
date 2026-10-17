@@ -59,9 +59,9 @@ struct MyApp: App {
 
     /// UI tests must never touch the audio session: any `-UITest-` launch
     /// argument (Debug builds only) swaps real speech for a no-op output.
-    private static func makeSpeechOutput() -> SpeechOutput {
+    static func makeSpeechOutput(arguments: [String] = ProcessInfo.processInfo.arguments) -> SpeechOutput {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("-UITest-") }) {
+        if arguments.contains(where: { $0.hasPrefix("-UITest-") }) {
             return NullSpeechOutput()
         }
         #endif

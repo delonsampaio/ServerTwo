@@ -10,7 +10,16 @@ final class AVSpeechSynthesizerAdapter: NSObject, SpeechSynthesizing, AVSpeechSy
     var onUtteranceEnded: (@MainActor (UUID) -> Void)?
 
     private let synthesizer = AVSpeechSynthesizer()
-    private var ids: [ObjectIdentifier: UUID] = [:]
+    /// The utterance is held strongly alongside its id so its address (the
+    /// `ObjectIdentifier`) cannot be reused by a new utterance until the entry
+    /// is removed; otherwise a stale queued callback could remove a live entry.
+    private var ids: [ObjectIdentifier: (utterance: AVSpeechUtterance, id: UUID)] = [:]
+
+    /// Every announcement sentence is English, so the voice must be English
+    /// even on a device set to another language.
+    static func voiceLanguage(deviceLanguage: String) -> String {
+        deviceLanguage.lowercased().hasPrefix("en") ? deviceLanguage : "en-US"
+    }
 
     override init() {
         super.init()
@@ -19,9 +28,11 @@ final class AVSpeechSynthesizerAdapter: NSObject, SpeechSynthesizing, AVSpeechSy
 
     func speak(_ text: String, id: UUID, preDelay: TimeInterval) {
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
+        utterance.voice = AVSpeechSynthesisVoice(
+            language: Self.voiceLanguage(deviceLanguage: AVSpeechSynthesisVoice.currentLanguageCode())
+        )
         utterance.preUtteranceDelay = preDelay
-        ids[ObjectIdentifier(utterance)] = id
+        ids[ObjectIdentifier(utterance)] = (utterance, id)
         synthesizer.speak(utterance)
     }
 
@@ -40,7 +51,7 @@ final class AVSpeechSynthesizerAdapter: NSObject, SpeechSynthesizing, AVSpeechSy
     }
 
     private func ended(_ key: ObjectIdentifier) {
-        guard let id = ids.removeValue(forKey: key) else { return }
+        guard let id = ids.removeValue(forKey: key)?.id else { return }
         onUtteranceEnded?(id)
     }
 }
@@ -55,16 +66,26 @@ final class AVAudioSessionController: AudioSessionControlling {
     func activate() {
         let session = AVAudioSession.sharedInstance()
         if !configured {
-            try? session.setCategory(
-                .playback, mode: .voicePrompt,
-                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
-            )
-            configured = true
+            do {
+                try session.setCategory(
+                    .playback, mode: .voicePrompt,
+                    options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+                )
+                configured = true
+            } catch {
+                // Leave `configured` false so the next activation retries.
+            }
         }
         try? session.setActive(true)
     }
 
-    func deactivate() {
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    /// Returns false when the system refused, so the caller can retry.
+    func deactivate() -> Bool {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            return true
+        } catch {
+            return false
+        }
     }
 }

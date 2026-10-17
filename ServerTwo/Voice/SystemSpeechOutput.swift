@@ -20,6 +20,7 @@ final class SystemSpeechOutput: SpeechOutput {
     private var currentID: UUID?
     private var sessionActive = false
     private var cancelPendingDeactivation: (() -> Void)?
+    private var deactivationRetried = false
 
     /// Lead-in when speech starts from an inactive session, so a waking
     /// Bluetooth route does not swallow the first number.
@@ -56,6 +57,7 @@ final class SystemSpeechOutput: SpeechOutput {
     }
 
     func speak(_ text: String) {
+        deactivationRetried = false
         cancelPendingDeactivation?()
         cancelPendingDeactivation = nil
         if currentID != nil { synthesizer.stop() }
@@ -89,8 +91,15 @@ final class SystemSpeechOutput: SpeechOutput {
         cancelPendingDeactivation?()
         cancelPendingDeactivation = scheduler(quietWindow) { [weak self] in
             guard let self else { return }
-            self.session.deactivate()
+            if !self.session.deactivate(), !self.deactivationRetried {
+                // The system refused: stay active and try once more.
+                self.deactivationRetried = true
+                self.scheduleDeactivation()
+                return
+            }
+            // Released, or the retry failed too: stop tracking it as active.
             self.sessionActive = false
+            self.deactivationRetried = false
             self.cancelPendingDeactivation = nil
         }
     }

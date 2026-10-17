@@ -24,7 +24,8 @@ protocol SpeechSynthesizing: AnyObject {
 /// tested with a fake.
 protocol AudioSessionControlling {
     func activate()
-    func deactivate()
+    /// Returns true when the session was released.
+    func deactivate() -> Bool
 }
 
 /// Schedules `action` after a delay and returns a closure that cancels it.

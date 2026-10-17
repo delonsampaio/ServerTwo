@@ -156,8 +156,8 @@ public final class PickleballGame {
         state = previous
     }
 
-    /// Sets BOTH teams' scores in one step — one undo-history entry, one
-    /// side-switch check — so a two-team correction never passes through an
+    /// Sets BOTH teams' scores in one step — one undo-history entry, with the
+    /// side-switch flag recomputed once from the corrected scores — so a two-team correction never passes through an
     /// intermediate board the engine would act on. Does not validate that
     /// the pair is reachable (the UI gates that via
     /// `GameConfiguration.isReachableGameScore`).

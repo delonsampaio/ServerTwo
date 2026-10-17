@@ -97,6 +97,13 @@ final class AnnouncementPlannerTests: XCTestCase {
 
     // MARK: - Games and matches
 
+    func testAGameCompletedWhileTheFlagWasTrueSpeaksNoSwitchLine() {
+        let old = snap(index: 0, a: 10, b: 3, switched: true)
+        let new = snap(index: 1, a: 0, b: 0, switched: false, gamesA: 1,
+                       last: .init(teamAScore: 11, teamBScore: 3, winner: .teamA))
+        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 3.", "Next game, 0, 0, 2."])
+    }
+
     func testAGameCompletedNamesTheWinnerAndCallsTheNextGame() {
         let old = snap(index: 0, a: 10, b: 3)
         let new = snap(index: 1, a: 0, b: 0, serving: .teamA, gamesA: 1,

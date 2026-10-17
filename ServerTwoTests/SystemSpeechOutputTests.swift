@@ -17,17 +17,24 @@ final class SystemSpeechOutputTests: XCTestCase {
     private final class FakeSession: AudioSessionControlling {
         var activateCount = 0
         var deactivateCount = 0
+        /// Consumed in order by `deactivate()`; true (success) once exhausted.
+        var deactivateResults: [Bool] = []
         func activate() { activateCount += 1 }
-        func deactivate() { deactivateCount += 1 }
+        func deactivate() -> Bool {
+            deactivateCount += 1
+            return deactivateResults.isEmpty ? true : deactivateResults.removeFirst()
+        }
     }
 
     /// Captures scheduled actions; `fire()` runs every one that was not cancelled.
     @MainActor private final class FakeScheduler {
         private struct Entry { var action: @MainActor () -> Void; var done: Bool }
         private var entries: [Entry] = []
+        private(set) var delays: [Duration] = []
         /// Actions scheduled and neither cancelled nor run yet.
         var scheduledCount: Int { entries.filter { !$0.done }.count }
         func schedule(_ delay: Duration, _ action: @escaping @MainActor () -> Void) -> () -> Void {
+            delays.append(delay)
             entries.append(Entry(action: action, done: false))
             let index = entries.count - 1
             return { [unowned self] in self.entries[index].done = true }
@@ -129,5 +136,59 @@ final class SystemSpeechOutputTests: XCTestCase {
         synth.onUtteranceEnded?(synth.spoken[0].id)
         scheduler.fire()
         XCTAssertEqual(session.deactivateCount, 1)
+    }
+
+    func testDeactivationIsScheduledAfterTheQuietWindow() {
+        let (output, synth, _, scheduler) = makeOutput()
+        output.speak("4, 2, 1.")
+        synth.onUtteranceEnded?(synth.spoken[0].id)
+        XCTAssertEqual(scheduler.delays, [.seconds(1.2)])
+    }
+
+    func testAFailedDeactivationIsRetriedOnceAndTheSessionStaysActiveMeanwhile() {
+        let (output, synth, session, scheduler) = makeOutput()
+        session.deactivateResults = [false, true]
+        output.speak("4, 2, 1.")
+        synth.onUtteranceEnded?(synth.spoken[0].id)
+
+        scheduler.fire()   // first attempt fails and reschedules
+        XCTAssertEqual(session.deactivateCount, 1)
+        XCTAssertEqual(scheduler.scheduledCount, 1, "a retry is pending")
+        output.speak("5, 2, 1.")   // still active: no re-activation, no lead-in
+        XCTAssertEqual(session.activateCount, 1)
+        XCTAssertEqual(synth.spoken[1].preDelay, 0, accuracy: 0.0001)
+        synth.onUtteranceEnded?(synth.spoken[1].id)
+
+        scheduler.fire()   // retry (rescheduled by the new utterance's end) succeeds
+        XCTAssertEqual(session.deactivateCount, 2)
+        output.speak("6, 2, 1.")
+        XCTAssertEqual(session.activateCount, 2)
+        XCTAssertEqual(synth.spoken[2].preDelay, 0.15, accuracy: 0.0001)
+    }
+
+    func testARetryThatSucceedsReleasesTheSession() {
+        let (output, synth, session, scheduler) = makeOutput()
+        session.deactivateResults = [false, true]
+        output.speak("4, 2, 1.")
+        synth.onUtteranceEnded?(synth.spoken[0].id)
+        scheduler.fire()
+        scheduler.fire()
+        XCTAssertEqual(session.deactivateCount, 2)
+        output.speak("5, 2, 1.")
+        XCTAssertEqual(session.activateCount, 2)
+        XCTAssertEqual(synth.spoken[1].preDelay, 0.15, accuracy: 0.0001)
+    }
+
+    func testTwoFailedDeactivationsGiveUpAndTheNextSpeakActivatesAgain() {
+        let (output, synth, session, scheduler) = makeOutput()
+        session.deactivateResults = [false, false]
+        output.speak("4, 2, 1.")
+        synth.onUtteranceEnded?(synth.spoken[0].id)
+        scheduler.fire()
+        scheduler.fire()
+        XCTAssertEqual(session.deactivateCount, 2)
+        XCTAssertEqual(scheduler.scheduledCount, 0, "no third attempt")
+        output.speak("5, 2, 1.")
+        XCTAssertEqual(session.activateCount, 2)
     }
 }
