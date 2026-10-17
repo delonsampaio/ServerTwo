@@ -10,6 +10,11 @@ final class VoiceAnnouncerTests: XCTestCase {
         func stop() { stopCount += 1 }
     }
 
+    @MainActor private final class Flag {
+        var value: Bool
+        init(_ value: Bool) { self.value = value }
+    }
+
     func testLinesAreJoinedIntoOneUtterance() {
         let output = RecordingOutput()
         let announcer = VoiceAnnouncer(output: output, isEnabled: { true }, isVoiceOverRunning: { false })
@@ -40,10 +45,10 @@ final class VoiceAnnouncerTests: XCTestCase {
 
     func testTheToggleIsReadAtAnnounceTimeNotCapturedOnce() {
         let output = RecordingOutput()
-        var enabled = true
-        let announcer = VoiceAnnouncer(output: output, isEnabled: { enabled }, isVoiceOverRunning: { false })
+        let enabled = Flag(true)
+        let announcer = VoiceAnnouncer(output: output, isEnabled: { enabled.value }, isVoiceOverRunning: { false })
         announcer.announce(["4, 2, 1."])
-        enabled = false
+        enabled.value = false
         announcer.announce(["5, 2, 1."])
         XCTAssertEqual(output.spoken, ["4, 2, 1."])
     }
