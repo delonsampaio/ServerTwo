@@ -68,7 +68,9 @@ final class ScoringPromptsUITests: XCTestCase {
         let confirm = app.buttons["Confirm Cancel Match"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 3))
         confirm.tap()
+        // Both the match and its Cancel prompt must be gone.
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: teamAZone)
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.otherElements["Prompt.CancelMatch"])
         waitForExpectations(timeout: 5)
         scrollUntilVisible(app.buttons["Start Match"], in: app)
     }
@@ -122,6 +124,8 @@ final class ScoringPromptsUITests: XCTestCase {
 
         correctToSixNil()
         dismissPrompt(titled: "Switch Sides")
+        // Give a duplicate presented from an onDismiss time to show up.
+        sleep(1)
         XCTAssertFalse(dismissButton.exists, "exactly one prompt per crossing")
     }
 }

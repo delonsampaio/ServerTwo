@@ -24,11 +24,10 @@ final class ScoringPromptSheetTests: XCTestCase {
         XCTAssertEqual(title(winner: nil, a: 10, b: 10), "Game 1 is over")
     }
 
-    func testEngineWinnerBeatsTheScoreFallback() {
-        // A rally-scoring game can be "won" by the engine's rules without the
-        // higher score being the deciding factor in our fallback; trust it.
+    func testResolvedWinnerKeepsTheEngineWinnerAndOnlyFallsBackWhenNil() {
         XCTAssertEqual(ScoringPromptSheet.resolvedWinner(.teamB, teamAScore: 11, teamBScore: 9), .teamB)
-        XCTAssertEqual(ScoringPromptSheet.resolvedWinner(nil, teamAScore: 5, teamBScore: 5), nil)
+        XCTAssertEqual(ScoringPromptSheet.resolvedWinner(nil, teamAScore: 5, teamBScore: 9), .teamB)
+        XCTAssertNil(ScoringPromptSheet.resolvedWinner(nil, teamAScore: 5, teamBScore: 5))
     }
 
     func testStartNextGameButtonNumbersTheFollowingGame() {
@@ -133,5 +132,88 @@ final class ScoringPromptSheetTests: XCTestCase {
         )
         XCTAssertFalse(sideSwitch.isStale(currentGameIndex: 0, hasSideSwitched: true))
         XCTAssertTrue(sideSwitch.isStale(currentGameIndex: 1, hasSideSwitched: true))
+    }
+
+    // MARK: Game Over acknowledgement
+
+    func testGameOverDecisionPromptsOncePerCompletedGame() {
+        var r = ScoringPrompt.gameOverDecision(newCompletedCount: 1, acknowledgedIndex: -1, isMatchOver: false)
+        XCTAssertTrue(r.shouldPrompt)
+        XCTAssertEqual(r.acknowledgedIndex, 0)
+        r = ScoringPrompt.gameOverDecision(newCompletedCount: 1, acknowledgedIndex: 0, isMatchOver: false)
+        XCTAssertFalse(r.shouldPrompt)
+        XCTAssertEqual(r.acknowledgedIndex, 0)
+    }
+
+    func testGameOverDecisionNeverPromptsForTheMatchDecidingGame() {
+        let r = ScoringPrompt.gameOverDecision(newCompletedCount: 2, acknowledgedIndex: 0, isMatchOver: true)
+        XCTAssertFalse(r.shouldPrompt)
+        XCTAssertEqual(r.acknowledgedIndex, 0)
+    }
+
+    func testGameOverDecisionLowersTheIndexOnUndoSoAReplayPromptsAgain() {
+        // Undo the game-ending point: count 1 -> 0.
+        var r = ScoringPrompt.gameOverDecision(newCompletedCount: 0, acknowledgedIndex: 0, isMatchOver: false)
+        XCTAssertFalse(r.shouldPrompt)
+        XCTAssertEqual(r.acknowledgedIndex, -1)
+        // Replay it: count 0 -> 1.
+        r = ScoringPrompt.gameOverDecision(newCompletedCount: 1, acknowledgedIndex: r.acknowledgedIndex, isMatchOver: false)
+        XCTAssertTrue(r.shouldPrompt)
+    }
+}
+
+final class SideSwitchPromptTrackerTests: XCTestCase {
+    func testFreshMatchPromptsOnceWhenTheFlagFirstSets() {
+        var tracker = SideSwitchPromptTracker()
+        tracker.seed(completedGameFlags: [], currentGameFlag: false)
+        XCTAssertNil(tracker.next(gameIndex: 0, hasSwitched: false))
+        XCTAssertEqual(tracker.next(gameIndex: 0, hasSwitched: true), .switchSides)
+        // Idempotent: a second sync for the same state announces nothing.
+        XCTAssertNil(tracker.next(gameIndex: 0, hasSwitched: true))
+    }
+
+    func testUnseededTrackerBehavesLikeAFreshMatch() {
+        var tracker = SideSwitchPromptTracker()
+        XCTAssertEqual(tracker.next(gameIndex: 0, hasSwitched: true), .switchSides)
+    }
+
+    func testResumedPastTheThresholdDoesNotPromptOnSync() {
+        var tracker = SideSwitchPromptTracker()
+        tracker.seed(completedGameFlags: [], currentGameFlag: true) // restored at 8-3
+        XCTAssertNil(tracker.next(gameIndex: 0, hasSwitched: true))
+    }
+
+    func testResumedThenDroppingUnderTheThresholdSwitchesBack() {
+        var tracker = SideSwitchPromptTracker()
+        tracker.seed(completedGameFlags: [], currentGameFlag: true)
+        XCTAssertEqual(tracker.next(gameIndex: 0, hasSwitched: false), .switchBack)
+        XCTAssertNil(tracker.next(gameIndex: 0, hasSwitched: false))
+        XCTAssertEqual(tracker.next(gameIndex: 0, hasSwitched: true), .switchSides)
+    }
+
+    func testResumedInGameTwoThenUndoingIntoGameOneDoesNotPrompt() {
+        var tracker = SideSwitchPromptTracker()
+        // Game 1 finished with its flag set; game 2 is fresh.
+        tracker.seed(completedGameFlags: [true], currentGameFlag: false)
+        XCTAssertNil(tracker.next(gameIndex: 1, hasSwitched: false))
+        // Undo back into game 1: flag still true.
+        XCTAssertNil(tracker.next(gameIndex: 0, hasSwitched: true))
+    }
+
+    func testPerIndexStateKeepsGamesIndependent() {
+        var tracker = SideSwitchPromptTracker()
+        XCTAssertEqual(tracker.next(gameIndex: 0, hasSwitched: true), .switchSides)
+        // New game starts un-switched, then crosses again.
+        XCTAssertNil(tracker.next(gameIndex: 1, hasSwitched: false))
+        XCTAssertEqual(tracker.next(gameIndex: 1, hasSwitched: true), .switchSides)
+    }
+
+    func testResyncAfterDroppingAStalePromptPreventsABogusOppositePrompt() {
+        var tracker = SideSwitchPromptTracker()
+        XCTAssertEqual(tracker.next(gameIndex: 0, hasSwitched: true), .switchSides)
+        // The queued prompt went stale while the live flag is false again;
+        // the user never saw the switch.
+        tracker.resync(gameIndex: 0, to: false)
+        XCTAssertNil(tracker.next(gameIndex: 0, hasSwitched: false))
     }
 }

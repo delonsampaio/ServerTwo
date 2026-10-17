@@ -6,14 +6,10 @@ struct ScoringView: View {
     @Environment(AppSettings.self) private var appSettings
 
     @State private var isShowingScoreCorrection = false
-    // Per game index, the last `hasSideSwitched` value the user was prompted
-    // about (missing = false, a fresh game's value). A plain "already prompted
-    // for this game" flag isn't enough: undo and score correction restore the
-    // whole earlier game state including `hasSideSwitched`, so dropping back
-    // under the threshold and crossing it again flips the court's sides again
-    // and must prompt again. Per-index (not one value) so undoing from game 2
-    // back into game 1, whose flag is still true, doesn't prompt spuriously.
-    @State private var sideSwitchPromptedState: [Int: Bool] = [:]
+    @State private var sideSwitchTracker = SideSwitchPromptTracker()
+    // `onChange` doesn't fire for a view's initial value, so a match restored
+    // after a relaunch (flag may already be set) must be seeded once on appear.
+    @State private var didSeedSideSwitchTracker = false
     @State private var gameOverAcknowledgedForGameIndex = -1
     @State private var showingFinishConfirmation = false
     @State private var finishErrorMessage: String?
@@ -24,6 +20,15 @@ struct ScoringView: View {
     // sheet is up (see `presentNextPromptIfPossible`).
     @State private var prompt: ScoringPrompt?
     @State private var pendingPrompts: [ScoringPrompt] = []
+    // The two sheets a prompt must wait for, tracked by whether they are REALLY
+    // on screen (set in their content's `onAppear`, cleared only in their
+    // `onDismiss`), not by their `isPresented` bindings: a Save sets the
+    // binding false in the same action that commits, while the sheet is still
+    // animating out. A prompt presented in that window can be dropped by
+    // SwiftUI, leaving `prompt` non-nil with no sheet and blocking every later
+    // prompt.
+    @State private var correctionSheetOnScreen = false
+    @State private var finishSheetOnScreen = false
 
     var body: some View {
         Group {
@@ -74,6 +79,7 @@ struct ScoringView: View {
             // catches that and queues the prompt, but this idempotent re-check
             // guarantees it once the sheet is really gone; if the handler
             // already queued it, the tracker sees nothing left to announce.
+            correctionSheetOnScreen = false
             syncSideSwitchPrompt()
             presentNextPromptIfPossible()
         }) {
@@ -88,19 +94,24 @@ struct ScoringView: View {
                         activeMatchController.correctScores(teamA: teamA, teamB: teamB)
                     }
                 )
+                .onAppear { correctionSheetOnScreen = true }
             }
         }
+        .onAppear {
+            guard !didSeedSideSwitchTracker else { return }
+            didSeedSideSwitchTracker = seedSideSwitchTracker()
+        }
         .onChange(of: activeMatchController.match.map(ObjectIdentifier.init)) { _, _ in
-            // A new match (including a fresh one right after finishing the
-            // previous one) must re-arm the side-switch prompt — without this,
-            // acknowledging the side switch in one match can suppress the
-            // prompt for every subsequent match's first side switch, since
-            // completedGames.count restarts at 0 each time and would otherwise
-            // collide with a previously-acknowledged index. Queued/visible
-            // prompts belong to the old match too (e.g. a cancelled one).
+            // Defensive reset for the controller swapping to a different match
+            // while this view stays alive: queued/visible prompts and the
+            // per-game trackers belong to the old match, and
+            // completedGames.count restarts at 0, which would collide with old
+            // indexes. In practice `RootTabView` removes this view whenever
+            // `match` is nil, so a new match normally gets a fresh view (seeded
+            // in `onAppear`) and this does not run.
             prompt = nil
             pendingPrompts = []
-            sideSwitchPromptedState = [:]
+            didSeedSideSwitchTracker = seedSideSwitchTracker()
             gameOverAcknowledgedForGameIndex = -1
         }
         .onChange(of: activeMatchController.match?.completedGames.count) { _, newCount in
@@ -111,8 +122,15 @@ struct ScoringView: View {
             // index i completes when completedGames.count becomes i + 1 — hence
             // the `+ 1` on both sides.
             guard let match = activeMatchController.match, let newCount else { return }
-            guard newCount > gameOverAcknowledgedForGameIndex + 1, !match.isMatchOver else { return }
-            gameOverAcknowledgedForGameIndex = newCount - 1
+            // Also lowers the index when the count drops (undo), so replaying
+            // the game-ending point announces it again.
+            let decision = ScoringPrompt.gameOverDecision(
+                newCompletedCount: newCount,
+                acknowledgedIndex: gameOverAcknowledgedForGameIndex,
+                isMatchOver: match.isMatchOver
+            )
+            gameOverAcknowledgedForGameIndex = decision.acknowledgedIndex
+            guard decision.shouldPrompt else { return }
             // `completedGames.last` is the game just finished; the prompt
             // carries its own final score because the live score has already
             // reset to 0-0 for the next game.
@@ -145,7 +163,10 @@ struct ScoringView: View {
         } message: {
             Text(finishErrorMessage ?? "")
         }
-        .sheet(isPresented: $showingFinishConfirmation, onDismiss: { presentNextPromptIfPossible() }) {
+        .sheet(isPresented: $showingFinishConfirmation, onDismiss: {
+            finishSheetOnScreen = false
+            presentNextPromptIfPossible()
+        }) {
             if let match = activeMatchController.match, let winningTeam = match.matchWinner {
                 FinishMatchSheet(
                     teamAName: activeMatchController.teamAName,
@@ -167,21 +188,29 @@ struct ScoringView: View {
                         }
                     }
                 )
+                .onAppear { finishSheetOnScreen = true }
             }
         }
     }
 
-    /// Idempotent: prompts only when the live `hasSideSwitched` differs from
-    /// what the user was last told for this game, so it can be called from
+    /// Returns whether it seeded (false only when there is no match yet).
+    private func seedSideSwitchTracker() -> Bool {
+        guard let match = activeMatchController.match else { return false }
+        sideSwitchTracker.seed(
+            completedGameFlags: match.completedGames.map(\.state.hasSideSwitched),
+            currentGameFlag: match.currentGame.state.hasSideSwitched
+        )
+        return true
+    }
+
+    /// Idempotent (see `SideSwitchPromptTracker`), so it can be called from
     /// every place the flag might have changed without double-prompting.
     private func syncSideSwitchPrompt() {
         guard let match = activeMatchController.match, !match.isMatchOver else { return }
         let gameIndex = match.completedGames.count
-        let current = match.currentGame.state.hasSideSwitched
-        guard let direction = ScoringPrompt.sideSwitchDirection(
-            hasSwitched: current, promptedState: sideSwitchPromptedState[gameIndex] ?? false
+        guard let direction = sideSwitchTracker.next(
+            gameIndex: gameIndex, hasSwitched: match.currentGame.state.hasSideSwitched
         ) else { return }
-        sideSwitchPromptedState[gameIndex] = current
         enqueue(.sideSwitch(
             gameIndex: gameIndex,
             direction: direction,
@@ -194,6 +223,12 @@ struct ScoringView: View {
     }
 
     private func enqueue(_ newPrompt: ScoringPrompt) {
+        // A double tap on the toolbar button must not stack two Cancel
+        // prompts. Game Over / Side Switch may legitimately repeat.
+        if case .cancelMatch = newPrompt,
+           prompt?.id == newPrompt.id || pendingPrompts.contains(where: { $0.id == newPrompt.id }) {
+            return
+        }
         pendingPrompts.append(newPrompt)
         presentNextPromptIfPossible()
     }
@@ -203,7 +238,9 @@ struct ScoringView: View {
     /// dismissed, so a prompt that had to wait appears right after the sheet
     /// that blocked it.
     private func presentNextPromptIfPossible() {
-        guard prompt == nil, !isShowingScoreCorrection, !showingFinishConfirmation else { return }
+        guard prompt == nil,
+              !isShowingScoreCorrection, !correctionSheetOnScreen,
+              !showingFinishConfirmation, !finishSheetOnScreen else { return }
         if let match = activeMatchController.match {
             // Drop side-switch prompts that went stale while waiting (e.g. the
             // same save crossed the threshold and ended the game). The tracker
@@ -214,7 +251,7 @@ struct ScoringView: View {
             pendingPrompts.removeAll { queued in
                 guard queued.isStale(currentGameIndex: gameIndex, hasSideSwitched: live) else { return false }
                 if case let .sideSwitch(queuedIndex, _, _, _, _, _, _) = queued, queuedIndex == gameIndex {
-                    sideSwitchPromptedState[queuedIndex] = live
+                    sideSwitchTracker.resync(gameIndex: queuedIndex, to: live)
                 }
                 return true
             }

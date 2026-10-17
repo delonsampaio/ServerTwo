@@ -48,6 +48,18 @@ enum ScoringPrompt: Identifiable, Equatable {
         }
     }
 
+    /// Whether a change in `completedGames.count` should raise Game Over, and
+    /// the acknowledged index to keep. The index must also move DOWN: undoing a
+    /// game-ending point and replaying it is a new game ending and should be
+    /// announced again, same as a side switch re-crossed after an undo.
+    static func gameOverDecision(
+        newCompletedCount: Int, acknowledgedIndex: Int, isMatchOver: Bool
+    ) -> (shouldPrompt: Bool, acknowledgedIndex: Int) {
+        let acknowledged = min(acknowledgedIndex, newCompletedCount - 1)
+        guard newCompletedCount > acknowledged + 1, !isMatchOver else { return (false, acknowledged) }
+        return (true, newCompletedCount - 1)
+    }
+
     /// A side-switch prompt can sit in the queue behind another sheet; by the
     /// time it would show, the game may have moved on (the same save that
     /// crossed the threshold also finished the game) or the flag may have
@@ -136,8 +148,8 @@ struct ScoringPromptSheet: View {
         teamAGames: Int, teamBGames: Int,
         completedGameCount: Int
     ) -> String {
-        let current = "current game \(teamAScore) – \(teamBScore)"
         guard completedGameCount > 0 else { return "Current game \(teamAScore) – \(teamBScore)" }
+        let current = "current game \(teamAScore) – \(teamBScore)"
         return "\(gamesTallyLine(teamAGames: teamAGames, teamBGames: teamBGames)), \(current)"
     }
 
