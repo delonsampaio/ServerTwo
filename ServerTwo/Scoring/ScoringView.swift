@@ -293,20 +293,25 @@ struct ScoringView: View {
                 .strokeBorder(isServing ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: isServing ? 2 : 1)
         )
         .contentShape(Rectangle())
-        // Tap to score, long-press to correct. Two gestures on a plain view —
-        // NOT a Button: with a Button, its own press handling beat an outer
-        // `.onLongPressGesture`, so the correction sheet could never be opened
-        // (verified under XCUITest: a long press neither opened it nor scored).
-        // SwiftUI resolves tap vs. long press exclusively here, so a long press
-        // never also scores a point.
-        .onTapGesture {
-            guard !match.isMatchOver else { return }
-            activeMatchController.recordPoint(for: team)
-        }
-        .onLongPressGesture {
-            guard !match.isMatchOver else { return }
-            isShowingScoreCorrection = true
-        }
+        // Tap to score, hold to correct — decided from the touch's own timing
+        // (see `TapOrHoldModifier`), NOT from SwiftUI's `.onTapGesture` +
+        // `.onLongPressGesture` pair: that pair left a dead zone where a press
+        // longer than a quick tap but shorter than the long-press duration did
+        // nothing, silently dropping a point on a slightly slow tap (found on a
+        // real device). A Button is out too: its own press handling beat an
+        // outer long-press, so the correction sheet could never open. A hold
+        // that opens the sheet never also scores when released.
+        .modifier(TapOrHoldModifier(
+            holdDuration: .milliseconds(500),
+            onTap: {
+                guard !match.isMatchOver else { return }
+                activeMatchController.recordPoint(for: team)
+            },
+            onHold: {
+                guard !match.isMatchOver else { return }
+                isShowingScoreCorrection = true
+            }
+        ))
         // Spec §3.7 scopes haptics into this phase's ScoringView work. The
         // condition closure both respects the user's toggle and limits firing
         // to actual score increases, so an unrelated re-render or an undo
@@ -329,4 +334,61 @@ struct ScoringView: View {
         .accessibilityLabel("\(name), \(score) points. Tap to score, double tap and hold to correct.")
     }
 
+}
+
+/// Tap to score, hold to correct — decided from the touch's own timing so a
+/// press of ANY length shorter than `holdDuration` is a tap. SwiftUI's
+/// `.onTapGesture` + `.onLongPressGesture` pair left a dead zone: a press
+/// longer than a quick tap but shorter than the long-press duration did
+/// nothing, silently dropping points on a slightly slow tap.
+private struct TapOrHoldModifier: ViewModifier {
+    let holdDuration: Duration
+    let onTap: () -> Void
+    let onHold: () -> Void
+
+    private enum Phase { case idle, pressing, holdFired }
+    @State private var phase: Phase = .idle
+    // Resets to false automatically when the touch ends OR is cancelled
+    // (`DragGesture.Value` has no `startTime` to tell touches apart), so a
+    // touch that never delivers `onEnded` can't leave the zone stuck.
+    @GestureState private var touchActive = false
+    @State private var holdTask: Task<Void, Never>?
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(phase == .pressing ? 0.7 : 1)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($touchActive) { _, state, _ in state = true }
+                    .onChanged { _ in
+                        // Only the first change of a touch starts a press.
+                        guard phase == .idle else { return }
+                        holdTask?.cancel()
+                        phase = .pressing
+                        holdTask = Task { @MainActor in
+                            try? await Task.sleep(for: holdDuration)
+                            guard !Task.isCancelled, phase == .pressing else { return }
+                            phase = .holdFired
+                            onHold()
+                        }
+                    }
+                    .onEnded { value in
+                        holdTask?.cancel()
+                        holdTask = nil
+                        let wasPressing = phase == .pressing
+                        phase = .idle
+                        let moved = hypot(value.translation.width, value.translation.height) > 20
+                        guard wasPressing, !moved else { return }
+                        onTap()
+                    }
+            )
+            .onChange(of: touchActive) { _, active in
+                // Touch cancelled without `onEnded` (e.g. the sheet appeared):
+                // drop any pending hold and un-stick the zone.
+                guard !active, phase != .idle else { return }
+                holdTask?.cancel()
+                holdTask = nil
+                phase = .idle
+            }
+    }
 }

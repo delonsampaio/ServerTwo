@@ -92,13 +92,13 @@ Hand-checked cases (11-point game): `12-9` unreachable (margin 3, overtime, not 
 
 ## As built
 
-- `ScoringView.scoreZone` was restructured from `Button` + outer `.onLongPressGesture` to a plain view with `.onTapGesture` + `.onLongPressGesture` (both guarded by `!match.isMatchOver`). A diagnostic showed the original long-press never opened the sheet under XCUITest and never scored either, so the correction sheet was effectively unreachable. The alternative `.simultaneousGesture(LongPressGesture)` was rejected because the Button also fired on release (a stray +1 point).
+- `ScoringView.scoreZone` was restructured from `Button` + outer `.onLongPressGesture` to a plain view driven by a private `TapOrHoldModifier` (a `DragGesture(minimumDistance: 0)` that decides tap vs hold from raw touch timing; both actions guarded by `!match.isMatchOver`). A press shorter than 0.5s is a tap however slow (unless the finger travels more than 20pt); a hold at 0.5s opens the correction sheet and releasing afterwards does nothing; the zone dims while pressed. A diagnostic showed the original Button's long-press never opened the sheet under XCUITest and never scored either, so the correction sheet was effectively unreachable. `.simultaneousGesture(LongPressGesture)` was rejected because the Button also fired on release (a stray +1 point).
+- A real-device report found the intermediate `.onTapGesture` + `.onLongPressGesture` pair left a dead zone: a press longer than a quick tap but shorter than 0.5s did nothing, silently dropping a point. `ScoreZoneGestureUITests` is a regression guard for slow (0.3s) and quick presses scoring; it also passed against the old pair under XCUITest, so it does not reproduce the device-only dead zone.
 - Because the plain view loses the Button's built-in activation, explicit `.accessibilityAction` (score) and `.accessibilityAction(named: "Correct score")` were added.
 - The UI test taps the steppers' inner buttons by their propagated identifiers `ScoreCorrection.TeamAStepper-Increment` / `ScoreCorrection.TeamBStepper-Increment`.
 - `undo()` Branch 3 does not reconcile and remains a documented limitation; it is UI-unreachable because the score zones guard on `isMatchOver`.
 - A two-score correction that raises both scores logs a single "Team A scored" point event in match detail (within the existing "corrections aren't distinguished" limitation).
 - Known follow-ups needing a real-device check:
-  - Press-down visual feedback (the Button's highlight) is lost.
   - A tap held longer than 0.5s opens the sheet instead of scoring.
   - VoiceOver activation of the score zone and the "Correct score" action.
   - The "Game Over" alert for a game completed by a correction in a best-of-N match: the correction sets `showingGameOverAlert` while the sheet is dismissing, with no onDismiss fallback like the side-switch one.
