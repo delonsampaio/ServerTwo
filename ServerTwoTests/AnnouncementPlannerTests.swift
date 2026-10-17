@@ -78,14 +78,36 @@ final class AnnouncementPlannerTests: XCTestCase {
     func testASideOutIsAnnouncedOnAForwardMove() {
         let old = snap(a: 4, b: 2, serving: .teamA, server: .two, moves: 5)
         let new = snap(a: 4, b: 2, serving: .teamB, server: .one, moves: 6)
-        XCTAssertEqual(plan(old, new), ["Side out.", "2, 4, 1."])
+        XCTAssertEqual(plan(old, new), ["Side out.", "Fred serving.", "2, 4, 1."])
     }
 
     func testASingleSideOutIsAnnouncedOnAForwardMove() {
         let singles = GameConfiguration(playMode: .singles, scoringFormat: .sideOut)
         let old = snap(a: 4, b: 2, serving: .teamA, server: .one, moves: 5)
         let new = snap(a: 4, b: 2, serving: .teamB, server: .one, moves: 6)
-        XCTAssertEqual(plan(old, new, config: singles), ["Side out.", "2, 4."])
+        XCTAssertEqual(plan(old, new, config: singles), ["Side out.", "Fred serving.", "2, 4."])
+    }
+
+    func testTheSideOutNamesTheNewServingTeamWhoeverItIs() {
+        let toB = plan(snap(a: 4, b: 2, serving: .teamA, server: .two, moves: 5),
+                       snap(a: 4, b: 2, serving: .teamB, server: .one, moves: 6))
+        XCTAssertEqual(toB, ["Side out.", "Fred serving.", "2, 4, 1."])
+        let toA = plan(snap(a: 4, b: 2, serving: .teamB, server: .two, moves: 5),
+                       snap(a: 4, b: 2, serving: .teamA, server: .one, moves: 6))
+        XCTAssertEqual(toA, ["Side out.", "Delon serving.", "4, 2, 1."])
+    }
+
+    func testTheServingTeamIsNotNamedOnASecondServerOrAPlainPoint() {
+        XCTAssertEqual(plan(snap(a: 4, b: 2, serving: .teamA, server: .one, moves: 5),
+                            snap(a: 4, b: 2, serving: .teamA, server: .two, moves: 6)), ["Second server.", "4, 2, 2."])
+        XCTAssertEqual(plan(snap(a: 3, b: 2, serving: .teamA, server: .one, moves: 5),
+                            snap(a: 4, b: 2, serving: .teamA, server: .one, moves: 6)), ["4, 2, 1."])
+    }
+
+    func testASideOutUndoDoesNotNameTheServingTeam() {
+        let old = snap(a: 4, b: 2, serving: .teamB, server: .one, moves: 6)
+        let new = snap(a: 4, b: 2, serving: .teamA, server: .two, moves: 5)
+        XCTAssertEqual(plan(old, new), ["4, 2, 2."])
     }
 
     func testASideOutIsSilentOnUndo() {
@@ -193,7 +215,7 @@ final class AnnouncementPlannerTests: XCTestCase {
         // Team B (8) was serving, Team A has 10; B loses the rally.
         let old = snap(a: 10, b: 8, serving: .teamB, server: .two, moves: 5)
         let new = snap(a: 10, b: 8, serving: .teamA, server: .one, moves: 6)
-        XCTAssertEqual(plan(old, new), ["Side out.", "10, 8, 1.", "Game point."])
+        XCTAssertEqual(plan(old, new), ["Side out.", "Delon serving.", "10, 8, 1.", "Game point."])
     }
 
     func testSecondServerOnGamePointSpeaksBothCalls() {
@@ -206,7 +228,7 @@ final class AnnouncementPlannerTests: XCTestCase {
         // Team B (10) loses its second serve; Team A (8) now serves. A cannot win on the next point.
         let old = snap(a: 8, b: 10, serving: .teamB, server: .two, moves: 5)
         let new = snap(a: 8, b: 10, serving: .teamA, server: .one, moves: 6)
-        XCTAssertEqual(plan(old, new), ["Side out.", "8, 10, 1."])
+        XCTAssertEqual(plan(old, new), ["Side out.", "Delon serving.", "8, 10, 1."])
     }
 
     func testUndoingATimeoutOnAGamePointBoardIsSilent() {
@@ -268,27 +290,27 @@ final class AnnouncementPlannerTests: XCTestCase {
         let old = snap(index: 0, a: 10, b: 3, switched: true)
         let new = snap(index: 1, a: 0, b: 0, switched: false, gamesA: 1,
                        last: .init(teamAScore: 11, teamBScore: 3, winner: .teamA))
-        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 3.", "Switch sides.", "Next game, 0, 0, 2."])
+        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 3.", "Switch sides.", "Next game, Delon serving, 0, 0, 2."])
     }
 
     func testAGameCompletedNamesTheWinnerSwitchesSidesAndCallsTheNextGame() {
         let old = snap(index: 0, a: 10, b: 3)
         let new = snap(index: 1, a: 0, b: 0, serving: .teamA, gamesA: 1,
                        last: .init(teamAScore: 11, teamBScore: 3, winner: .teamA))
-        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 3.", "Switch sides.", "Next game, 0, 0, 2."])
+        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 3.", "Switch sides.", "Next game, Delon serving, 0, 0, 2."])
     }
 
     func testTeamBWinningAGameSpeaksTheWinnersScoreFirst() {
         let old = snap(index: 1, a: 7, b: 10, gamesA: 1)
         let new = snap(index: 2, a: 0, b: 0, serving: .teamB, gamesA: 1, gamesB: 1,
                        last: .init(teamAScore: 7, teamBScore: 11, winner: .teamB))
-        XCTAssertEqual(plan(old, new), ["Game 2 to Fred, 11 to 7.", "Switch sides.", "Next game, 0, 0, 2."])
+        XCTAssertEqual(plan(old, new), ["Game 2 to Fred, 11 to 7.", "Switch sides.", "Next game, Fred serving, 0, 0, 2."])
     }
 
     func testAGameWithNoEngineWinnerFallsBackToTheHigherScore() {
         let old = snap(index: 0, a: 10, b: 9)
         let new = snap(index: 1, gamesA: 1, last: .init(teamAScore: 11, teamBScore: 9, winner: nil))
-        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 9.", "Switch sides.", "Next game, 0, 0, 2."])
+        XCTAssertEqual(plan(old, new), ["Game 1 to Delon, 11 to 9.", "Switch sides.", "Next game, Delon serving, 0, 0, 2."])
     }
 
     func testTheNextGameCallFollowsTheScoringFormat() {
@@ -297,7 +319,7 @@ final class AnnouncementPlannerTests: XCTestCase {
         let new = snap(index: 1, serving: .teamA, server: .one, gamesA: 1,
                        last: .init(teamAScore: 11, teamBScore: 3, winner: .teamA))
         XCTAssertEqual(plan(old, new, config: singles),
-                       ["Game 1 to Delon, 11 to 3.", "Switch sides.", "Next game, 0, 0."])
+                       ["Game 1 to Delon, 11 to 3.", "Switch sides.", "Next game, Delon serving, 0, 0."])
     }
 
     func testABestOfOneMatchOverIsGameAndMatch() {
@@ -373,11 +395,12 @@ final class AnnouncementPlannerTests: XCTestCase {
         XCTAssertEqual(after.lastCompleted, .init(teamAScore: 11, teamBScore: 0, winner: .teamA))
         XCTAssertEqual(after.teamAScore, 0)   // the new game
         XCTAssertEqual(after.moveCount, 0)    // a fresh game has no moves
+        XCTAssertEqual(after.servingTeam, .teamB)   // Rule 21.F.2: the other team serves game 2
         XCTAssertFalse(after.isMatchOver)
         XCTAssertEqual(
             AnnouncementPlanner.plan(from: start, to: after, configuration: doublesSideOut,
                                      matchFormat: .bestOfThree, teamAName: "Delon", teamBName: "Fred"),
-            ["Game 1 to Delon, 11 to 0.", "Switch sides.", "Next game, 0, 0, 2."]
+            ["Game 1 to Delon, 11 to 0.", "Switch sides.", "Next game, Fred serving, 0, 0, 2."]
         )
     }
 }

@@ -20,7 +20,8 @@ enum ScoringPrompt: Identifiable, Equatable {
         teamAName: String, teamBName: String,
         teamAScore: Int, teamBScore: Int,
         winner: Team?,
-        teamAGames: Int, teamBGames: Int
+        teamAGames: Int, teamBGames: Int,
+        firstServerName: String
     )
     case cancelMatch(
         teamAName: String, teamBName: String,
@@ -136,6 +137,14 @@ struct ScoringPromptSheet: View {
     /// unchanged.
     static let switchSidesLine = "Teams switch sides."
 
+    /// Initial service changes every game (Rule 21.F.2), so the first server is
+    /// no longer the previous winner and the sheet says who it is. "First
+    /// serve: <name>." is grammatical for a singles name, a combined doubles
+    /// name and the Team A/Team B fallback.
+    static func firstServeLine(name: String) -> String {
+        "First serve: \(name)."
+    }
+
     static func sideSwitchScoreLine(
         teamAName: String, teamBName: String, teamAScore: Int, teamBScore: Int
     ) -> String {
@@ -171,11 +180,12 @@ struct ScoringPromptSheet: View {
                     teamAName: teamAName, teamBName: teamBName,
                     teamAScore: teamAScore, teamBScore: teamBScore
                 )
-            case let .gameOver(gameNumber, teamAName, teamBName, teamAScore, teamBScore, winner, teamAGames, teamBGames):
+            case let .gameOver(gameNumber, teamAName, teamBName, teamAScore, teamBScore, winner, teamAGames, teamBGames, firstServerName):
                 gameOver(
                     gameNumber: gameNumber, teamAName: teamAName, teamBName: teamBName,
                     teamAScore: teamAScore, teamBScore: teamBScore, winner: winner,
-                    teamAGames: teamAGames, teamBGames: teamBGames
+                    teamAGames: teamAGames, teamBGames: teamBGames,
+                    firstServerName: firstServerName
                 )
             case let .cancelMatch(teamAName, teamBName, teamAScore, teamBScore, teamAGames, teamBGames, completedGameCount):
                 cancelMatch(
@@ -209,7 +219,7 @@ struct ScoringPromptSheet: View {
         switch prompt {
         case .sideSwitch(_, .switchBack, _, _, _, _, _): 340
         case .sideSwitch: 300
-        case .gameOver: 420
+        case .gameOver: 440
         case .cancelMatch: 380
         }
     }
@@ -255,7 +265,8 @@ struct ScoringPromptSheet: View {
         teamAName: String, teamBName: String,
         teamAScore: Int, teamBScore: Int,
         winner: Team?,
-        teamAGames: Int, teamBGames: Int
+        teamAGames: Int, teamBGames: Int,
+        firstServerName: String
     ) -> some View {
         VStack(spacing: 16) {
             badge(systemName: "flag.checkered", tint: Color.accentColor)
@@ -272,6 +283,9 @@ struct ScoringPromptSheet: View {
                 Text(Self.gamesTallyLine(teamAGames: teamAGames, teamBGames: teamBGames))
                     .font(.subheadline.weight(.semibold))
                 Text(Self.switchSidesLine)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(Self.firstServeLine(name: firstServerName))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Text("Next game starts at 0-0.")
@@ -427,7 +441,8 @@ struct ScoringPromptSheet: View {
             prompt: .gameOver(
                 gameNumber: 1, teamAName: "Delon", teamBName: "Fred",
                 teamAScore: 11, teamBScore: 6, winner: .teamA,
-                teamAGames: 1, teamBGames: 0
+                teamAGames: 1, teamBGames: 0,
+                firstServerName: "Fred"
             ),
             onCancelMatch: {}
         )

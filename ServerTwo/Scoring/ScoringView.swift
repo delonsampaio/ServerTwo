@@ -157,7 +157,13 @@ struct ScoringView: View {
                     teamBScore: finishedGame.state.teamBScore,
                     winner: finishedGame.gameWinner,
                     teamAGames: match.gamesWon(for: .teamA),
-                    teamBGames: match.gamesWon(for: .teamB)
+                    teamBGames: match.gamesWon(for: .teamB),
+                    // `completedGames.last` is the game just finished; the match
+                    // has already created the next game, so `currentGame` is its
+                    // fresh game and its serving team is the next first server.
+                    firstServerName: match.currentGame.state.servingTeam == .teamA
+                        ? activeMatchController.teamAName
+                        : activeMatchController.teamBName
                 ))
             }
         }

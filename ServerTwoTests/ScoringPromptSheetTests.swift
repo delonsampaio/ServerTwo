@@ -35,6 +35,11 @@ final class ScoringPromptSheetTests: XCTestCase {
         XCTAssertEqual(ScoringPromptSheet.startNextGameTitle(afterGame: 4), "Start Game 5")
     }
 
+    func testFirstServeLineNamesTheNextGamesFirstServer() {
+        XCTAssertEqual(ScoringPromptSheet.firstServeLine(name: "Fred"), "First serve: Fred.")
+        XCTAssertEqual(ScoringPromptSheet.firstServeLine(name: "Delon & Katie"), "First serve: Delon & Katie.")
+    }
+
     func testGamesTallyLine() {
         XCTAssertEqual(ScoringPromptSheet.gamesTallyLine(teamAGames: 1, teamBGames: 0), "Games 1 – 0")
     }
@@ -77,7 +82,7 @@ final class ScoringPromptSheetTests: XCTestCase {
         XCTAssertEqual(
             ScoringPrompt.gameOver(
                 gameNumber: 1, teamAName: "A", teamBName: "B", teamAScore: 11, teamBScore: 0,
-                winner: .teamA, teamAGames: 1, teamBGames: 0
+                winner: .teamA, teamAGames: 1, teamBGames: 0, firstServerName: "B"
             ).id,
             "gameOver"
         )
@@ -127,7 +132,7 @@ final class ScoringPromptSheetTests: XCTestCase {
     func testOnlySideSwitchPromptsCanBeStale() {
         let gameOver = ScoringPrompt.gameOver(
             gameNumber: 1, teamAName: "A", teamBName: "B", teamAScore: 11, teamBScore: 0,
-            winner: .teamA, teamAGames: 1, teamBGames: 0
+            winner: .teamA, teamAGames: 1, teamBGames: 0, firstServerName: "B"
         )
         XCTAssertFalse(gameOver.isStale(currentGameIndex: 5, hasSideSwitched: false))
         let sideSwitch = ScoringPrompt.sideSwitch(

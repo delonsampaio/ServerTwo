@@ -5,7 +5,8 @@ import PickleballKit
 /// period; `VoiceAnnouncer` joins them with a space into one utterance.
 ///
 /// One same-game change composes at most four slots, in this order:
-/// 1. prefix: "Side out." or "Second server." (forward moves only),
+/// 1. prefix: "Side out." + "<name> serving." (two sentences) or
+///    "Second server." (forward moves only),
 /// 2. the score call,
 /// 3. "Switch sides." / "Switch back." (last game of the format only),
 /// 4. "Match point." / "Game point." (only when the call was spoken).
@@ -42,11 +43,13 @@ enum AnnouncementPlanner {
                     "Game and match, \(name(matchWinner)), \(winnerGames) games to \(loserGames).",
                 ]
             }
-            // Teams change ends after every completed game (Rule 21.F.2).
+            // Teams change ends after every completed game, and the next game's
+            // first server is the opponent of this game's first server, not the
+            // winner (Rule 21.F.2); `new.servingTeam` is that fresh game's server.
             return [
                 "Game \(new.gameIndex) to \(name(winner)), \(winnerScore) to \(loserScore).",
                 "Switch sides.",
-                "Next game, \(scoreCall(new, configuration: configuration)).",
+                "Next game, \(name(new.servingTeam)) serving, \(scoreCall(new, configuration: configuration)).",
             ]
         }
 
@@ -81,7 +84,10 @@ enum AnnouncementPlanner {
         if callChanged, scoresUnchanged, new.moveCount > old.moveCount,
            configuration.scoringFormat == .sideOut {
             if old.servingTeam != new.servingTeam {
+                // Say who has the serve now: "Side out." alone does not tell a
+                // noisy court which team that is.
                 lines.append("Side out.")
+                lines.append("\(name(new.servingTeam)) serving.")
             } else if configuration.playMode == .doubles, old.serverNumber == .one, new.serverNumber == .two {
                 lines.append("Second server.")
             }
