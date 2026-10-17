@@ -21,11 +21,14 @@ protocol SpeechSynthesizing: AnyObject {
 }
 
 /// Wraps `AVAudioSession` activation so `SystemSpeechOutput`'s logic can be
-/// tested with a fake.
+/// tested with a fake. Both calls are asynchronous: the synchronous
+/// `setActive` blocks the main thread (the system logs a warning and a
+/// Bluetooth route can stall the UI), so the result arrives in a completion.
 protocol AudioSessionControlling {
-    func activate()
-    /// Returns true when the session was released.
-    func deactivate() -> Bool
+    /// Asynchronously activates; the completion reports whether it succeeded.
+    func activate(completion: @escaping @MainActor (Bool) -> Void)
+    /// Asynchronously deactivates (with notify-others); the completion reports success.
+    func deactivate(completion: @escaping @MainActor (Bool) -> Void)
 }
 
 /// Schedules `action` after a delay and returns a closure that cancels it.

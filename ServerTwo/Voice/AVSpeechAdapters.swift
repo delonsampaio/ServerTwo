@@ -63,7 +63,7 @@ final class AVSpeechSynthesizerAdapter: NSObject, SpeechSynthesizing, AVSpeechSy
 final class AVAudioSessionController: AudioSessionControlling {
     private var configured = false
 
-    func activate() {
+    func activate(completion: @escaping @MainActor (Bool) -> Void) {
         let session = AVAudioSession.sharedInstance()
         if !configured {
             do {
@@ -76,16 +76,18 @@ final class AVAudioSessionController: AudioSessionControlling {
                 // Leave `configured` false so the next activation retries.
             }
         }
-        try? session.setActive(true)
+        // The system calls back on an arbitrary queue; hop to the main actor
+        // carrying only the Bool. An error counts as failure.
+        session.activate(options: []) { activated, error in
+            let ok = activated && error == nil
+            Task { @MainActor in completion(ok) }
+        }
     }
 
-    /// Returns false when the system refused, so the caller can retry.
-    func deactivate() -> Bool {
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            return true
-        } catch {
-            return false
+    func deactivate(completion: @escaping @MainActor (Bool) -> Void) {
+        AVAudioSession.sharedInstance().deactivate(options: .notifyOthersOnDeactivation) { deactivated, error in
+            let ok = deactivated && error == nil
+            Task { @MainActor in completion(ok) }
         }
     }
 }
