@@ -53,7 +53,7 @@ final class PickleballMatchCorrectScoresTests: XCTestCase {
         XCTAssertEqual(match.completedGames[0].state.teamAScore, 11)
         XCTAssertEqual(match.completedGames[0].state.teamBScore, 9)
         XCTAssertEqual(match.currentGame.state.teamAScore, 0)   // fresh game 2
-        XCTAssertEqual(match.currentGame.state.servingTeam, .teamA)
+        XCTAssertEqual(match.currentGame.state.servingTeam, .teamB)   // Rule 21.F.2: the other team serves first, not the winner
         XCTAssertFalse(match.isMatchOver)
 
         match.undo()   // Branch 3: pops the archived game and undoes the correction

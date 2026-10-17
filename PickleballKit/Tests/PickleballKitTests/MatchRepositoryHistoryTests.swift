@@ -191,7 +191,10 @@ final class MatchRepositoryHistoryTests: XCTestCase {
 
         let match = PickleballMatch(configuration: config, matchFormat: .bestOfThree, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
         for _ in 1...11 { match.recordPoint(for: .teamA) } // game 1: teamA wins 11-0
-        for _ in 1...11 { match.recordPoint(for: .teamA) } // game 2: teamA wins 11-0, match over (best of 3, 2-0)
+        // Game 2: teamA wins 11-0, match over (best of 3, 2-0). Team B serves
+        // first in game 2 (Rule 21.F.2), so A first wins the side-out;
+        // playOutGame handles that. Scored points per game stay 11.
+        playOutGame(match, winner: .teamA)
 
         _ = try repository.saveCompletedMatch(match, teamAName: "A", teamBName: "B", startedAt: Date())
 
@@ -238,8 +241,9 @@ final class MatchRepositoryHistoryTests: XCTestCase {
         XCTAssertEqual(resumedMatch2.completedGames.count, 1)
         XCTAssertFalse(resumedMatch2.isMatchOver)
 
-        // Win game 2 to decide the match (best of 3, 2-0).
-        for _ in 1...11 { resumedMatch2.recordPoint(for: .teamA) }
+        // Win game 2 to decide the match (best of 3, 2-0). Team B serves
+        // first in game 2 (Rule 21.F.2), so playOutGame wins the side-out first.
+        playOutGame(resumedMatch2, winner: .teamA)
         XCTAssertTrue(resumedMatch2.isMatchOver)
 
         // Save to history using the startedAt carried through the snapshot(s).

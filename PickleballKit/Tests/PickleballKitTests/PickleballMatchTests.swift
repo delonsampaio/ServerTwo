@@ -9,7 +9,7 @@ final class PickleballMatchTests: XCTestCase {
         XCTAssertFalse(match.isMatchOver)
     }
 
-    func testWinningAGameAdvancesToANewGameWithWinnerServingFirst() {
+    func testWinningAGameAdvancesToANewGameWithTheOtherTeamServingFirst() {
         let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
         let match = PickleballMatch(configuration: config, matchFormat: .bestOfThree, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
         for _ in 1...11 { match.recordPoint(for: .teamA) }
@@ -18,15 +18,14 @@ final class PickleballMatchTests: XCTestCase {
         XCTAssertEqual(match.completedGames.count, 1)
         XCTAssertFalse(match.isMatchOver) // best of 3 needs 2 games won
         XCTAssertEqual(match.currentGame.state.teamAScore, 0)
-        XCTAssertEqual(match.currentGame.state.servingTeam, .teamA) // winner serves next game
+        XCTAssertEqual(match.currentGame.state.servingTeam, .teamB) // Rule 21.F.2: the other team serves first, not the winner
     }
 
     func testWinningEnoughGamesEndsTheMatch() {
         let config = GameConfiguration(winningScore: .eleven, winByTwo: true)
         let match = PickleballMatch(configuration: config, matchFormat: .bestOfThree, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
-        for _ in 1...2 {
-            for _ in 1...11 { match.recordPoint(for: .teamA) }
-        }
+        playOutGame(match, winner: .teamA)   // game 1 (Team A serves first)
+        playOutGame(match, winner: .teamA)   // game 2 (Team B serves first, Rule 21.F.2)
         XCTAssertTrue(match.isMatchOver)
         XCTAssertEqual(match.matchWinner, .teamA)
         XCTAssertEqual(match.gamesWon[.teamA], 2)
@@ -89,7 +88,7 @@ final class PickleballMatchTests: XCTestCase {
     // MARK: - Fix 2: PickleballMatch forwards correctScore/requestTimeout/isPaywalled/unlockPro
 
     func testCorrectScoreOnMatchThatPushesCurrentGameToAWinAdvancesTheMatch() {
-        // Mirrors testWinningAGameAdvancesToANewGameWithWinnerServingFirst,
+        // Mirrors testWinningAGameAdvancesToANewGameWithTheOtherTeamServingFirst,
         // but drives the win via match.correctScore instead of recordPoint,
         // which must keep gamesWon/completedGames/currentGame in sync just
         // like the recordPoint path does.
@@ -104,7 +103,7 @@ final class PickleballMatchTests: XCTestCase {
         XCTAssertEqual(match.completedGames.count, 1)
         XCTAssertFalse(match.isMatchOver) // best of 3 needs 2 games won
         XCTAssertEqual(match.currentGame.state.teamAScore, 0)
-        XCTAssertEqual(match.currentGame.state.servingTeam, .teamA) // winner serves next game
+        XCTAssertEqual(match.currentGame.state.servingTeam, .teamB) // Rule 21.F.2: the other team serves first, not the winner
     }
 
     func testCorrectScoreOnMatchThatReversesAMatchDecidingGameUnsticksTheMatch() {

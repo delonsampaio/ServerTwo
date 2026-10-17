@@ -51,6 +51,16 @@ public final class PickleballGame {
 
     public var canUndo: Bool { !history.isEmpty }
 
+    /// Who served first in this game. Every move appends the state BEFORE the
+    /// move to `history`, so its first element is the game's initial state and
+    /// its `servingTeam` is the initial server; a game with no moves (or with
+    /// every move undone) still has it in `state`. Derived, not stored: no
+    /// Codable change, and it works for games saved by earlier builds. The next
+    /// game's first server is this team's opponent (Rule 21.F.2).
+    public var initialServingTeam: Team {
+        history.first?.servingTeam ?? state.servingTeam
+    }
+
     public var isGameOver: Bool { gameWinner != nil }
 
     public var isPaywalled: Bool {

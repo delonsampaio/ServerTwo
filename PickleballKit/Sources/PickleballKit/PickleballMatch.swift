@@ -81,9 +81,11 @@ public final class PickleballMatch {
 
         guard !isMatchOver else { return }
 
+        // Initial service changes every game (Rule 21.F.2): the other team
+        // serves first, whoever won this one.
         currentGame = PickleballGame(
             configuration: configuration,
-            firstServingTeam: winner,
+            firstServingTeam: currentGame.initialServingTeam.opponent,
             proUnlocked: currentGame.proUnlocked,
             demoPointCap: currentGame.demoPointCap
         )
@@ -162,9 +164,11 @@ public final class PickleballMatch {
             completedGames.append(currentGame)
             currentGameIsCounted = true
             if !isMatchOver {
+                // Rule 21.F.2: the first server alternates and does not depend
+                // on who won (a correction can flip the winner).
                 currentGame = PickleballGame(
                     configuration: configuration,
-                    firstServingTeam: newWinner,
+                    firstServingTeam: currentGame.initialServingTeam.opponent,
                     proUnlocked: currentGame.proUnlocked,
                     demoPointCap: currentGame.demoPointCap
                 )
