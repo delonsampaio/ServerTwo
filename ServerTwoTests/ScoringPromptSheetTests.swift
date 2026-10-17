@@ -39,6 +39,10 @@ final class ScoringPromptSheetTests: XCTestCase {
         XCTAssertEqual(ScoringPromptSheet.gamesTallyLine(teamAGames: 1, teamBGames: 0), "Games 1 – 0")
     }
 
+    func testGameOverSheetSaysTeamsChangeEnds() {
+        XCTAssertEqual(ScoringPromptSheet.changeEndsLine, "Teams change ends.")
+    }
+
     func testCancelProgressIncludesGamesOnlyWhenGamesWereCompleted() {
         XCTAssertEqual(
             ScoringPromptSheet.cancelProgressSummary(

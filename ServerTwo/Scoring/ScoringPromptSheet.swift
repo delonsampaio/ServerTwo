@@ -129,6 +129,11 @@ struct ScoringPromptSheet: View {
         "Games \(teamAGames) – \(teamBGames)"
     }
 
+    /// Teams change ends after every completed game (Rule 21.F.2). A separate
+    /// line, so the existing "Next game starts at 0-0." text element is
+    /// unchanged.
+    static let changeEndsLine = "Teams change ends."
+
     static func sideSwitchScoreLine(
         teamAName: String, teamBName: String, teamAScore: Int, teamBScore: Int
     ) -> String {
@@ -264,6 +269,9 @@ struct ScoringPromptSheet: View {
             VStack(spacing: 4) {
                 Text(Self.gamesTallyLine(teamAGames: teamAGames, teamBGames: teamBGames))
                     .font(.subheadline.weight(.semibold))
+                Text(Self.changeEndsLine)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 Text("Next game starts at 0-0.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)

@@ -125,3 +125,12 @@ Initial-service alternation between games (Open question 2), "Point" before each
 2. **Initial service between games (Rule 21.F.2) is verified official, and the app deviates.** `PickleballMatch.recordPoint` creates the next game with `firstServingTeam: winner`. The rule says the initial service changes each game, so after the team that serves first in game 1, the OTHER team serves first in game 2, and the original team in game 3. Fixing it touches the engine and needs the match to remember who served first in game 1 (and persisted in-progress matches). Default: NOT part of this spec; recommend a separate small spec, because it changes persisted-match behaviour and many users play "winner serves".
 3. **"Change ends." on every game break** even for players who do not follow the rule. Default: yes (Rule 21.F.2).
 4. **Optional courtesy calls.** "Game point." / "Match point." are not rulebook calls. Default: keep (the user asked for a more official, informative announcer); serving team only in side-out.
+
+## As built
+
+- `AnnouncementSnapshot.moveCount` (`currentGame.history.count`) distinguishes forward moves from undo; `AnnouncementPlanner.plan` composes prefix, call, switch line and stakes in that order; `pointStakes` requires the team to be strictly ahead after the point (the score check is symmetric) and uses serving-team-only eligibility for side-out and rally freeze, either team for rally without freeze.
+- `MatchFormat.isLastGame(index:)` gates both the spoken "Switch sides."/"Switch back." and `ScoringView.syncSideSwitchPrompt`; in every other game no mid-game switch prompt or line is produced.
+- The Game Over sheet shows a separate "Teams change ends." line above the unchanged "Next game starts at 0-0."; the spoken game line says "Change ends." before "Next game, ...".
+- Match endings are "Game and match, <winner>, <w> to <l>." (best of 1) and "Game N to <winner>, <w> to <l>." + "Game and match, <winner>, <wg> games to <lg>." (best of 3/5).
+- Not changed: initial service between games (Open question 2), still "winner serves first".
+- Device checks owed: best of 3, game 1 passing 6 is silent and shows no sheet, game 3 passing 6 says "Switch sides." and shows the sheet; between games "Change ends." is spoken and shown; "Side out." on a side-out and "Second server." when the first server loses, neither after undo; "Game point." when serving at 10-8 (not when receiving at 8-10); "Match point." in a clincher; a game ending says "Game and match, ...".

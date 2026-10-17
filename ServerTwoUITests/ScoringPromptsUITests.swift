@@ -30,20 +30,31 @@ final class ScoringPromptsUITests: XCTestCase {
         let teamAZone = app.buttons["scoreZone.teamA"]
         XCTAssertTrue(teamAZone.waitForExistence(timeout: 3))
 
-        // Correct to 11-0: a finished game, so Save ends game 1.
         let save = app.buttons["ScoreCorrection.Save"]
+        let teamAIncrement = app.buttons["ScoreCorrection.TeamAIncrement"]
+        let dismissButton = app.buttons["Prompt.Dismiss"]
+
+        // The mid-game change of ends applies only in the last game of the
+        // format, so reaching 6 in game 1 of a best of 3 must NOT show the
+        // Switch Sides sheet.
         teamAZone.press(forDuration: 1.0)
         XCTAssertTrue(save.waitForExistence(timeout: 3))
-        let teamAIncrement = app.buttons["ScoreCorrection.TeamAIncrement"]
-        for _ in 0..<11 { teamAIncrement.tap() }
+        for _ in 0..<6 { teamAIncrement.tap() }
+        save.tap()
+        XCTAssertFalse(dismissButton.waitForExistence(timeout: 2), "no Switch Sides sheet in game 1 of a best of 3")
+
+        // Correct from 6-0 to 11-0: a finished game, so Save ends game 1.
+        teamAZone.press(forDuration: 1.0)
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        for _ in 0..<5 { teamAIncrement.tap() }
         save.tap()
 
-        let dismissButton = app.buttons["Prompt.Dismiss"]
         XCTAssertTrue(dismissButton.waitForExistence(timeout: 5), "Game Over prompt never appeared after the correction sheet closed")
         XCTAssertTrue(app.otherElements["Prompt.GameOver"].exists)
         XCTAssertTrue(app.staticTexts["Game 1 goes to Team A"].exists)
         XCTAssertTrue(app.staticTexts["Games 1 – 0"].exists)
         XCTAssertTrue(app.staticTexts["Next game starts at 0-0."].exists)
+        XCTAssertTrue(app.staticTexts["Teams change ends."].exists)
         XCTAssertEqual(dismissButton.label, "Start Game 2")
         dismissButton.tap()
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: dismissButton)

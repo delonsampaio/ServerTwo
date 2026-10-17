@@ -222,6 +222,10 @@ struct ScoringView: View {
     private func syncSideSwitchPrompt() {
         guard let match = activeMatchController.match, !match.isMatchOver else { return }
         let gameIndex = match.completedGames.count
+        // The mid-game end change applies only in the last game of the match
+        // format (Rule 21.B). Between games teams always change ends (Rule
+        // 21.F.2), which the Game Over sheet and the spoken game line say.
+        guard match.matchFormat.isLastGame(index: gameIndex) else { return }
         guard let direction = sideSwitchTracker.next(
             gameIndex: gameIndex, hasSwitched: match.currentGame.state.hasSideSwitched
         ) else { return }
