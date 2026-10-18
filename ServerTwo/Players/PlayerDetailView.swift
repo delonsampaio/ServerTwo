@@ -124,6 +124,8 @@ struct PlayerDetailView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                // The strip below carries this same label.
+                                .accessibilityHidden(true)
                             // Oldest-to-newest, left to right — matches
                             // HomeView's own recent-form dots.
                             HStack(spacing: 8) {
@@ -135,6 +137,12 @@ struct PlayerDetailView: View {
                                         .background(didWin ? Color.green : Color.red, in: Circle())
                                 }
                             }
+                            // One stop that reads the results in the order they
+                            // are displayed, instead of a row of "W"/"L" letters.
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Recent form")
+                            .accessibilityValue(AccessibilityText.recentFormValue(Array(recentForm.reversed())))
+                            .accessibilityIdentifier("RecentForm")
                         }
                         .padding(.vertical, 4)
                     }
@@ -233,6 +241,7 @@ struct PlayerDetailView: View {
                     .foregroundStyle(result ? .green : .red)
                     .frame(width: resultBadgeSize, height: resultBadgeSize)
                     .background(result ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
+                    .accessibilityLabel(AccessibilityText.resultWord(didWin: result))
             }
         }
         let score = Text(scoreText)

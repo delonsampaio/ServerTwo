@@ -167,6 +167,7 @@ struct MatchDetailView: View {
             AdaptiveStack(verticalAlignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "trophy.fill")
+                        .accessibilityHidden(true)
                     Text("Winner: \(match.winningTeam == .teamA ? teamAName : teamBName)")
                         .font(.subheadline.bold())
                 }
@@ -193,6 +194,7 @@ struct MatchDetailView: View {
                 Text("Game \(game.gameNumber)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
+                    .accessibilityAddTraits(.isHeader)
                 if game.id == closestGameID {
                     Text("Closest Game")
                         .font(.caption2.weight(.semibold))
@@ -244,6 +246,7 @@ struct MatchDetailView: View {
                             Circle()
                                 .fill(point.scoringTeam == .teamA ? Color.accentColor : Color.orange)
                                 .frame(width: scorerDotSize, height: scorerDotSize)
+                                .accessibilityHidden(true)
                             Text("\(point.scoringTeam == .teamA ? teamAName : teamBName) scored")
                                 .font(.subheadline)
                                 .foregroundStyle(.primary)
@@ -254,6 +257,14 @@ struct MatchDetailView: View {
                                 .padding(.vertical, 2)
                                 .background(Color.primary.opacity(0.06), in: Capsule())
                         }
+                        // One VoiceOver stop per point instead of three
+                        // (sequence, scorer, running score).
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(AccessibilityText.pointRowLabel(
+                            sequence: point.sequenceNumber,
+                            scorerName: point.scoringTeam == .teamA ? teamAName : teamBName,
+                            scoreAfter: "\(point.teamAScoreAfter)-\(point.teamBScoreAfter)"
+                        ))
                     }
                 }
             }

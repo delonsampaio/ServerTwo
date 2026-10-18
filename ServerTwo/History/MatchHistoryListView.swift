@@ -126,6 +126,8 @@ struct MatchHistoryListView: View {
             Image(systemName: filterPlayerID == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
         }
         .accessibilityIdentifier("History Filter Menu")
+        .accessibilityLabel("Filter matches")
+        .accessibilityValue(filterPlayerName ?? "All matches")
     }
 
     private func matchRow(_ match: MatchRecord) -> some View {
@@ -165,6 +167,7 @@ struct MatchHistoryListView: View {
                     .foregroundStyle(myResult ? .green : .red)
                     .frame(width: resultBadgeSize, height: resultBadgeSize)
                     .background(myResult ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
+                    .accessibilityLabel(AccessibilityText.resultWord(didWin: myResult))
             }
         }
         // A best-of-1 match's "games won" score is always 1-0 or 0-1 -

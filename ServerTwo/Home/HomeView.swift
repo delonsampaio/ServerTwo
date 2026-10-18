@@ -99,6 +99,7 @@ struct HomeView: View {
                     Text("Last Match")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
+                        .accessibilityAddTraits(.isHeader)
                     Text("\(teamAName) vs \(teamBName)")
                         .font(.headline)
                     HStack(spacing: 8) {
@@ -108,6 +109,7 @@ struct HomeView: View {
                                 .foregroundStyle(myResult ? .green : .red)
                                 .frame(width: resultBadgeSize, height: resultBadgeSize)
                                 .background(myResult ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
+                                .accessibilityLabel(AccessibilityText.resultWord(didWin: myResult))
                         }
                         if match.matchFormat == .bestOfOne, let onlyGame = games.first {
                             Text("\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)")
@@ -166,6 +168,7 @@ struct HomeView: View {
                         Text("Your Record")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
+                            .accessibilityAddTraits(.isHeader)
                             .accessibilityIdentifier("Your Record")
                         Spacer()
                         // Only shown while it's actually something to be
@@ -176,6 +179,7 @@ struct HomeView: View {
                                 .font(.subheadline.bold())
                                 .foregroundStyle(.orange)
                                 .accessibilityIdentifier("WinStreak")
+                                .accessibilityLabel("\(streak) win streak")
                         }
                     }
                     // Content row: the record is the hero metric on the
@@ -204,6 +208,12 @@ struct HomeView: View {
                                         .background(didWin ? Color.green : Color.red, in: Circle())
                                 }
                             }
+                            // One stop that reads the results in the order
+                            // they are displayed, instead of a row of "W"/"L"
+                            // letters.
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Recent form")
+                            .accessibilityValue(AccessibilityText.recentFormValue(Array(form.reversed())))
                             .accessibilityIdentifier("RecentForm")
                         }
                     }
@@ -213,6 +223,7 @@ struct HomeView: View {
                     Text("Matches Played")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
+                        .accessibilityAddTraits(.isHeader)
                     Spacer()
                     Text("\(matches.count)")
                         .font(.title2.bold())
@@ -238,6 +249,7 @@ struct HomeView: View {
                     Text("Quick Start")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
+                        .accessibilityAddTraits(.isHeader)
                     Spacer()
                     if !selectedQuickStartPlayers.isEmpty {
                         Button {
@@ -327,6 +339,7 @@ struct HomeView: View {
         // selected, further taps on an unselected chip would have
         // nowhere to go.
         .disabled(!isSelected && selectedQuickStartPlayers.count >= 4)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("QuickStart.\(player.name)")
     }
 

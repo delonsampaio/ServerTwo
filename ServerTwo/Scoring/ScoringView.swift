@@ -36,6 +36,11 @@ struct ScoringView: View {
     // prompt.
     @State private var correctionSheetOnScreen = false
     @State private var finishSheetOnScreen = false
+    // Moves VoiceOver to "Finish Match" once the match is decided. Set from the
+    // button's `onAppear`, not from the state change that decides the match:
+    // the button is inserted by that same change and is not in the
+    // accessibility tree yet when it happens.
+    @AccessibilityFocusState private var finishMatchFocused: Bool
 
     var body: some View {
         Group {
@@ -341,6 +346,8 @@ struct ScoringView: View {
                 .controlSize(.large)
                 .padding(.horizontal)
                 .accessibilityIdentifier("Finish Match")
+                .accessibilityFocused($finishMatchFocused)
+                .onAppear { finishMatchFocused = true }
             }
         }
         .padding(.vertical)
@@ -445,7 +452,8 @@ struct ScoringView: View {
             isShowingScoreCorrection = true
         }
         .accessibilityIdentifier("scoreZone.\(team.rawValue)")
-        .accessibilityLabel("\(name), \(score) points. Tap to score, double tap and hold to correct.")
+        .accessibilityLabel(AccessibilityText.scoreZoneLabel(name: name, score: score, isServing: isServing))
+        .accessibilityHint(AccessibilityText.scoreZoneHint)
     }
 
 }

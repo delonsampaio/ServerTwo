@@ -3,7 +3,7 @@ import XCTest
 @MainActor
 final class ScoreZoneGestureUITests: XCTestCase {
     /// Parses N out of a score zone label of the form
-    /// "<name>, <N> points. Tap to score, ...".
+    /// "<name>, <N> points" (plus ", serving" for the serving team).
     private func score(of zone: XCUIElement) -> Int {
         let label = zone.label
         guard let comma = label.range(of: ", ") else { return -1 }

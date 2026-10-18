@@ -280,6 +280,10 @@ Empty state only: no saved players existed, so no rows were audited (see ManageP
 | CancelMatchPrompt@AXXL | textClipped | Confirm Cancel Match | Text clipped | Text of this SwiftUI.AccessibilityNode may be clipped at larger Dynamic Type sizes. |
 | CancelMatchPrompt@AXXL | textClipped | label:Current game 0 – 0 | Text clipped | Text of this SwiftUI.AccessibilityNode may be clipped at larger Dynamic Type sizes. |
 
+## Task 4 note (VoiceOver labels, values and focus)
+
+Audit re-run after Task 4: 113 issues (Task 2: 122). Per screen: Onboarding 8, Home 2, HomeWithMatch 3, HomeWithMatchAndMe 6 (10), MatchSetup 10, CoinFlip 5, Scoring 16, CancelMatchPrompt 8, History 5, MatchDetail 16, Settings 7, ManagePlayers 0, ManagePlayersWithRows 3 (8), HowToPlay 5, Paywall 4, Scoring@AXXL 14, CancelMatchPrompt@AXXL 1. The baseline reported no `sufficientElementDescription` or `trait` items, so Task 4 removed none of those; the drops are on the Home screen with a saved Me player (the recent-form strip is now one element, so its per-letter contrast/Dynamic Type rows are gone, and `WinStreak`/`RecentForm` no longer appear) and on ManagePlayersWithRows (most rows are reported as "(no element)", so part of that drop is attribution, and the avatar rows wobble by +/- 1 between runs). VoiceOver wording and focus are not measured by the audit; they are on the device-check list.
+
 ## Observations
 
 These are judgements from reading the log only; nothing was visually verified on a device yet. Verify each before fixing.

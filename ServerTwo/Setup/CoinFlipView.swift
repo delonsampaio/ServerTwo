@@ -35,6 +35,10 @@ struct CoinFlipView: View {
     /// `coinRotation` animates, landing on the actual outcome exactly when
     /// the spin stops.
     @State private var displayedTeam: Team?
+    // Moves VoiceOver to "Begin Match" once a result exists. Set from the
+    // button's `onAppear`, not from `settle(on:)`: the button is inserted by
+    // the same state change and is not in the accessibility tree yet.
+    @AccessibilityFocusState private var beginMatchFocused: Bool
 
     var body: some View {
         AdaptiveScroll {
@@ -72,6 +76,8 @@ struct CoinFlipView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                         .accessibilityIdentifier("Begin Match")
+                        .accessibilityFocused($beginMatchFocused)
+                        .onAppear { beginMatchFocused = true }
                     } else {
                         Button("Flip Coin") {
                             flip()
@@ -173,6 +179,8 @@ struct CoinFlipView: View {
             }
         }
         .rotation3DEffect(.degrees(coinRotation), axis: (x: 0, y: 1, z: 0))
+        // Decorative: the result is spoken through the "serves first" line.
+        .accessibilityHidden(true)
         .sensoryFeedback(.impact, trigger: result) { oldValue, newValue in
             newValue != nil
         }
@@ -212,6 +220,8 @@ struct CoinFlipView: View {
     private func settle(on team: Team) {
         result = team
         displayedTeam = team
+        let name = team == .teamA ? setup.resolvedTeamAName : setup.resolvedTeamBName
+        VoiceOverAnnouncement.post("\(name) serves first")
     }
 }
 

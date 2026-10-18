@@ -93,6 +93,7 @@ struct ManagePlayersView: View {
                     Image(systemName: "plus")
                 }
                 .accessibilityIdentifier("Add Player")
+                .accessibilityLabel("Add Player")
             }
         }
         .task { loadPlayers() }
@@ -122,6 +123,7 @@ struct ManagePlayersView: View {
                     VStack(spacing: 16) {
                         Text("Rename Player")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         TextField("Name", text: $renameText)
                             .textFieldStyle(.roundedBorder)
                             .accessibilityIdentifier("RenameField")
@@ -149,6 +151,7 @@ struct ManagePlayersView: View {
                 VStack(spacing: 16) {
                     Text("Add Player")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     TextField("Name", text: $newPlayerName)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("NewPlayerField")
@@ -190,6 +193,8 @@ struct ManagePlayersView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("PhotoPicker.\(player.name)")
+        // The avatar alone would read as just the player's initial.
+        .accessibilityLabel("Change photo for \(player.name)")
         .contextMenu {
             if player.photoData != nil {
                 Button("Remove Photo", role: .destructive) {
@@ -238,6 +243,7 @@ struct ManagePlayersView: View {
             .buttonStyle(PillButtonStyle())
             .fixedSize()
             .accessibilityIdentifier("Rename.\(player.name)")
+            .accessibilityLabel("Rename \(player.name)")
             if !player.isMe {
                 Button("Set as Me") {
                     setMe(player)
@@ -245,6 +251,7 @@ struct ManagePlayersView: View {
                 .buttonStyle(PillButtonStyle())
                 .fixedSize()
                 .accessibilityIdentifier("SetMe.\(player.name)")
+                .accessibilityLabel("Set \(player.name) as Me")
             }
         }
     }
