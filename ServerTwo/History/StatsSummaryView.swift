@@ -39,18 +39,18 @@ struct StatsSummaryView: View {
                 }
                 .frame(maxWidth: .infinity)
             } else {
-            HStack(alignment: .top, spacing: 16) {
-                Spacer(minLength: 0)
-                statColumn(title: "Matches", value: "\(matches.count)")
-                if let mePlayer {
-                    let record = repository.personalRecord(for: mePlayer, in: matches)
-                    statDivider
-                    statColumn(title: "Your Record", value: "\(record.wins) - \(record.losses)")
-                    statDivider
-                    statColumn(title: "Points For/Against", value: "\(record.pointsFor) - \(record.pointsAgainst)")
+                HStack(alignment: .top, spacing: 16) {
+                    Spacer(minLength: 0)
+                    statColumn(title: "Matches", value: "\(matches.count)")
+                    if let mePlayer {
+                        let record = repository.personalRecord(for: mePlayer, in: matches)
+                        statDivider
+                        statColumn(title: "Your Record", value: "\(record.wins) - \(record.losses)")
+                        statDivider
+                        statColumn(title: "Points For/Against", value: "\(record.pointsFor) - \(record.pointsAgainst)")
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
-            }
             }
         }
         .padding(.vertical, 8)

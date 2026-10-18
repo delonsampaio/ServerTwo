@@ -162,7 +162,7 @@ struct MatchDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(match.completedAt, style: .date)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
             }
             AdaptiveStack(verticalAlignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
@@ -178,7 +178,7 @@ struct MatchDetailView: View {
                 if let matchMetadataText {
                     Text(matchMetadataText)
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
                 }
             }
         }
@@ -246,7 +246,7 @@ struct MatchDetailView: View {
                                 .frame(width: scorerDotSize, height: scorerDotSize)
                             Text("\(point.scoringTeam == .teamA ? teamAName : teamBName) scored")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.primary)
                             Spacer()
                             Text("\(point.teamAScoreAfter)-\(point.teamBScoreAfter)")
                                 .font(.subheadline.weight(.semibold).monospacedDigit())
@@ -267,7 +267,7 @@ struct MatchDetailView: View {
         VStack(alignment: alignment, spacing: 2) {
             Text(name)
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
             Text("\(score)")

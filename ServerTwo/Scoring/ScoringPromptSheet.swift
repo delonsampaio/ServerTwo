@@ -329,10 +329,10 @@ struct ScoringPromptSheet: View {
                     completedGameCount: completedGameCount
                 ))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 Text("This can't be undone.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
             }
             .multilineTextAlignment(.center)
             // Stacked, not side by side: "Cancel Match" is long enough that

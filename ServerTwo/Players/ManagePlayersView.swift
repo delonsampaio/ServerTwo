@@ -225,28 +225,24 @@ struct ManagePlayersView: View {
     // pill chrome, so two of them sitting next to each other read as distinct
     // tappable buttons instead of one run-on line of blue text.
     // `.fixedSize()` keeps a longer name from squeezing these into
-    // wrapping/truncating. `PillButtonLabel` draws the same small pill but
+    // wrapping/truncating. `PillButtonStyle` draws the same small pill but
     // gives it a 44 pt tall tap area without growing the row (it replaces
-    // `.bordered` + `.controlSize(.small)`, which can't do that; `.plain` is
-    // the same kind of explicit non-default style).
+    // `.bordered` + `.controlSize(.small)`, which can't do that; it is the
+    // same kind of explicit non-default style).
     private func actionButtons(for player: SavedPlayer) -> some View {
         AdaptiveStack(verticalAlignment: .leading, spacing: 8) {
-            Button {
+            Button("Rename") {
                 renameText = player.name
                 renamingPlayer = player
-            } label: {
-                PillButtonLabel(title: "Rename")
             }
-            .pillButtonLayout()
+            .buttonStyle(PillButtonStyle())
             .fixedSize()
             .accessibilityIdentifier("Rename.\(player.name)")
             if !player.isMe {
-                Button {
+                Button("Set as Me") {
                     setMe(player)
-                } label: {
-                    PillButtonLabel(title: "Set as Me")
                 }
-                .pillButtonLayout()
+                .buttonStyle(PillButtonStyle())
                 .fixedSize()
                 .accessibilityIdentifier("SetMe.\(player.name)")
             }

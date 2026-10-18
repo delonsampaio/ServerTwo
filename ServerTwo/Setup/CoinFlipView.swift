@@ -93,7 +93,7 @@ struct CoinFlipView: View {
                 VStack(spacing: 12) {
                     Text("Already spun a paddle?")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
                     AdaptiveStack(spacing: 12) {
                         // `.frame(maxWidth: .infinity)` on the label (not the
                         // Button itself) — applied to the Button directly it

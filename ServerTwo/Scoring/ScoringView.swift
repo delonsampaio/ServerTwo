@@ -391,7 +391,7 @@ struct ScoringView: View {
 
             Text("Tap to Score")
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 // Wraps at accessibility sizes; never squeezed into a truncation.
                 .fixedSize(horizontal: false, vertical: true)

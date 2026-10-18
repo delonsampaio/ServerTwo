@@ -126,12 +126,10 @@ struct HomeView: View {
                     // failed decode should silently omit the button rather
                     // than offer a rematch that can't actually be built.
                     if let request = RematchRequest(match: match) {
-                        Button {
+                        Button("Rematch") {
                             onRematch(request)
-                        } label: {
-                            PillButtonLabel(title: "Rematch")
                         }
-                        .pillButtonLayout()
+                        .buttonStyle(PillButtonStyle())
                         .accessibilityIdentifier("Rematch")
                     }
                     // Lives here (not its own card below) once Pro is
@@ -140,8 +138,7 @@ struct HomeView: View {
                     // needed, when it already has a header row with room.
                     if activeMatchController.proUnlocked {
                         MatchRecapShareButton(match: match)
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                            .buttonStyle(PillButtonStyle())
                     }
                 }
             }
@@ -250,9 +247,9 @@ struct HomeView: View {
                             selectedQuickStartPlayers = []
                             onQuickStart(QuickStartRequest(players: players))
                         } label: {
-                            PillButtonLabel(title: "Start (\(selectedQuickStartPlayers.count))")
+                            Text("Start (\(selectedQuickStartPlayers.count))")
                         }
-                        .pillButtonLayout()
+                        .buttonStyle(PillButtonStyle())
                         .accessibilityIdentifier("Start Quick Start Selection")
                     }
                 }
