@@ -10,7 +10,7 @@ import XCTest
 /// match an explicit `knownFalsePositives` entry fail the test.
 ///
 /// Log line format (one line per issue):
-/// `A11Y-AUDIT|<screen>|<auditType>|<element identifier or label>|<compactDescription>`
+/// `A11Y-AUDIT|<screen>|<auditType>|<element identifier or label>|<compactDescription>|<detailedDescription>`
 /// and one `A11Y-AUDIT-SUMMARY|<screen>|<count>` line per audit call.
 ///
 /// If an audit call itself throws (as opposed to reporting issues), the test
@@ -22,18 +22,25 @@ final class AccessibilityAuditUITests: XCTestCase {
     private let strict = false
 
     /// One entry per audit issue that is understood to be a false positive.
-    /// Only consulted when `strict == true`. Each entry must say why.
+    /// Only consulted when `strict == true`. An issue is ignored only when it
+    /// matches ALL of `screen`, `auditType`, `element` and `descriptionContains`.
+    /// Each entry must say why.
     private struct KnownFalsePositive {
         let screen: String
         let auditType: String
         let element: String
+        /// Substring of the issue's compact description (for example
+        /// "Contrast failed"), so a different problem on the same element is
+        /// not hidden by an entry for another one.
+        let descriptionContains: String
         /// Why this issue is a false positive.
         let reason: String
     }
 
     private let knownFalsePositives: [KnownFalsePositive] = [
         // Intentionally empty while report-only. Add entries (each with a
-        // `reason`) when a finding is verified to be a false positive.
+        // `descriptionContains` and a `reason`) when a finding is verified to
+        // be a false positive.
     ]
 
     /// Every issue recorded during this test run, as the printed log lines.
@@ -41,13 +48,25 @@ final class AccessibilityAuditUITests: XCTestCase {
 
     // MARK: - Harness
 
-    private func audit(_ app: XCUIApplication, screen: String) throws {
+    /// Runs the audit on the current screen. `anchor` is an element that must
+    /// be present and hittable before auditing, then a short fixed settle
+    /// lets transitions and animations finish. The settle lives only here so
+    /// every audit gets the same treatment.
+    private func audit(_ app: XCUIApplication, screen: String, anchor: XCUIElement) throws {
+        let ready = expectation(
+            for: NSPredicate(format: "exists == true AND isHittable == true"),
+            evaluatedWith: anchor
+        )
+        wait(for: [ready], timeout: 5)
+        Thread.sleep(forTimeInterval: 0.5)
+
         var countForScreen = 0
         try app.performAccessibilityAudit { [self] issue in
             let type = Self.name(for: issue.auditType)
             let elementID = Self.elementDescription(issue.element)
             let description = Self.sanitize(issue.compactDescription)
-            let line = "A11Y-AUDIT|\(screen)|\(type)|\(elementID)|\(description)"
+            let detailed = Self.sanitize(issue.detailedDescription)
+            let line = "A11Y-AUDIT|\(screen)|\(type)|\(elementID)|\(description)|\(detailed)"
             recordedIssues.append(line)
             countForScreen += 1
             print(line)
@@ -55,6 +74,7 @@ final class AccessibilityAuditUITests: XCTestCase {
             if !strict { return true }
             return knownFalsePositives.contains {
                 $0.screen == screen && $0.auditType == type && $0.element == elementID
+                    && description.contains($0.descriptionContains)
             }
         }
         let summary = "A11Y-AUDIT-SUMMARY|\(screen)|\(countForScreen)"
@@ -114,8 +134,22 @@ final class AccessibilityAuditUITests: XCTestCase {
     }
 
     /// Play tab -> Start Match -> the coin-flip ("First Serve") screen.
-    private func openCoinFlip(_ app: XCUIApplication) {
+    private func openCoinFlip(_ app: XCUIApplication, teamA: String? = nil, teamB: String? = nil) {
         app.tabBars.buttons["Play"].tap()
+        // Names (doubles mode, one field per team) create saved players when
+        // the match finishes; see SavedPlayersUITests.
+        if let teamA {
+            let field = app.textFields.matching(identifier: "Team A Player Name").firstMatch
+            scrollUntilVisible(field, in: app)
+            field.tap()
+            field.typeText(teamA)
+        }
+        if let teamB {
+            let field = app.textFields.matching(identifier: "Team B Player Name").firstMatch
+            scrollUntilVisible(field, in: app)
+            field.tap()
+            field.typeText(teamB)
+        }
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
@@ -133,8 +167,8 @@ final class AccessibilityAuditUITests: XCTestCase {
 
     /// Plays one full one-game match to 11 and confirms finishing it, as
     /// `GoldenPathUITests` does. Leaves the app on the Play tab's setup screen.
-    private func playAndFinishOneMatch(_ app: XCUIApplication) {
-        openCoinFlip(app)
+    private func playAndFinishOneMatch(_ app: XCUIApplication, teamA: String? = nil, teamB: String? = nil) {
+        openCoinFlip(app, teamA: teamA, teamB: teamB)
         beginMatchFromCoinFlip(app)
         let teamAZone = app.buttons["scoreZone.teamA"]
         let finishButton = app.buttons["Finish Match"]
@@ -146,17 +180,20 @@ final class AccessibilityAuditUITests: XCTestCase {
         finishButton.tap()
         // Wrapper + inner Button both expose this identifier; see GoldenPathUITests.
         app.buttons["Confirm Finish"].firstMatch.tap()
+        // Wait for the match to actually end before navigating anywhere else.
+        let finished = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: finishButton)
+        wait(for: [finished], timeout: 5)
     }
 
     /// Audits the live scoring screen, then the Cancel Match prompt, then
     /// taps "Keep Playing". `suffix` distinguishes screen names between runs.
     private func auditScoringAndCancelPrompt(_ app: XCUIApplication, suffix: String = "") throws {
-        try audit(app, screen: "Scoring" + suffix)
+        try audit(app, screen: "Scoring" + suffix, anchor: app.buttons["scoreZone.teamA"])
 
         app.buttons["Cancel Match"].tap()
         let keepPlaying = app.buttons["Prompt.KeepPlaying"]
         XCTAssertTrue(keepPlaying.waitForExistence(timeout: 3))
-        try audit(app, screen: "CancelMatchPrompt" + suffix)
+        try audit(app, screen: "CancelMatchPrompt" + suffix, anchor: keepPlaying)
         keepPlaying.tap()
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: keepPlaying)
         waitForExpectations(timeout: 3)
@@ -167,20 +204,20 @@ final class AccessibilityAuditUITests: XCTestCase {
     func testHome() throws {
         let app = launchApp()
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 3))
-        try audit(app, screen: "Home")
+        try audit(app, screen: "Home", anchor: app.buttons["New Match"])
     }
 
     func testMatchSetup() throws {
         let app = launchApp()
         app.tabBars.buttons["Play"].tap()
         XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 3))
-        try audit(app, screen: "MatchSetup")
+        try audit(app, screen: "MatchSetup", anchor: app.navigationBars.firstMatch)
     }
 
     func testCoinFlip() throws {
         let app = launchApp()
         openCoinFlip(app)
-        try audit(app, screen: "CoinFlip")
+        try audit(app, screen: "CoinFlip", anchor: app.buttons["Flip Coin"])
     }
 
     func testScoring() throws {
@@ -197,7 +234,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         app.tabBars.buttons["History"].tap()
         let row = app.staticTexts["Team A vs Team B"]
         XCTAssertTrue(row.waitForExistence(timeout: 3))
-        try audit(app, screen: "History")
+        try audit(app, screen: "History", anchor: row)
 
         row.tap()
         // The detail screen replaces the list; give it a moment to settle.
@@ -205,7 +242,13 @@ final class AccessibilityAuditUITests: XCTestCase {
             app.navigationBars.buttons.firstMatch.waitForExistence(timeout: 3),
             "Match detail should push a navigation bar with a back button"
         )
-        try audit(app, screen: "MatchDetail")
+        try audit(app, screen: "MatchDetail", anchor: app.navigationBars.buttons.firstMatch)
+
+        // Home with a finished match in history: Last Match card, quick-start
+        // row, matches-played card and the Home unlock banner. (No saved
+        // "Me" here, so the Your Record card is covered in testPlayersAndSettings.)
+        app.tabBars.buttons["Home"].tap()
+        try audit(app, screen: "HomeWithMatch", anchor: app.buttons["New Match"])
     }
 
     func testPlayersAndSettings() throws {
@@ -213,11 +256,32 @@ final class AccessibilityAuditUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         let managePlayers = app.buttons["Manage Players"]
         XCTAssertTrue(managePlayers.waitForExistence(timeout: 3))
-        try audit(app, screen: "Settings")
+        try audit(app, screen: "Settings", anchor: managePlayers)
 
         managePlayers.tap()
         XCTAssertTrue(app.navigationBars["Manage Players"].waitForExistence(timeout: 3))
-        try audit(app, screen: "ManagePlayers")
+        try audit(app, screen: "ManagePlayers", anchor: app.navigationBars["Manage Players"])
+
+        // Pop back to Settings' root so the tab shows it again later.
+        app.navigationBars.buttons.firstMatch.tap()
+
+        // Create two saved players (a named match saves both), set one as Me,
+        // then audit the populated list and the Home record card.
+        playAndFinishOneMatch(app, teamA: "Alice", teamB: "Bob")
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["Manage Players"].tap()
+        let setAliceAsMe = app.buttons["SetMe.Alice"]
+        XCTAssertTrue(setAliceAsMe.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["SetMe.Bob"].exists, "Both players should be saved")
+        setAliceAsMe.tap()
+        let aliceRow = app.staticTexts["Me.Alice"]
+        XCTAssertTrue(aliceRow.waitForExistence(timeout: 3))
+        try audit(app, screen: "ManagePlayersWithRows", anchor: aliceRow)
+
+        app.tabBars.buttons["Home"].tap()
+        let record = app.staticTexts["YourRecordValue"]
+        XCTAssertTrue(record.waitForExistence(timeout: 3), "Home should show the record card once Me is set")
+        try audit(app, screen: "HomeWithMatchAndMe", anchor: record)
     }
 
     func testHowToPlay() throws {
@@ -227,7 +291,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         scrollUntilVisible(link, in: app)
         link.tap()
         XCTAssertTrue(app.navigationBars["How to Play"].waitForExistence(timeout: 3))
-        try audit(app, screen: "HowToPlay")
+        try audit(app, screen: "HowToPlay", anchor: app.navigationBars["How to Play"])
     }
 
     func testOnboarding() throws {
@@ -236,7 +300,8 @@ final class AccessibilityAuditUITests: XCTestCase {
         let presented = app.buttons["Done"].waitForExistence(timeout: 5)
             || app.buttons["Skip"].waitForExistence(timeout: 1)
         XCTAssertTrue(presented, "Onboarding should be presented after -UITest-ResetState")
-        try audit(app, screen: "Onboarding")
+        let onboardingAnchor = app.buttons["Done"].exists ? app.buttons["Done"] : app.buttons["Skip"]
+        try audit(app, screen: "Onboarding", anchor: onboardingAnchor)
     }
 
     func testPaywall() throws {
@@ -248,11 +313,12 @@ final class AccessibilityAuditUITests: XCTestCase {
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
+        let unlockButton = app.buttons["Unlock Pro — $1.99"]
         XCTAssertTrue(
-            app.buttons["Unlock Pro — $1.99"].waitForExistence(timeout: 3),
+            unlockButton.waitForExistence(timeout: 3),
             "Starting a second match should present the paywall"
         )
-        try audit(app, screen: "Paywall")
+        try audit(app, screen: "Paywall", anchor: unlockButton)
     }
 
     func testScoringAtAccessibilitySize() throws {
@@ -275,10 +341,10 @@ final class AccessibilityAuditUITests: XCTestCase {
         let largeSubtitle = app.staticTexts["FirstServeResult"]
         XCTAssertTrue(largeSubtitle.waitForExistence(timeout: 3))
         let largeHeight = largeSubtitle.frame.height
-        XCTAssertGreaterThan(
+        XCTAssertGreaterThanOrEqual(
             largeHeight,
-            defaultHeight,
-            "Accessibility XXL should enlarge the subtitle (default \(defaultHeight), large \(largeHeight)); the content-size launch argument did not apply"
+            defaultHeight * 1.5,
+            "Accessibility XXL should enlarge the subtitle at least 1.5x (default \(defaultHeight), large \(largeHeight)); the content-size launch argument did not apply"
         )
         print("A11Y-AUDIT-SIZECHECK|FirstServeResult height default=\(defaultHeight) axxl=\(largeHeight)")
 
