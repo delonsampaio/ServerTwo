@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class ScoreCorrectionUITests: XCTestCase {
     func testTwoScoreCorrectionGatesSaveOnReachabilityAndAppliesBothScoresAtOnce() throws {
         let app = XCUIApplication()

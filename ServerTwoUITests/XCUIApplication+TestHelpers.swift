@@ -3,6 +3,7 @@ import XCTest
 /// Shared XCUITest helpers. These were previously duplicated verbatim as
 /// `private` copies in both `GoldenPathUITests` and `PaywallTriggerUITests`;
 /// an `XCTestCase` extension keeps every existing call site unchanged.
+@MainActor
 extension XCTestCase {
     /// Dismisses the onboarding sheet if this launch presented it, so a test
     /// doesn't depend on whether a previous run already marked it seen.

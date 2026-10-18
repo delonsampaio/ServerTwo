@@ -4,6 +4,7 @@ import XCTest
 /// sheet, not system alerts. The correction path is the risky one: its Save
 /// completes the game while the correction sheet is still on screen, so the
 /// Game Over prompt must wait for that sheet's dismissal and then appear.
+@MainActor
 final class ScoringPromptsUITests: XCTestCase {
     func testGameOverAfterCorrectionThenCancelMatchPrompt() throws {
         let app = XCUIApplication()

@@ -3,6 +3,7 @@ import SwiftData
 @testable import ServerTwo
 import PickleballKit
 
+@MainActor
 final class RematchRequestTests: XCTestCase {
     private func makeInMemoryContext() throws -> ModelContext {
         ModelContext(try PersistenceContainer.makeInMemoryContainer())

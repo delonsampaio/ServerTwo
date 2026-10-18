@@ -2,6 +2,7 @@ import XCTest
 @testable import ServerTwo
 import PickleballKit
 
+@MainActor
 final class ScoringPromptSheetTests: XCTestCase {
     private func title(winner: Team?, a: Int, b: Int, game: Int = 1) -> String {
         ScoringPromptSheet.gameOverTitle(
@@ -171,6 +172,7 @@ final class ScoringPromptSheetTests: XCTestCase {
     }
 }
 
+@MainActor
 final class SideSwitchPromptTrackerTests: XCTestCase {
     func testFreshMatchPromptsOnceWhenTheFlagFirstSets() {
         var tracker = SideSwitchPromptTracker()

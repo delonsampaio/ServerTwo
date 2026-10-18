@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class GoldenPathUITests: XCTestCase {
     func testStartMatchScoreToWinAndAppearInHistory() throws {
         let app = XCUIApplication()

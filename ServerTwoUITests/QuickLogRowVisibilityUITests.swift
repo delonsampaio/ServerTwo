@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class QuickLogRowVisibilityUITests: XCTestCase {
     func testTypingDigitsNeverPrematurelyRevealsTheNextRowAndEditingAnEarlierRowHidesButPreservesLaterRows() throws {
         // A 3s debounce makes the "Game 2 must not appear yet" check below

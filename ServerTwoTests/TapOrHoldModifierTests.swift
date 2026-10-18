@@ -1,6 +1,7 @@
 import XCTest
 @testable import ServerTwo
 
+@MainActor
 final class TapOrHoldModifierTests: XCTestCase {
     private func isBeyond(_ width: CGFloat, _ height: CGFloat) -> Bool {
         TapOrHoldModifier.isMovementBeyondTapThreshold(translation: CGSize(width: width, height: height))

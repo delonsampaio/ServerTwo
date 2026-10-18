@@ -2,6 +2,7 @@ import XCTest
 @testable import ServerTwo
 import PickleballKit
 
+@MainActor
 final class ScoreCorrectionSheetTests: XCTestCase {
     private let elevenWinByTwo = GameConfiguration(winningScore: .eleven, winByTwo: true)
 

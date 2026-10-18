@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class ScoreZoneGestureUITests: XCTestCase {
     /// Parses N out of a score zone label of the form
     /// "<name>, <N> points. Tap to score, ...".

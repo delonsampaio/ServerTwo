@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class PaywallTriggerUITests: XCTestCase {
     /// Plays and finishes one full match (start → flip coin → begin → score
     /// to an 11-point win → confirm finish) from a fresh MatchSetupView,

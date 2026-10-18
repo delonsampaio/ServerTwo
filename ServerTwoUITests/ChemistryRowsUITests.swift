@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class ChemistryRowsUITests: XCTestCase {
     func testChemistryRowsAppearForOtherPlayerWhenMeIsSetAndOmittedOnOwnProfile() throws {
         let app = XCUIApplication()

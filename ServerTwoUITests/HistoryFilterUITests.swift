@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class HistoryFilterUITests: XCTestCase {
     func testFilteringHistoryByPlayerShowsOnlyTheirMatches() throws {
         let app = XCUIApplication()

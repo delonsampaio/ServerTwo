@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class QuickLogUITests: XCTestCase {
     func testLoggingAFinalScoreSavesTheMatchWithNoPointLogAndResetsSetupFields() throws {
         let app = XCUIApplication()

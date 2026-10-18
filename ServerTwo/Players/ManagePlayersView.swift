@@ -30,6 +30,10 @@ struct ManagePlayersView: View {
                 )
             } else {
                 ForEach(players, id: \.id) { player in
+                    // Built here, on the main actor: PhotosPicker's label
+                    // closure is @Sendable and nonisolated, so it can't
+                    // construct this view (or capture `player`) itself.
+                    let avatar = PlayerAvatarView(player: player, size: 44)
                     HStack {
                         // A write-only PhotosPicker: tapping the avatar
                         // opens the picker directly (no separate "Edit
@@ -46,7 +50,7 @@ struct ManagePlayersView: View {
                             ),
                             matching: .images
                         ) {
-                            PlayerAvatarView(player: player, size: 44)
+                            avatar
                                 .overlay(Circle().strokeBorder(.primary.opacity(0.12), lineWidth: 1))
                         }
                         .buttonStyle(.plain)

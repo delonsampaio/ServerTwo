@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class SavedPlayersUITests: XCTestCase {
     func testPlayingAMatchSavesPlayerNamesAsSuggestionsForTheNextMatch() throws {
         let app = XCUIApplication()
