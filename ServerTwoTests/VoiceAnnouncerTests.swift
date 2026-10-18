@@ -10,6 +10,10 @@ final class VoiceAnnouncerTests: XCTestCase {
         func stop() { stopCount += 1 }
     }
 
+    @MainActor private final class PostedBox {
+        var posted: [String] = []
+    }
+
     @MainActor private final class Flag {
         var value: Bool
         init(_ value: Bool) { self.value = value }
@@ -36,11 +40,52 @@ final class VoiceAnnouncerTests: XCTestCase {
         XCTAssertTrue(output.spoken.isEmpty)
     }
 
-    func testVoiceOverRunningSpeaksNothing() {
+    func testWithVoiceOverRunningTheLinesAreAnnouncedNotSpoken() {
         let output = RecordingOutput()
-        let announcer = VoiceAnnouncer(output: output, isEnabled: { true }, isVoiceOverRunning: { true })
+        let box = PostedBox()
+        let announcer = VoiceAnnouncer(
+            output: output, isEnabled: { true }, isVoiceOverRunning: { true },
+            postAnnouncement: { box.posted.append($0) }
+        )
+        announcer.announce(["Side out.", "Fred serving.", "2, 4, 1."])
+        XCTAssertTrue(output.spoken.isEmpty, "The synthesizer never speaks under VoiceOver")
+        XCTAssertEqual(box.posted, ["Side out. Fred serving. 2, 4, 1."])
+    }
+
+    func testWithVoiceOverRunningAndTheToggleOffTheLinesAreStillAnnounced() {
+        let output = RecordingOutput()
+        let box = PostedBox()
+        let announcer = VoiceAnnouncer(
+            output: output, isEnabled: { false }, isVoiceOverRunning: { true },
+            postAnnouncement: { box.posted.append($0) }
+        )
         announcer.announce(["4, 2, 1."])
         XCTAssertTrue(output.spoken.isEmpty)
+        XCTAssertEqual(box.posted, ["4, 2, 1."])
+    }
+
+    func testWithVoiceOverOffAndTheToggleOffNothingIsSpokenOrPosted() {
+        let output = RecordingOutput()
+        let box = PostedBox()
+        let announcer = VoiceAnnouncer(
+            output: output, isEnabled: { false }, isVoiceOverRunning: { false },
+            postAnnouncement: { box.posted.append($0) }
+        )
+        announcer.announce(["4, 2, 1."])
+        XCTAssertTrue(output.spoken.isEmpty)
+        XCTAssertTrue(box.posted.isEmpty)
+    }
+
+    func testEmptyLinesPostNothingUnderVoiceOver() {
+        let output = RecordingOutput()
+        let box = PostedBox()
+        let announcer = VoiceAnnouncer(
+            output: output, isEnabled: { true }, isVoiceOverRunning: { true },
+            postAnnouncement: { box.posted.append($0) }
+        )
+        announcer.announce([])
+        XCTAssertTrue(output.spoken.isEmpty)
+        XCTAssertTrue(box.posted.isEmpty)
     }
 
     func testTheToggleIsReadAtAnnounceTimeNotCapturedOnce() {
