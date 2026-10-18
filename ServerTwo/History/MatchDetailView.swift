@@ -5,6 +5,14 @@ struct MatchDetailView: View {
     let match: MatchRecord
     let onRematch: (RematchRequest) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    // 36 pt, 24 pt and 6 pt at the default text size; they scale with Dynamic
+    // Type (the score digits stop at 52 pt and never wrap).
+    @ScaledMetric(relativeTo: .largeTitle) private var gameScoreSize: CGFloat = 36
+    @ScaledMetric(relativeTo: .caption) private var sequenceColumnWidth: CGFloat = 24
+    @ScaledMetric(relativeTo: .caption) private var scorerDotSize: CGFloat = 6
+    private let gameScoreSizeCap: CGFloat = 52
+
     private var teamAName: String {
         (match.teamSides ?? []).first { $0.team == .teamA }?.displayName ?? "Team A"
     }
@@ -148,15 +156,15 @@ struct MatchDetailView: View {
 
     private var resultCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveStack(horizontalAlignment: .firstTextBaseline, verticalAlignment: .leading, spacing: 8) {
                 Text("\(teamAName) vs \(teamBName)")
                     .font(.title2.bold())
-                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Text(match.completedAt, style: .date)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            HStack(spacing: 10) {
+            AdaptiveStack(verticalAlignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "trophy.fill")
                     Text("Winner: \(match.winningTeam == .teamA ? teamAName : teamBName)")
@@ -181,7 +189,7 @@ struct MatchDetailView: View {
 
     private func gameCard(_ game: GameRecord) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 6) {
+            AdaptiveStack(verticalAlignment: .leading, spacing: 6) {
                 Text("Game \(game.gameNumber)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -232,10 +240,10 @@ struct MatchDetailView: View {
                             Text("\(point.sequenceNumber)")
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.tertiary)
-                                .frame(width: 24, alignment: .leading)
+                                .frame(width: sequenceColumnWidth, alignment: .leading)
                             Circle()
                                 .fill(point.scoringTeam == .teamA ? Color.accentColor : Color.orange)
-                                .frame(width: 6, height: 6)
+                                .frame(width: scorerDotSize, height: scorerDotSize)
                             Text("\(point.scoringTeam == .teamA ? teamAName : teamBName) scored")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -260,11 +268,12 @@ struct MatchDetailView: View {
             Text(name)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
             Text("\(score)")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .font(.system(size: min(gameScoreSize, gameScoreSizeCap), weight: .bold, design: .rounded))
                 .monospacedDigit()
+                .lineLimit(1)
                 .foregroundStyle(won ? .primary : .secondary)
         }
         .frame(maxWidth: .infinity, alignment: alignment == .leading ? .leading : .trailing)

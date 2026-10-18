@@ -17,48 +17,58 @@ struct FinishMatchSheet: View {
     let onConfirm: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    // Today's sizes at the default text size; they scale with Dynamic Type.
+    @ScaledMetric(relativeTo: .body) private var badgeScale: CGFloat = 1
+    @ScaledMetric(relativeTo: .largeTitle) private var scoreDigitSize: CGFloat = 36
+    @ScaledMetric(relativeTo: .largeTitle) private var dividerHeight: CGFloat = 36
+    private let scoreDigitSizeCap: CGFloat = 56
+    private let badgeScaleCap: CGFloat = 1.4
 
     var body: some View {
-        VStack(spacing: 20) {
-            trophyBadge
-            Text("\(winningTeamName) Wins!")
-                .font(.title2.bold())
-                .multilineTextAlignment(.center)
-            scoreRow
-            // Full-width, equal-width action row (not small pills with
-            // empty space around them) — these are the two things a
-            // thumb needs to reach without looking closely right after a
-            // match ends. Native `.glass`/`.glassProminent` (not
-            // hand-drawn fills) for true Liquid Glass material; the
-            // `.frame(maxWidth: .infinity)` goes on each label, not the
-            // Button itself — on the Button it only widens the tap
-            // target, leaving the style's own background hugging the
-            // text.
-            HStack(spacing: 12) {
-                Button(role: .cancel) {
-                    dismiss()
-                } label: {
-                    Text("Cancel")
-                        .font(.headline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.glass)
+        AdaptiveScroll {
+            VStack(spacing: 20) {
+                trophyBadge
+                Text("\(winningTeamName) Wins!")
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
+                scoreRow
+                // Full-width, equal-width action row (not small pills with
+                // empty space around them) — these are the two things a
+                // thumb needs to reach without looking closely right after a
+                // match ends. Native `.glass`/`.glassProminent` (not
+                // hand-drawn fills) for true Liquid Glass material; the
+                // `.frame(maxWidth: .infinity)` goes on each label, not the
+                // Button itself — on the Button it only widens the tap
+                // target, leaving the style's own background hugging the
+                // text.
+                AdaptiveStack(spacing: 12) {
+                    Button(role: .cancel) {
+                        dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .font(.headline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.glass)
 
-                Button {
-                    onConfirm()
-                    dismiss()
-                } label: {
-                    Text("Confirm Finish")
-                        .font(.headline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                    Button {
+                        onConfirm()
+                        dismiss()
+                    } label: {
+                        Text("Confirm Finish")
+                            .font(.headline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(Color.accentColor)
+                    .accessibilityIdentifier("Confirm Finish")
                 }
-                .buttonStyle(.glassProminent)
-                .tint(Color.accentColor)
-                .accessibilityIdentifier("Confirm Finish")
+                .controlSize(.large)
             }
-            .controlSize(.large)
         }
         .padding()
         // An opaque elevated surface of our own — the sheet's own default
@@ -75,7 +85,7 @@ struct FinishMatchSheet: View {
                 .shadow(color: .black.opacity(0.5), radius: 24, y: -4)
                 .ignoresSafeArea()
         )
-        .presentationDetents([.height(320)])
+        .adaptiveSheetDetents(height: 320)
         .presentationBackground(.clear)
     }
 
@@ -84,9 +94,9 @@ struct FinishMatchSheet: View {
             Circle()
                 .fill(Color.yellow.opacity(0.15))
                 .overlay(Circle().strokeBorder(Color.yellow.opacity(0.3), lineWidth: 1))
-                .frame(width: 60, height: 60)
+                .frame(width: 60 * min(badgeScale, badgeScaleCap), height: 60 * min(badgeScale, badgeScaleCap))
             Image(systemName: "trophy.fill")
-                .font(.system(size: 28, weight: .bold))
+                .font(.system(size: 28 * min(badgeScale, badgeScaleCap), weight: .bold))
                 .foregroundStyle(.yellow)
         }
     }
@@ -104,7 +114,7 @@ struct FinishMatchSheet: View {
             teamScoreColumn(name: teamAName, value: isBestOfOne ? teamAScore : teamAGames, highlighted: winningTeam == .teamA)
             Rectangle()
                 .fill(.primary.opacity(0.12))
-                .frame(width: 1, height: 36)
+                .frame(width: 1, height: dividerHeight)
             teamScoreColumn(name: teamBName, value: isBestOfOne ? teamBScore : teamBGames, highlighted: winningTeam == .teamB)
         }
         .padding(.vertical, 14)
@@ -116,11 +126,13 @@ struct FinishMatchSheet: View {
         VStack(spacing: 4) {
             Text(name)
                 .font(.subheadline.weight(.medium))
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Text("\(value)")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .font(.system(size: min(scoreDigitSize, scoreDigitSizeCap), weight: .bold, design: .rounded))
                 .monospacedDigit()
+                .lineLimit(1)
                 .foregroundStyle(highlighted ? .primary : .secondary)
         }
         .frame(maxWidth: .infinity)

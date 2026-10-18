@@ -7,6 +7,9 @@ struct StatsSummaryView: View {
     let mePlayer: SavedPlayer?
     let repository: MatchRepository
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title3) private var dividerHeight: CGFloat = 32
+
     var body: some View {
         // Each column hugs its own content width (statColumn has no
         // `.frame(maxWidth: .infinity)`) instead of being forced into an
@@ -22,17 +25,33 @@ struct StatsSummaryView: View {
         // center-aligning the whole HStack let that taller column pull
         // its own number down out of line with the other two, reading as
         // randomly misaligned.
-        HStack(alignment: .top, spacing: 16) {
-            Spacer(minLength: 0)
-            statColumn(title: "Matches", value: "\(matches.count)")
-            if let mePlayer {
-                let record = repository.personalRecord(for: mePlayer, in: matches)
-                statDivider
-                statColumn(title: "Your Record", value: "\(record.wins) - \(record.losses)")
-                statDivider
-                statColumn(title: "Points For/Against", value: "\(record.pointsFor) - \(record.pointsAgainst)")
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Three columns side by side no longer fit at accessibility
+                // sizes, so they stack (without the dividers).
+                VStack(spacing: 12) {
+                    statColumn(title: "Matches", value: "\(matches.count)")
+                    if let mePlayer {
+                        let record = repository.personalRecord(for: mePlayer, in: matches)
+                        statColumn(title: "Your Record", value: "\(record.wins) - \(record.losses)")
+                        statColumn(title: "Points For/Against", value: "\(record.pointsFor) - \(record.pointsAgainst)")
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+            HStack(alignment: .top, spacing: 16) {
+                Spacer(minLength: 0)
+                statColumn(title: "Matches", value: "\(matches.count)")
+                if let mePlayer {
+                    let record = repository.personalRecord(for: mePlayer, in: matches)
+                    statDivider
+                    statColumn(title: "Your Record", value: "\(record.wins) - \(record.losses)")
+                    statDivider
+                    statColumn(title: "Points For/Against", value: "\(record.pointsFor) - \(record.pointsAgainst)")
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            }
         }
         .padding(.vertical, 8)
     }
@@ -43,7 +62,7 @@ struct StatsSummaryView: View {
     // where that default reads as too low-contrast to notice.
     private var statDivider: some View {
         Divider()
-            .frame(height: 32)
+            .frame(height: dividerHeight)
             .overlay(Color.primary.opacity(0.15))
     }
 
@@ -56,8 +75,8 @@ struct StatsSummaryView: View {
             Text(title)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.85)
         }
     }
 }

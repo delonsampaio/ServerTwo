@@ -29,13 +29,16 @@ struct OnboardingView: View {
     /// context, for an analogous reliability reason.
     let modelContext: ModelContext
     @State private var yourName: String = ""
+    // 64 pt and 32 pt at the default text size; they scale with Dynamic Type.
+    @ScaledMetric(relativeTo: .largeTitle) private var heroIconSize: CGFloat = 64
+    @ScaledMetric(relativeTo: .title2) private var featureIconWidth: CGFloat = 32
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
                     Image(systemName: "figure.pickleball")
-                        .font(.system(size: 64))
+                        .font(.system(size: heroIconSize))
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
                     Text("Welcome to Server Two")
@@ -112,7 +115,7 @@ struct OnboardingView: View {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(.tint)
-                .frame(width: 32)
+                .frame(width: featureIconWidth)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.subheadline.weight(.semibold))

@@ -15,6 +15,11 @@ struct ScoreCorrectionSheet: View {
     let onCommit: (_ teamA: Int, _ teamB: Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    // 64 pt at the default text size, scaling with Dynamic Type up to a cap
+    // so a two-digit score still fits its half-width card.
+    @ScaledMetric(relativeTo: .largeTitle) private var scoreDigitSize: CGFloat = 64
+    private let scoreDigitSizeCap: CGFloat = 88
     @State private var newTeamAScore: Int
     @State private var newTeamBScore: Int
 
@@ -91,19 +96,23 @@ struct ScoreCorrectionSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                // Team A left, Team B right — same fixed order as ScoringView.
-                HStack(spacing: 12) {
-                    scoreColumn(
-                        name: teamAName, original: currentTeamAScore, score: $newTeamAScore,
-                        idPrefix: "ScoreCorrection.TeamA"
-                    )
-                    scoreColumn(
-                        name: teamBName, original: currentTeamBScore, score: $newTeamBScore,
-                        idPrefix: "ScoreCorrection.TeamB"
-                    )
+            AdaptiveScroll {
+                VStack(spacing: 16) {
+                    // Team A left, Team B right — same fixed order as ScoringView.
+                    // Side by side at the default size; stacked at accessibility
+                    // sizes, where two columns of +/- buttons overflow the sheet.
+                    AdaptiveStack(spacing: 12) {
+                        scoreColumn(
+                            name: teamAName, original: currentTeamAScore, score: $newTeamAScore,
+                            idPrefix: "ScoreCorrection.TeamA"
+                        )
+                        scoreColumn(
+                            name: teamBName, original: currentTeamBScore, score: $newTeamBScore,
+                            idPrefix: "ScoreCorrection.TeamB"
+                        )
+                    }
+                    footer
                 }
-                footer
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -125,7 +134,7 @@ struct ScoreCorrectionSheet: View {
                 }
             }
         }
-        .presentationDetents([.height(360), .large])
+        .modifier(CorrectionSheetDetents())
         .presentationDragIndicator(.visible)
     }
 
@@ -140,12 +149,14 @@ struct ScoreCorrectionSheet: View {
         return VStack(spacing: 6) {
             Text(name)
                 .font(.headline.weight(.bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.65)
+                .multilineTextAlignment(.center)
 
             Text("\(value)")
-                .font(.system(size: 64, weight: .bold, design: .rounded))
+                .font(.system(size: min(scoreDigitSize, scoreDigitSizeCap), weight: .bold, design: .rounded))
                 .monospacedDigit()
+                .lineLimit(1)
                 .contentTransition(.numericText())
                 .foregroundStyle(isModified ? Color.accentColor : Color.primary)
                 .accessibilityLabel(name)
@@ -224,6 +235,25 @@ struct ScoreCorrectionSheet: View {
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, minHeight: 36)
+    }
+}
+
+/// This sheet already offers `.large` at the default text size, so it cannot
+/// use `adaptiveSheetDetents` (the policy adds `.large` only at accessibility
+/// sizes). At the default size it keeps exactly its two detents; at
+/// accessibility sizes it uses the scaled height plus `.large`.
+private struct CorrectionSheetDetents: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat = 360
+
+    func body(content: Content) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            content.presentationDetents(Set(
+                SheetDetentPolicy.detents(height: scaledHeight, isAccessibilitySize: true)
+            ))
+        } else {
+            content.presentationDetents([.height(360), .large])
+        }
     }
 }
 

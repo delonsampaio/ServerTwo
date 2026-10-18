@@ -99,6 +99,15 @@ struct ScoringPromptSheet: View {
     let onCancelMatch: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    // Today's sizes at the default text size; they scale with Dynamic Type.
+    // The digits and the badge stop growing at a cap so the card stays usable.
+    @ScaledMetric(relativeTo: .body) private var badgeScale: CGFloat = 1
+    @ScaledMetric(relativeTo: .largeTitle) private var scoreDigitSize: CGFloat = 64
+    @ScaledMetric(relativeTo: .largeTitle) private var dividerHeight: CGFloat = 52
+    private let badgeScaleCap: CGFloat = 1.4
+    private let scoreDigitSizeCap: CGFloat = 88
 
     // MARK: Copy (static so the wording is unit-testable)
 
@@ -172,28 +181,30 @@ struct ScoringPromptSheet: View {
     // MARK: Body
 
     var body: some View {
-        Group {
-            switch prompt {
-            case let .sideSwitch(_, direction, threshold, teamAName, teamBName, teamAScore, teamBScore):
-                sideSwitch(
-                    direction: direction, threshold: threshold,
-                    teamAName: teamAName, teamBName: teamBName,
-                    teamAScore: teamAScore, teamBScore: teamBScore
-                )
-            case let .gameOver(gameNumber, teamAName, teamBName, teamAScore, teamBScore, winner, teamAGames, teamBGames, firstServerName):
-                gameOver(
-                    gameNumber: gameNumber, teamAName: teamAName, teamBName: teamBName,
-                    teamAScore: teamAScore, teamBScore: teamBScore, winner: winner,
-                    teamAGames: teamAGames, teamBGames: teamBGames,
-                    firstServerName: firstServerName
-                )
-            case let .cancelMatch(teamAName, teamBName, teamAScore, teamBScore, teamAGames, teamBGames, completedGameCount):
-                cancelMatch(
-                    teamAName: teamAName, teamBName: teamBName,
-                    teamAScore: teamAScore, teamBScore: teamBScore,
-                    teamAGames: teamAGames, teamBGames: teamBGames,
-                    completedGameCount: completedGameCount
-                )
+        AdaptiveScroll {
+            Group {
+                switch prompt {
+                case let .sideSwitch(_, direction, threshold, teamAName, teamBName, teamAScore, teamBScore):
+                    sideSwitch(
+                        direction: direction, threshold: threshold,
+                        teamAName: teamAName, teamBName: teamBName,
+                        teamAScore: teamAScore, teamBScore: teamBScore
+                    )
+                case let .gameOver(gameNumber, teamAName, teamBName, teamAScore, teamBScore, winner, teamAGames, teamBGames, firstServerName):
+                    gameOver(
+                        gameNumber: gameNumber, teamAName: teamAName, teamBName: teamBName,
+                        teamAScore: teamAScore, teamBScore: teamBScore, winner: winner,
+                        teamAGames: teamAGames, teamBGames: teamBGames,
+                        firstServerName: firstServerName
+                    )
+                case let .cancelMatch(teamAName, teamBName, teamAScore, teamBScore, teamAGames, teamBGames, completedGameCount):
+                    cancelMatch(
+                        teamAName: teamAName, teamBName: teamBName,
+                        teamAScore: teamAScore, teamBScore: teamBScore,
+                        teamAGames: teamAGames, teamBGames: teamBGames,
+                        completedGameCount: completedGameCount
+                    )
+                }
             }
         }
         .padding()
@@ -210,7 +221,7 @@ struct ScoringPromptSheet: View {
                 .shadow(color: .black.opacity(0.5), radius: 24, y: -4)
                 .ignoresSafeArea()
         )
-        .presentationDetents([.height(detentHeight)])
+        .adaptiveSheetDetents(height: detentHeight)
         .presentationDragIndicator(.visible)
         .presentationBackground(.clear)
     }
@@ -250,8 +261,8 @@ struct ScoringPromptSheet: View {
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
             }
             .multilineTextAlignment(.center)
             dismissButton("Got It")
@@ -310,8 +321,8 @@ struct ScoringPromptSheet: View {
             VStack(spacing: 6) {
                 Text(Self.matchupLine(teamAName: teamAName, teamBName: teamBName))
                     .font(.body.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
                 Text(Self.cancelProgressSummary(
                     teamAScore: teamAScore, teamBScore: teamBScore,
                     teamAGames: teamAGames, teamBGames: teamBGames,
@@ -362,9 +373,9 @@ struct ScoringPromptSheet: View {
             Circle()
                 .fill(tint.opacity(0.15))
                 .overlay(Circle().strokeBorder(tint.opacity(0.3), lineWidth: 1))
-                .frame(width: 60, height: 60)
+                .frame(width: 60 * min(badgeScale, badgeScaleCap), height: 60 * min(badgeScale, badgeScaleCap))
             Image(systemName: systemName)
-                .font(.system(size: 28, weight: .bold))
+                .font(.system(size: 28 * min(badgeScale, badgeScaleCap), weight: .bold))
                 .foregroundStyle(tint)
         }
         .accessibilityHidden(true)
@@ -374,8 +385,8 @@ struct ScoringPromptSheet: View {
         Text(text)
             .font(.title2.bold())
             .multilineTextAlignment(.center)
-            .lineLimit(2)
-            .minimumScaleFactor(0.8)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+            .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.8)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -412,7 +423,7 @@ struct ScoringPromptSheet: View {
             scoreColumn(name: teamAName, value: teamAScore, highlighted: winner == .teamA)
             Rectangle()
                 .fill(.primary.opacity(0.12))
-                .frame(width: 1, height: 52)
+                .frame(width: 1, height: dividerHeight)
             scoreColumn(name: teamBName, value: teamBScore, highlighted: winner == .teamB)
         }
         .padding(.vertical, 12)
@@ -424,11 +435,13 @@ struct ScoringPromptSheet: View {
         VStack(spacing: 2) {
             Text(name)
                 .font(.subheadline.weight(.medium))
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Text("\(value)")
-                .font(.system(size: 64, weight: .bold, design: .rounded))
+                .font(.system(size: min(scoreDigitSize, scoreDigitSizeCap), weight: .bold, design: .rounded))
                 .monospacedDigit()
+                .lineLimit(1)
                 .foregroundStyle(highlighted ? .primary : .secondary)
         }
         .frame(maxWidth: .infinity)

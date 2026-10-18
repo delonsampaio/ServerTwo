@@ -341,7 +341,12 @@ struct MatchSetupView: View {
             } label: {
                 Text("Log Final Score Instead")
                     .font(.subheadline.weight(.medium))
+                    // Grows the tap area to 44 pt tall without growing the
+                    // layout: the vertical padding is taken back below.
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
             }
+            .padding(.vertical, -12)
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
             .padding(.bottom, 4)
@@ -923,12 +928,15 @@ fileprivate struct QuickLogRow: View {
     @Binding var teamAText: String
     @Binding var teamBText: String
 
+    // 56 pt at the default text size; scales with Dynamic Type.
+    @ScaledMetric(relativeTo: .caption) private var gameLabelWidth: CGFloat = 56
+
     var body: some View {
         HStack {
             Text("Game \(gameID)")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 56, alignment: .leading)
+                .frame(width: gameLabelWidth, alignment: .leading)
             TextField("0", text: $teamAText)
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)

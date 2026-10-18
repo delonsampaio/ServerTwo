@@ -9,7 +9,9 @@ struct TimeoutControlsView: View {
         // Equal-width columns (not a Spacer pushing two independently-sized
         // buttons apart) so each button sits directly underneath its own
         // team's score card above, reading as one unified column per side.
-        HStack(spacing: 12) {
+        // At accessibility sizes two half-width buttons can't fit "Timeout (2)"
+        // on one line (it broke mid-word), so they stack.
+        AdaptiveStack(spacing: 12) {
             timeoutButton(for: .teamA)
             timeoutButton(for: .teamB)
         }

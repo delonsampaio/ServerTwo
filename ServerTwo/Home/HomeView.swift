@@ -12,6 +12,11 @@ import PickleballKit
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ActiveMatchController.self) private var activeMatchController
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    // Today's fixed sizes at the default text size; they scale with Dynamic Type.
+    @ScaledMetric(relativeTo: .caption2) private var resultBadgeSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .subheadline) private var formDotSize: CGFloat = 28
+    @ScaledMetric(relativeTo: .body) private var quickStartScale: CGFloat = 1
     let onNewMatch: () -> Void
     let onRematch: (RematchRequest) -> Void
     let onQuickStart: (QuickStartRequest) -> Void
@@ -89,7 +94,7 @@ struct HomeView: View {
             MatchRepository(modelContext: modelContext).myResult(for: $0, in: match)
         }
         return VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveStack(horizontalAlignment: .firstTextBaseline, verticalAlignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Last Match")
                         .font(.caption.weight(.semibold))
@@ -101,7 +106,7 @@ struct HomeView: View {
                             Text(myResult ? "W" : "L")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(myResult ? .green : .red)
-                                .frame(width: 22, height: 22)
+                                .frame(width: resultBadgeSize, height: resultBadgeSize)
                                 .background(myResult ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
                         }
                         if match.matchFormat == .bestOfOne, let onlyGame = games.first {
@@ -113,7 +118,7 @@ struct HomeView: View {
                         }
                     }
                 }
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 8) {
                     // Only offered when the match's stored rules can still be
                     // decoded and both sides are present — not expected to
@@ -121,11 +126,12 @@ struct HomeView: View {
                     // failed decode should silently omit the button rather
                     // than offer a rematch that can't actually be built.
                     if let request = RematchRequest(match: match) {
-                        Button("Rematch") {
+                        Button {
                             onRematch(request)
+                        } label: {
+                            PillButtonLabel(title: "Rematch")
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        .pillButtonLayout()
                         .accessibilityIdentifier("Rematch")
                     }
                     // Lives here (not its own card below) once Pro is
@@ -179,11 +185,11 @@ struct HomeView: View {
                     // left, recent form (most-recent-first, matching how
                     // "how am I doing lately" is naturally read) on the
                     // right of the same row.
-                    HStack(alignment: .lastTextBaseline) {
+                    AdaptiveStack(horizontalAlignment: .lastTextBaseline, verticalAlignment: .leading, spacing: 8) {
                         Text("\(record.wins) - \(record.losses)")
                             .font(.title2.bold())
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityIdentifier("YourRecordValue")
-                        Spacer()
                         if !form.isEmpty {
                             HStack(spacing: 8) {
                                 // `form` itself is most-recent-first (see
@@ -197,7 +203,7 @@ struct HomeView: View {
                                     Text(didWin ? "W" : "L")
                                         .font(.subheadline.bold())
                                         .foregroundStyle(.white)
-                                        .frame(width: 28, height: 28)
+                                        .frame(width: formDotSize, height: formDotSize)
                                         .background(didWin ? Color.green : Color.red, in: Circle())
                                 }
                             }
@@ -237,15 +243,16 @@ struct HomeView: View {
                         .foregroundStyle(.primary)
                     Spacer()
                     if !selectedQuickStartPlayers.isEmpty {
-                        Button("Start (\(selectedQuickStartPlayers.count))") {
+                        Button {
                             let players = selectedQuickStartPlayers.map {
                                 QuickStartRequest.PlayerSlot(name: $0.name, savedPlayerID: $0.id)
                             }
                             selectedQuickStartPlayers = []
                             onQuickStart(QuickStartRequest(players: players))
+                        } label: {
+                            PillButtonLabel(title: "Start (\(selectedQuickStartPlayers.count))")
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        .pillButtonLayout()
                         .accessibilityIdentifier("Start Quick Start Selection")
                     }
                 }
@@ -261,7 +268,9 @@ struct HomeView: View {
                 // a natural cue that the row scrolls without needing a
                 // visible scrollbar.
                 let quickStartPlayers = Array(frequentPlayers.prefix(8))
-                if quickStartPlayers.count <= 4 {
+                // At accessibility sizes the scaled avatars no longer fit four
+                // to a row, so it always uses the scrolling row.
+                if quickStartPlayers.count <= 4, !dynamicTypeSize.isAccessibilitySize {
                     HStack(spacing: 16) {
                         ForEach(quickStartPlayers, id: \.id) { player in
                             quickStartItem(player)
@@ -274,7 +283,7 @@ struct HomeView: View {
                         HStack(spacing: 16) {
                             ForEach(quickStartPlayers, id: \.id) { player in
                                 quickStartItem(player)
-                                    .frame(width: 68)
+                                    .frame(width: 68 * min(quickStartScale, 1.6))
                             }
                         }
                         .padding(.top, 6)

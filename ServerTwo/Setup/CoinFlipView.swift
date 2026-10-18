@@ -17,6 +17,11 @@ struct CoinFlipView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
     let setup: PendingMatchSetup
 
+    // The coin (120 pt, with 48 pt / 44 pt glyphs) scales with Dynamic Type up
+    // to 1.4x.
+    @ScaledMetric(relativeTo: .largeTitle) private var coinScale: CGFloat = 1
+    private let coinScaleCap: CGFloat = 1.4
+
     @State private var isFlipping = false
     @State private var coinRotation: Double = 0
     @State private var result: Team?
@@ -32,87 +37,89 @@ struct CoinFlipView: View {
     @State private var displayedTeam: Team?
 
     var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
+        AdaptiveScroll {
+            VStack(spacing: 32) {
+                Spacer()
 
-            // Matchup, coin, and the flip action are one visual group —
-            // tight internal spacing keeps them reading as a single block
-            // rather than floating independently at their own heights.
-            VStack(spacing: 20) {
-                Text("\(setup.resolvedTeamAName) vs \(setup.resolvedTeamBName)")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                // Matchup, coin, and the flip action are one visual group —
+                // tight internal spacing keeps them reading as a single block
+                // rather than floating independently at their own heights.
+                VStack(spacing: 20) {
+                    Text("\(setup.resolvedTeamAName) vs \(setup.resolvedTeamBName)")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
 
-                coin
+                    coin
 
-                // Always present (reserving its line's height) and only
-                // its content/opacity changes — if the result line were
-                // added via `if let`, the extra line appearing only once a
-                // result exists would change this VStack's content height,
-                // and with Spacers above and below, SwiftUI would
-                // redistribute space between them and visibly shift
-                // everything else when the coin lands.
-                Text(subtitle)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(result == nil ? .secondary : .primary)
-                    .accessibilityIdentifier("FirstServeResult")
+                    // Always present (reserving its line's height) and only
+                    // its content/opacity changes — if the result line were
+                    // added via `if let`, the extra line appearing only once a
+                    // result exists would change this VStack's content height,
+                    // and with Spacers above and below, SwiftUI would
+                    // redistribute space between them and visibly shift
+                    // everything else when the coin lands.
+                    Text(subtitle)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(result == nil ? .secondary : .primary)
+                        .accessibilityIdentifier("FirstServeResult")
 
-                if let result {
-                    Button("Begin Match") {
-                        activeMatchController.confirmFirstServe(result)
+                    if let result {
+                        Button("Begin Match") {
+                            activeMatchController.confirmFirstServe(result)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .accessibilityIdentifier("Begin Match")
+                    } else {
+                        Button("Flip Coin") {
+                            flip()
+                        }
+                        .font(.headline.weight(.semibold))
+                        .padding(.horizontal, 36)
+                        .padding(.vertical, 14)
+                        .background(Color.accentColor, in: Capsule())
+                        .foregroundStyle(.white)
+                        .disabled(isFlipping)
+                        .accessibilityIdentifier("Flip Coin")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .accessibilityIdentifier("Begin Match")
-                } else {
-                    Button("Flip Coin") {
-                        flip()
-                    }
-                    .font(.headline.weight(.semibold))
-                    .padding(.horizontal, 36)
-                    .padding(.vertical, 14)
-                    .background(Color.accentColor, in: Capsule())
-                    .foregroundStyle(.white)
-                    .disabled(isFlipping)
-                    .accessibilityIdentifier("Flip Coin")
                 }
-            }
 
-            Spacer()
+                Spacer()
 
-            // Grounded in its own card instead of floating bare text and
-            // buttons directly against the screen background.
-            VStack(spacing: 12) {
-                Text("Already spun a paddle?")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 12) {
-                    // `.frame(maxWidth: .infinity)` on the label (not the
-                    // Button itself) — applied to the Button directly it
-                    // only widened the tap area, while the visible
-                    // `.bordered` background kept hugging the text, still
-                    // leaving a gap between two unequal-looking pills.
-                    Button {
-                        settle(on: .teamA)
-                    } label: {
-                        Text("\(setup.resolvedTeamAName) Won Spin")
-                            .frame(maxWidth: .infinity)
+                // Grounded in its own card instead of floating bare text and
+                // buttons directly against the screen background.
+                VStack(spacing: 12) {
+                    Text("Already spun a paddle?")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    AdaptiveStack(spacing: 12) {
+                        // `.frame(maxWidth: .infinity)` on the label (not the
+                        // Button itself) — applied to the Button directly it
+                        // only widened the tap area, while the visible
+                        // `.bordered` background kept hugging the text, still
+                        // leaving a gap between two unequal-looking pills.
+                        Button {
+                            settle(on: .teamA)
+                        } label: {
+                            Text("\(setup.resolvedTeamAName) Won Spin")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .accessibilityIdentifier("Team A Won Spin")
+                        Button {
+                            settle(on: .teamB)
+                        } label: {
+                            Text("\(setup.resolvedTeamBName) Won Spin")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .accessibilityIdentifier("Team B Won Spin")
                     }
-                    .accessibilityIdentifier("Team A Won Spin")
-                    Button {
-                        settle(on: .teamB)
-                    } label: {
-                        Text("\(setup.resolvedTeamBName) Won Spin")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .accessibilityIdentifier("Team B Won Spin")
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
+                .padding()
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
-            .padding()
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
         .padding()
         .navigationTitle("First Serve")
@@ -150,18 +157,18 @@ struct CoinFlipView: View {
                 .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 4))
                 .overlay(Circle().inset(by: 8).strokeBorder(.white.opacity(0.15), lineWidth: 1.5))
                 .shadow(color: Color.accentColor.opacity(0.35), radius: 16, y: 6)
-                .frame(width: 120, height: 120)
+                .frame(width: 120 * min(coinScale, coinScaleCap), height: 120 * min(coinScale, coinScaleCap))
             // A neutral icon (not a team letter) before the first flip —
             // showing a letter from the very start made the coin look
             // identical to a `PlayerAvatarView` with that team already
             // pre-selected, before anyone had flipped anything.
             if let displayedTeam {
                 Text(letter(for: displayedTeam))
-                    .font(.system(size: 48, weight: .heavy, design: .rounded))
+                    .font(.system(size: 48 * min(coinScale, coinScaleCap), weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
             } else {
                 Image(systemName: "figure.pickleball")
-                    .font(.system(size: 44, weight: .bold))
+                    .font(.system(size: 44 * min(coinScale, coinScaleCap), weight: .bold))
                     .foregroundStyle(.white)
             }
         }

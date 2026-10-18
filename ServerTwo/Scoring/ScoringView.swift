@@ -5,6 +5,12 @@ struct ScoringView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
     @Environment(AppSettings.self) private var appSettings
     @Environment(VoiceAnnouncer.self) private var voiceAnnouncer
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    // Both are today's fixed sizes at the default text size and scale with
+    // Dynamic Type from there. The digit growth is capped (see `scoreZone`).
+    @ScaledMetric(relativeTo: .largeTitle) private var scoreDigitSize: CGFloat = 108
+    private let scoreDigitSizeCap: CGFloat = 128
 
     @State private var isShowingScoreCorrection = false
     @State private var sideSwitchTracker = SideSwitchPromptTracker()
@@ -350,19 +356,11 @@ struct ScoringView: View {
             // reserving the space, its card's content would sit lower
             // than the serving side's, breaking the side-by-side
             // alignment the two cards are supposed to share.
-            Group {
-                if isServing {
-                    Label("SERVING", systemImage: "circle.grid.cross.fill")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.accentColor.opacity(0.18), in: Capsule())
-                } else {
-                    Color.clear
-                }
-            }
-            .frame(height: 28)
+            ServingBadgeSlot(isServing: isServing)
+                // Capped at the first accessibility size: the badge sits in a
+                // half-width card, where "SERVING" at the largest sizes would
+                // truncate.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
 
             Spacer()
 
@@ -376,17 +374,27 @@ struct ScoringView: View {
             Text(name)
                 .font(.title.weight(.bold))
                 .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                // A long name wraps onto a second line at accessibility
+                // sizes instead of shrinking or truncating.
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.6)
+                .multilineTextAlignment(.center)
+            // The digits scale with Dynamic Type but stop at 128 pt, and never
+            // wrap: a two-digit score must fit the half-width card.
             Text("\(score)")
-                .font(.system(size: 108, weight: .bold, design: .rounded))
+                .font(.system(size: min(scoreDigitSize, scoreDigitSizeCap), weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
 
             Spacer()
 
             Text("Tap to Score")
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                // Wraps at accessibility sizes; never squeezed into a truncation.
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -440,6 +448,35 @@ struct ScoringView: View {
         .accessibilityLabel("\(name), \(score) points. Tap to score, double tap and hold to correct.")
     }
 
+}
+
+/// The fixed-height slot at the top of a score card: the "SERVING" badge when
+/// this team serves, otherwise empty space of the same height — if the
+/// receiving side left it empty with nothing reserving the space, its card's
+/// content would sit lower than the serving side's, breaking the side-by-side
+/// alignment the two cards are supposed to share. 28 pt at the default text
+/// size, scaling with the (capped) Dynamic Type size.
+private struct ServingBadgeSlot: View {
+    let isServing: Bool
+    @ScaledMetric(relativeTo: .caption) private var slotHeight: CGFloat = 28
+
+    var body: some View {
+        Group {
+            if isServing {
+                Label("SERVING", systemImage: "circle.grid.cross.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.accentColor.opacity(0.18), in: Capsule())
+            } else {
+                Color.clear
+            }
+        }
+        .frame(height: slotHeight)
+    }
 }
 
 /// Tap to score, hold to correct — decided from the touch's own timing so a

@@ -15,6 +15,11 @@ struct PlayerDetailView: View {
     @State private var matches: [MatchRecord] = []
     @State private var loadError: Error?
     @State private var mePlayer: SavedPlayer?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    // 22 pt and 54 pt at the default text size; they scale with Dynamic Type.
+    @ScaledMetric(relativeTo: .caption2) private var resultBadgeSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .subheadline) private var scoreColumnWidth: CGFloat = 54
+    @ScaledMetric(relativeTo: .title2) private var statDividerHeight: CGFloat = 32
     @State private var chemistry: (asPartner: (wins: Int, losses: Int)?, asOpponent: (wins: Int, losses: Int)?)?
 
     var body: some View {
@@ -57,16 +62,31 @@ struct PlayerDetailView: View {
                     // Content-sized columns centered as a group (same
                     // technique as StatsSummaryView) rather than forced
                     // equal thirds, plus a matching divider style.
-                    HStack(alignment: .top, spacing: 16) {
-                        Spacer(minLength: 0)
-                        statColumn(value: "\(record.wins) - \(record.losses)", label: "Record")
-                            .accessibilityIdentifier("PlayerDetail.Record")
-                        statDivider
-                        statColumn(value: "\(winPct)%", label: "Win Rate")
-                        statDivider
-                        statColumn(value: "\(record.pointsFor) - \(record.pointsAgainst)", label: "Points For/Against")
-                            .accessibilityIdentifier("PlayerDetail.PointsForAgainst")
-                        Spacer(minLength: 0)
+                    // Three columns side by side no longer fit at accessibility
+                    // sizes, so they stack (without the dividers).
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            VStack(spacing: 12) {
+                                statColumn(value: "\(record.wins) - \(record.losses)", label: "Record")
+                                    .accessibilityIdentifier("PlayerDetail.Record")
+                                statColumn(value: "\(winPct)%", label: "Win Rate")
+                                statColumn(value: "\(record.pointsFor) - \(record.pointsAgainst)", label: "Points For/Against")
+                                    .accessibilityIdentifier("PlayerDetail.PointsForAgainst")
+                            }
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            HStack(alignment: .top, spacing: 16) {
+                                Spacer(minLength: 0)
+                                statColumn(value: "\(record.wins) - \(record.losses)", label: "Record")
+                                    .accessibilityIdentifier("PlayerDetail.Record")
+                                statDivider
+                                statColumn(value: "\(winPct)%", label: "Win Rate")
+                                statDivider
+                                statColumn(value: "\(record.pointsFor) - \(record.pointsAgainst)", label: "Points For/Against")
+                                    .accessibilityIdentifier("PlayerDetail.PointsForAgainst")
+                                Spacer(minLength: 0)
+                            }
+                        }
                     }
                     .padding(.vertical, 8)
 
@@ -99,11 +119,11 @@ struct PlayerDetailView: View {
 
                     if !recentForm.isEmpty {
                         Divider()
-                        HStack {
+                        AdaptiveStack(verticalAlignment: .leading, spacing: 8) {
                             Text("Recent Form")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
-                            Spacer()
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             // Oldest-to-newest, left to right — matches
                             // HomeView's own recent-form dots.
                             HStack(spacing: 8) {
@@ -111,7 +131,7 @@ struct PlayerDetailView: View {
                                     Text(didWin ? "W" : "L")
                                         .font(.caption2.bold())
                                         .foregroundStyle(.white)
-                                        .frame(width: 22, height: 22)
+                                        .frame(width: resultBadgeSize, height: resultBadgeSize)
                                         .background(didWin ? Color.green : Color.red, in: Circle())
                                 }
                             }
@@ -164,7 +184,7 @@ struct PlayerDetailView: View {
 
     private var statDivider: some View {
         Divider()
-            .frame(height: 32)
+            .frame(height: statDividerHeight)
             .overlay(Color.primary.opacity(0.15))
     }
 
@@ -177,8 +197,8 @@ struct PlayerDetailView: View {
             Text(label)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.85)
         }
     }
 
@@ -192,33 +212,50 @@ struct PlayerDetailView: View {
         let teamAGames = games.filter { $0.winningTeam == .teamA }.count
         let teamBGames = games.filter { $0.winningTeam == .teamB }.count
         let result = MatchRepository(modelContext: modelContext).myResult(for: player, in: match)
-        return HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(teamAName) vs \(teamBName)")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(match.completedAt, style: .date)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        let scoreText: String = {
+            if match.matchFormat == .bestOfOne, let onlyGame = games.first {
+                return "\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)"
             }
-            Spacer()
+            return "\(teamAGames) - \(teamBGames)"
+        }()
+        let title = VStack(alignment: .leading, spacing: 4) {
+            Text("\(teamAName) vs \(teamBName)")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(match.completedAt, style: .date)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        let badge = Group {
             if let result {
                 Text(result ? "W" : "L")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(result ? .green : .red)
-                    .frame(width: 22, height: 22)
+                    .frame(width: resultBadgeSize, height: resultBadgeSize)
                     .background(result ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
             }
-            Group {
-                if match.matchFormat == .bestOfOne, let onlyGame = games.first {
-                    Text("\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)")
-                } else {
-                    Text("\(teamAGames) - \(teamBGames)")
-                }
-            }
+        }
+        let score = Text(scoreText)
             .font(.subheadline.weight(.bold).monospacedDigit())
             .foregroundStyle(.primary)
-            .frame(width: 54, alignment: .trailing)
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    title
+                    HStack(spacing: 12) {
+                        badge
+                        score
+                    }
+                }
+            } else {
+                HStack(spacing: 12) {
+                    title
+                    Spacer()
+                    badge
+                    score
+                        .frame(width: scoreColumnWidth, alignment: .trailing)
+                }
+            }
         }
     }
 

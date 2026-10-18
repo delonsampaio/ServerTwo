@@ -10,6 +10,11 @@ struct PlayerAvatarView: View {
     let player: SavedPlayer
     var size: CGFloat = 44
 
+    // The avatar grows with Dynamic Type (so its initials do too) but stops at
+    // 1.6x, which keeps rows and chips from being taken over by it.
+    @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 1
+    private var scaledSize: CGFloat { size * min(textScale, 1.6) }
+
     var body: some View {
         Group {
             if let photoData = player.photoData, let uiImage = UIImage(data: photoData) {
@@ -20,12 +25,12 @@ struct PlayerAvatarView: View {
                 ZStack {
                     Circle().fill(Self.color(for: player.id))
                     Text(Self.initials(for: player.name))
-                        .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
+                        .font(.system(size: scaledSize * 0.4, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
                 }
             }
         }
-        .frame(width: size, height: size)
+        .frame(width: scaledSize, height: scaledSize)
         .clipShape(Circle())
     }
 

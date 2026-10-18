@@ -9,6 +9,10 @@ struct MatchHistoryListView: View {
     @State private var mePlayer: SavedPlayer?
     @State private var loadError: Error?
     @State private var filterPlayerID: UUID?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    // 22 pt and 54 pt at the default text size; they scale with Dynamic Type.
+    @ScaledMetric(relativeTo: .caption2) private var resultBadgeSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .subheadline) private var scoreColumnWidth: CGFloat = 54
 
     /// Every `SavedPlayer` who actually appears in this history, not the
     /// full roster — offering a filter that's guaranteed to show zero
@@ -139,43 +143,61 @@ struct MatchHistoryListView: View {
         let myResult: Bool? = mePlayer.flatMap {
             MatchRepository(modelContext: modelContext).myResult(for: $0, in: match)
         }
-        return HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(teamAName) vs \(teamBName)")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .accessibilityIdentifier("\(teamAName) vs \(teamBName)")
-                Text(match.completedAt, style: .date)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        let scoreText: String = {
+            if match.matchFormat == .bestOfOne, let onlyGame = games.first {
+                return "\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)"
             }
-            Spacer()
+            return "\(teamAGames) - \(teamBGames)"
+        }()
+        let title = VStack(alignment: .leading, spacing: 4) {
+            Text("\(teamAName) vs \(teamBName)")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .accessibilityIdentifier("\(teamAName) vs \(teamBName)")
+            Text(match.completedAt, style: .date)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        let badge = Group {
             if let myResult {
                 Text(myResult ? "W" : "L")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(myResult ? .green : .red)
-                    .frame(width: 22, height: 22)
+                    .frame(width: resultBadgeSize, height: resultBadgeSize)
                     .background(myResult ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
             }
-            // A best-of-1 match's "games won" score is always 1-0 or 0-1 -
-            // true but uninformative on every single row. Showing the
-            // actual point score instead tells a reader something new;
-            // best-of-3/5 still show the meaningful games-won tally.
-            //
-            // A fixed trailing-aligned width (not just natural sizing) -
-            // "0 - 11" and "11 - 6" are different widths, which otherwise
-            // shifts the W/L badge left/right from row to row instead of
-            // sitting in a straight column.
-            Group {
-                if match.matchFormat == .bestOfOne, let onlyGame = games.first {
-                    Text("\(onlyGame.teamAFinalScore) - \(onlyGame.teamBFinalScore)")
-                } else {
-                    Text("\(teamAGames) - \(teamBGames)")
-                }
-            }
+        }
+        // A best-of-1 match's "games won" score is always 1-0 or 0-1 -
+        // true but uninformative on every single row. Showing the
+        // actual point score instead tells a reader something new;
+        // best-of-3/5 still show the meaningful games-won tally.
+        let score = Text(scoreText)
             .font(.subheadline.weight(.bold).monospacedDigit())
             .foregroundStyle(.primary)
-            .frame(width: 54, alignment: .trailing)
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Too wide for one line at accessibility sizes: the title on
+                // top, the result badge and score beneath it.
+                VStack(alignment: .leading, spacing: 6) {
+                    title
+                    HStack(spacing: 12) {
+                        badge
+                        score
+                    }
+                }
+            } else {
+                HStack(spacing: 12) {
+                    title
+                    Spacer()
+                    badge
+                    // A fixed trailing-aligned width (not just natural
+                    // sizing) - "0 - 11" and "11 - 6" are different widths,
+                    // which otherwise shifts the W/L badge left/right from
+                    // row to row instead of sitting in a straight column.
+                    score
+                        .frame(width: scoreColumnWidth, alignment: .trailing)
+                }
+            }
         }
     }
 
