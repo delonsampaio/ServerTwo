@@ -16,6 +16,7 @@ struct ScoreCorrectionSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     // 64 pt at the default text size, scaling with Dynamic Type up to a cap
     // so a two-digit score still fits its half-width card.
     @ScaledMetric(relativeTo: .largeTitle) private var scoreDigitSize: CGFloat = 64
@@ -157,7 +158,7 @@ struct ScoreCorrectionSheet: View {
                 .font(.system(size: min(scoreDigitSize, scoreDigitSizeCap), weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
-                .contentTransition(.numericText())
+                .contentTransition(reduceMotion ? .identity : .numericText())
                 .foregroundStyle(isModified ? Color.accentColor : Color.primary)
                 .accessibilityLabel(name)
                 .accessibilityValue("\(value)")

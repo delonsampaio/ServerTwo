@@ -15,6 +15,7 @@ import PickleballKit
 /// real-world decision already made.
 struct CoinFlipView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let setup: PendingMatchSetup
 
     // The coin (120 pt, with 48 pt / 44 pt glyphs) scales with Dynamic Type up
@@ -192,8 +193,15 @@ struct CoinFlipView: View {
     }
 
     private func flip() {
-        isFlipping = true
+        let plan = CoinFlipAnimationPlan.plan(reduceMotion: reduceMotion)
         let outcome = CoinFlip.flip()
+        // Reduce Motion: no spin, no letter toggling, no delay. `isFlipping`
+        // is never set, so it cannot be left stuck.
+        guard plan.spins else {
+            settle(on: outcome)
+            return
+        }
+        isFlipping = true
         // Several full spins, slowing to a stop — "coinRotation" keeps
         // incrementing across repeated flips (never reset to 0) so a
         // second flip always visibly spins forward again, rather than
@@ -205,13 +213,12 @@ struct CoinFlipView: View {
         // animates, so it actually reads as alternating between the two
         // teams rather than one static letter just distorting in place.
         let toggleInterval = 0.1
-        let toggleCount = 6
-        for step in 0..<toggleCount {
+        for step in 0..<plan.letterToggles {
             DispatchQueue.main.asyncAfter(deadline: .now() + toggleInterval * Double(step)) {
                 displayedTeam = displayedTeam == .teamA ? .teamB : .teamA
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + plan.settleDelay) {
             isFlipping = false
             settle(on: outcome)
         }
