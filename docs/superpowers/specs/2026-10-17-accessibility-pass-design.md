@@ -1,7 +1,7 @@
 # Accessibility Pass Design (Phase 7)
 
 **Date:** 2026-10-17
-**Status:** Revised after Gemini review (2026-10-18), awaiting user approval. See "Review changes" at the end.
+**Status:** Approved by the user on 2026-10-18 ("do what you think is best"), with every default below accepted, including Q4 (VoiceOver users always get the spoken announcements). See "Review changes" at the end.
 **Builds on:** Phase 7 "Audio & Accessibility" on the roadmap (the Voice Announcer half is already built)
 
 ## Goal
