@@ -33,8 +33,20 @@ final class AccessibilityAuditUITests: XCTestCase {
         /// "Contrast failed"), so a different problem on the same element is
         /// not hidden by an entry for another one.
         let descriptionContains: String
-        /// Why this issue is a false positive.
+        /// Why this issue is a false positive (or, for contrast items, why it
+        /// awaits a design decision).
         let reason: String
+
+        init(screen: String, auditType: String, element: String, descriptionContains: String, reason: String) {
+            // An empty substring matches every description: it would act as a
+            // wildcard for the whole element, which is never intended.
+            precondition(!descriptionContains.isEmpty, "descriptionContains must not be empty")
+            self.screen = screen
+            self.auditType = auditType
+            self.element = element
+            self.descriptionContains = descriptionContains
+            self.reason = reason
+        }
     }
 
     private let knownFalsePositives: [KnownFalsePositive] = [
@@ -350,5 +362,70 @@ final class AccessibilityAuditUITests: XCTestCase {
 
         beginMatchFromCoinFlip(app)
         try auditScoringAndCancelPrompt(app, suffix: "@AXXL")
+    }
+
+    /// The two sheets that sit on top of the scoring screen and carry its
+    /// primary actions: Game Over (best of 3) and Finish Match (best of 1),
+    /// at accessibility size 4. Their primary buttons must be hittable (not
+    /// pushed off the sheet), and each sheet is audited as its own screen.
+    func testSheetsAtAccessibilitySize() throws {
+        let axArguments = [
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXL",
+        ]
+
+        // Game Over: finish game 1 of a best of 3 (the match goes on).
+        let gameOverApp = launchApp(extraArguments: axArguments)
+        gameOverApp.tabBars.buttons["Play"].tap()
+        let bestOfThree = gameOverApp.buttons["Best of 3"]
+        scrollUntilVisible(bestOfThree, in: gameOverApp)
+        bestOfThree.tap()
+        let startMatchButton = gameOverApp.buttons["Start Match"]
+        scrollUntilVisible(startMatchButton, in: gameOverApp)
+        startMatchButton.tap()
+        XCTAssertTrue(gameOverApp.buttons["Flip Coin"].waitForExistence(timeout: 3))
+        beginMatchFromCoinFlip(gameOverApp)
+        let gameOverZone = gameOverApp.buttons["scoreZone.teamA"]
+        let startNextGame = gameOverApp.buttons["Prompt.Dismiss"]
+        for _ in 0..<20 {
+            if startNextGame.exists { break }
+            gameOverZone.tap()
+        }
+        XCTAssertTrue(startNextGame.waitForExistence(timeout: 5), "Game 1 should end within 20 Team A points")
+        XCTAssertTrue(gameOverApp.otherElements["Prompt.GameOver"].exists)
+        let gameOverReady = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: startNextGame)
+        wait(for: [gameOverReady], timeout: 5)
+        XCTAssertTrue(startNextGame.isHittable, "Start Game 2 must be reachable at accessibility size 4")
+        try audit(gameOverApp, screen: "GameOverSheet@AXXL", anchor: startNextGame)
+        gameOverApp.terminate()
+
+        // Finish Match: finish a best of 1 and open the confirmation sheet.
+        let finishApp = launchApp(extraArguments: axArguments)
+        openCoinFlip(finishApp)
+        beginMatchFromCoinFlip(finishApp)
+        let finishZone = finishApp.buttons["scoreZone.teamA"]
+        let finishButton = finishApp.buttons["Finish Match"]
+        // The last game of the format shows the Switch Sides sheet at 6
+        // points; at accessibility size it covers the score zones, so
+        // dismiss it before the next tap.
+        let switchSidesDismiss = finishApp.buttons["Prompt.Dismiss"]
+        for _ in 0..<20 {
+            if finishButton.exists { break }
+            if switchSidesDismiss.exists {
+                switchSidesDismiss.tap()
+                let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: switchSidesDismiss)
+                wait(for: [gone], timeout: 3)
+            }
+            finishZone.tap()
+        }
+        XCTAssertTrue(finishButton.waitForExistence(timeout: 2), "Match should finish well within 20 Team A points")
+        finishButton.tap()
+        // Wrapper + inner Button both expose this identifier; see GoldenPathUITests.
+        let confirmFinish = finishApp.buttons["Confirm Finish"].firstMatch
+        XCTAssertTrue(confirmFinish.waitForExistence(timeout: 3))
+        let finishReady = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: confirmFinish)
+        wait(for: [finishReady], timeout: 5)
+        XCTAssertTrue(confirmFinish.isHittable, "Confirm Finish must be reachable at accessibility size 4")
+        try audit(finishApp, screen: "FinishMatchSheet@AXXL", anchor: confirmFinish)
     }
 }

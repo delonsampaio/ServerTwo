@@ -85,3 +85,46 @@ Dark/light contrast tuning beyond what the audit flags; per-screen VoiceOver rot
 ## Review changes (Gemini review, 2026-10-18)
 Accepted: UI-test constraints on combining rows; the serving gap and label/hint split on the score zone; `.scrollBounceBehavior(.basedOnSize)` and `.large` only at accessibility sizes; audit report-only first and strict last; expected audit failure sites; HowToPlay does not animate (my error), CoinFlip reduce-motion branch; announcements and focus for coin flip and match end; W/L letters confirmed; recent-form and point-row combining.
 Rejected: Gemini said the launch argument `UICTContentSizeCategoryAccessibilityXXL` is wrong and that UIKit ignores it. Verified on the simulator that it is the exact string UIKit stores for accessibility size 4; the spec keeps it and adds a check that the size really applied.
+
+## As built (2026-10-18)
+
+### What changed, per task
+1. **Audit harness (report-only).** `AccessibilityAuditUITests` runs `performAccessibilityAudit` on every main screen (Onboarding, Home empty / with a match / with a match and a Me player, Match Setup, Coin Flip, Scoring, Cancel Match prompt, History, Match Detail, Settings, Manage Players empty / with rows, How to Play, Paywall) and at accessibility size 4 (`UICTContentSizeCategoryAccessibilityXXL`). Each audit waits for a hittable anchor and a 0.5 s settle; findings are logged as `A11Y-AUDIT|...` lines and attached to the test. The baseline is `docs/superpowers/plans/2026-10-18-accessibility-audit-findings.md`.
+2. **Dynamic Type and sheets.** Scaled fonts and metrics (`@ScaledMetric`, capped where the layout needs it), `AdaptiveStack` (row at normal sizes, column at accessibility sizes), `AdaptiveScroll` and `adaptiveSheetDetents` (`.large` only at accessibility sizes), `PillButtonStyle` (44 pt hit region with the old pill look), stacked timeout and Won Spin buttons at accessibility sizes. Several secondary texts moved to `.primary` for contrast (Match Detail summary lines, Coin Flip and Cancel prompt captions, "Tap to Score" to `.secondary`).
+3. **VoiceOver announcement path.** `VoiceOverAnnouncement` (one place, high priority); with VoiceOver running the score lines are always announced regardless of the Voice Announcer toggle, and the synthesizer voice is never used.
+4. **VoiceOver labels, values and focus.** `AccessibilityText` (score zone label "<name>, <N> points[, serving]" plus a hint, Won/Lost words, recent form value, point row sentences), grouped recent-form strips and point rows, header traits, decorative glyphs hidden, "Begin Match" and "Finish Match" take focus, the coin flip result is announced.
+5. **Reduce Motion, sheet checks, final pass.** `CoinFlipAnimationPlan` (normal: spin, 6 letter toggles, 0.7 s settle; Reduce Motion: no spin, no toggles, immediate settle, `isFlipping` never set so it cannot stick); `CoinFlipView.flip()` reads it from `accessibilityReduceMotion`. `ScoreCorrectionSheet` uses `.contentTransition(reduceMotion ? .identity : .numericText())`. The audit class gained `testSheetsAtAccessibilitySize` (Game Over sheet of a best of 3 and the Finish Match sheet of a best of 1, both at accessibility size 4, primary buttons asserted hittable, each audited as `GameOverSheet@AXXL` and `FinishMatchSheet@AXXL`), and `KnownFalsePositive` now refuses an empty `descriptionContains` so an entry can never act as a wildcard.
+
+### Strict audit: not switched on (needs a decision)
+`strict` is still `false` and `knownFalsePositives` is empty. The last report-only run (19 audited screens, including the two new sheets) reports 125 issues in 89 distinct (screen, audit type, element, description) combinations, far over the "about 40" budget for documented exceptions:
+
+| Category | Issues |
+|---|---|
+| contrast, "failed" | 51 |
+| contrast, "nearly passed" | 33 |
+| dynamicType, "partially unsupported" | 21 |
+| textClipped | 16 |
+| hitRegion | 3 |
+| elementDetection | 1 |
+
+The contrast rows are the colour items below plus a long tail of `.secondary` captions on grouped or material backgrounds ("nearly passed"); fixing those with existing styles means turning most secondary text `.primary`, which flattens the visual hierarchy across the app, so it was not done unilaterally. The 21 dynamicType rows are score digits and "Tap to Score" (capped or fixed by design), "SERVING" (capped at accessibility 1 so it does not truncate), system toolbar text (Cancel Match, Done, Rematch) and avatar initials. The 16 textClipped rows are the static heuristic (identical at default size and at accessibility size 4, on Scoring, the Cancel Match prompt, Settings and one Manage Players row) and were not visually re-verified in this task. The three hitRegion rows are the non-interactive `Me.<name>` badge and two Match Setup rows with no element. Rows with no element (about a third of the contrast rows, on 8 screens) cannot be told apart, so one exception per screen would also hide a new unattributed contrast problem there.
+
+### Real findings fixed along the way
+- Task 2: both decorative `chevron.right` hit-region rows (hidden from accessibility), several textClipped heuristics (content now scrolls or wraps), Rename / Set as Me / Home share button tap targets (44 pt, measured 46.3 pt and 44 x 48.7 pt), pills, sheets that clipped at accessibility sizes.
+- Task 2 follow-up: contrast fixes listed under task 2 above.
+- Task 4: the recent-form strip and point rows no longer read letter by letter.
+- Task 5: no strict-only findings were fixed because strict was not enabled; the two new sheet checks found no unreachable buttons at accessibility size 4.
+
+### Colour items awaiting a design decision (light mode; WCAG, white text unless noted)
+- Accent blue #007AFF as text or white-on-accent (Start Match, New Match, Done, Get Started, Keep Playing, Confirm Finish, Rematch / Rename / Set as Me pills, "SERVING" badge, Timeout buttons, Home Pro banner): 4.02:1, needs 4.5:1 for small text. Fix: a darker accent.
+- White on green #34C759 (recent-form dots, W badges): 2.22:1; green or red text on a 20 % tinted circle (W / L badges) fails. Closest / Longest Game badges: white on orange 2.20:1, white on blue 4.02:1. Win streak orange text on the card is low.
+- Avatar initials (white): teal 2.57, orange 2.20, mint 2.12, brown 3.50, pink 3.65, blue 4.02, purple 4.13 (indigo 5.65 passes). Black initials would pass for teal, orange and mint (8.2, 9.6, 9.9). The colour is assigned per player, so avatar rows vary between runs.
+- Match Detail: point sequence numbers (`.tertiary` caption on thin material, needs `.primary`) and the losing team's digit (36 pt bold `.secondary`; the emphasis is the design).
+- System toolbar buttons (Cancel Match, Cancel Coin Flip, Done, Not Now, Rematch): no styling hook.
+- "Nearly passed" `.secondary` captions (about 3.4 to 4.4:1 on grouped or thin material): onboarding captions, Settings footers, Match Setup captions, Coin Flip and History captions, Paywall and How to Play body text.
+
+### Device checks owed (for the user, after the build)
+- VoiceOver on: scoring screen reads "<name>, <N> points, serving" for the serving team only; double-tap scores; the new score / side out / game end is spoken once (watch for double reading: VoiceOver re-reading the label PLUS our announcement; if it doubles, report it); flip the coin: announcement and focus lands on Begin Match; match over: focus lands on Finish Match; history row, recent form and point rows read as single sensible stops.
+- Voice Announcer toggle OFF with VoiceOver on: scores are still announced; VoiceOver off with the toggle off: silent.
+- Text size at the largest accessibility setting: open Home, Play, History, Settings, Manage Players, Add/Rename Player, the scoring screen (two-digit scores), Game Over, Switch Sides, Cancel Match, Score Correction and Finish Match sheets: nothing clipped, every button reachable.
+- Reduce Motion on: the coin flip settles instantly with the same result.
