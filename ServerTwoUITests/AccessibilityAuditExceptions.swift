@@ -10,8 +10,17 @@
 // and is limited by the occurrence count. A new issue on a different element
 // fails, and so does an extra unattributed one.
 //
-// Two kinds of entries: (a) false positives / system behaviour, each with the
-// screenshots that were checked, and (b) contrast items whose reason starts
+// Each cap is the largest count actually observed for its (screen, audit
+// type, wording) in all recorded runs (strict runs 2 to 19 and the full-suite
+// runs). Only the two avatar screens (HomeWithMatchAndMe, ManagePlayersWithRows)
+// get +1 on their contrast entries, because the per-run avatar colour moves
+// rows between "failed" and "nearly passed". `AccessibilityAuditUITests` prints
+// the unused capacity of every audited screen (`A11Y-AUDIT-UNUSED|...`) so a
+// stale entry shows up in the log.
+//
+// Two kinds of entries: (a) heuristic rows that were reviewed (looked at with
+// short fixture names at AX4; not proven, see each reason) or are system
+// behaviour, and (b) contrast items whose reason starts
 // "design decision pending": they need a new or darker colour that has not
 // been chosen yet. Nothing here is a whole-category or whole-screen wildcard.
 
@@ -64,9 +73,9 @@ enum AccessibilityAuditExceptions {
         c_sequence +
         c_sheets
 
-    // MARK: Text clipped (static heuristic)
+    // MARK: Text clipped (static heuristic, reviewed with short names at AX4)
 
-    private static let clippedReason = "static textClipped heuristic, reported identically at default size and accessibility size 4; not visibly clipped at default and AX4 (checked simulator screenshots of Scoring, the Cancel Match prompt, Settings and Manage Players)"
+    private static let clippedReason = "static textClipped heuristic, reported identically at default size and at AX4 (it cannot see the real layout); reviewed, not proven: looked at once in simulator screenshots with short fixture names (Alice, Bob, Team A, Team B) at the default size and at AX4 only; long names and AX5 are on the device-check list. Nothing was visibly clipped on Scoring, the Cancel Match prompt, Settings and Manage Players."
 
     private static let clipped: [KnownFalsePositive] = [
         KnownFalsePositive(
@@ -102,34 +111,42 @@ enum AccessibilityAuditExceptions {
         ),
     ]
 
-    // MARK: Dynamic Type "partially unsupported"
+    // MARK: Dynamic Type "partially unsupported" (reviewed, reasons per element)
 
-    private static let dynReason = "Dynamic Type heuristic on elements that are capped or reflow by design: score digits (capped so two digits fit), \"Tap to Score\", \"SERVING\" (capped at accessibility1), system toolbar text (Cancel Match, Done, Rematch) and rows that reflow at accessibility sizes; text visibly scales and is not clipped at AX4 (checked simulator screenshots of Scoring, History, Match Detail, Manage Players, Onboarding)"
+    private static let dynHistoryReason = "reviewed: the History stats card number (\"1\") and its \"Matches\" caption; they scale visibly at AX4 in the History screenshot and nothing is clipped (looked at once in simulator screenshots with short fixture names (Alice, Bob, Team A, Team B) at the default size and at AX4 only; long names and AX5 are on the device-check list)"
+
+    private static let dynPlayersReason = "reviewed: Manage Players row text. After the Manage Players title fix, Alice, the \"Me\" badge and a long name (\"Bartholomew Featherstonehaugh\") were looked at at AX4: they scale and wrap, nothing is truncated (the long name breaks mid-word across 5 lines at AX4 because the row is narrow; wrapping is not truncation, judged acceptable, listed for the device checks)"
+
+    private static let dynMatchDetailReason = "reviewed: score digits are scaled with a deliberate maximum of 52 pt so two digits never wrap (capped by design, so the audit sees them as only partly scaling), plus the system toolbar \"Rematch\" text which has no API to scale it; looked at at AX4 with short names: intact"
+
+    private static let dynOnboardingReason = "reviewed: \"Done\" is the system toolbar button text, which has no API to scale it further; looked at at AX4: intact"
+
+    private static let dynScoringReason = "reviewed, by design: score digits are scaled up to a 128 pt maximum and shrink to fit rather than wrap; the \"SERVING\" badge is deliberately capped at accessibility1 so it does not truncate; \"Tap to Score\" is a caption2 hint that wraps to two lines at AX sizes; \"Cancel Match\" is system toolbar text. Looked at at AX4 with short names: nothing clipped (long names and AX5 are on the device-check list)"
 
     private static let dyn: [KnownFalsePositive] = [
         KnownFalsePositive(
             screen: "History", auditType: "dynamicType", elements: ["label:1", "label:Matches"],
-            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 2, reason: dynReason
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 2, reason: dynHistoryReason
         ),
         KnownFalsePositive(
             screen: "ManagePlayersWithRows", auditType: "dynamicType", elements: ["Me.Alice", "PlayerRow.Alice", "PlayerRow.Bob"],
-            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 3, reason: dynReason
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 3, reason: dynPlayersReason
         ),
         KnownFalsePositive(
             screen: "MatchDetail", auditType: "dynamicType", elements: ["Rematch", "label:0", "label:11"],
-            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 3, reason: dynReason
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 3, reason: dynMatchDetailReason
         ),
         KnownFalsePositive(
             screen: "Onboarding", auditType: "dynamicType", elements: ["Done"],
-            descriptionContains: "Dynamic Type font sizes are partially unsupported", reason: dynReason
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", reason: dynOnboardingReason
         ),
         KnownFalsePositive(
             screen: "Scoring", auditType: "dynamicType", elements: ["Cancel Match", "label:0", "label:SERVING", "label:Tap to Score"],
-            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 6, reason: dynReason
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 6, reason: dynScoringReason
         ),
         KnownFalsePositive(
             screen: "Scoring@AXXL", auditType: "dynamicType", elements: ["Cancel Match", "label:0", "label:SERVING", "label:Tap to Score"],
-            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 6, reason: dynReason
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 6, reason: dynScoringReason
         ),
     ]
 
@@ -252,11 +269,11 @@ enum AccessibilityAuditExceptions {
     private static let c_homeme: [KnownFalsePositive] = [
         KnownFalsePositive(
             screen: "HomeWithMatchAndMe", auditType: "contrast", elements: ["(no element)", "PhotoPicker.Alice", "PhotoPicker.Bob", "Rematch", "label:A", "label:B", "label:New Match", "label:W"],
-            descriptionContains: "Contrast failed", maxOccurrences: 7, reason: c_homemeReason
+            descriptionContains: "Contrast failed", maxOccurrences: 6, reason: c_homemeReason
         ),
         KnownFalsePositive(
             screen: "HomeWithMatchAndMe", auditType: "contrast", elements: ["(no element)", "PhotoPicker.Alice", "PhotoPicker.Bob", "label:A", "label:B", "label:Unlock Server Two Pro — $1.99"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 5, reason: c_homemeReason
+            descriptionContains: "Contrast nearly passed", maxOccurrences: 4, reason: c_homemeReason
         ),
     ]
 
@@ -267,11 +284,11 @@ enum AccessibilityAuditExceptions {
     private static let c_avatar: [KnownFalsePositive] = [
         KnownFalsePositive(
             screen: "ManagePlayersWithRows", auditType: "contrast", elements: ["(no element)", "Me.Alice", "PhotoPicker.Alice", "PhotoPicker.Bob", "label:A", "label:B"],
-            descriptionContains: "Contrast failed", maxOccurrences: 3, reason: c_avatarReason
+            descriptionContains: "Contrast failed", maxOccurrences: 2, reason: c_avatarReason
         ),
         KnownFalsePositive(
             screen: "ManagePlayersWithRows", auditType: "contrast", elements: ["(no element)", "PhotoPicker.Alice", "PhotoPicker.Bob", "label:A", "label:B"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 3, reason: c_avatarReason
+            descriptionContains: "Contrast nearly passed", reason: c_avatarReason
         ),
     ]
 

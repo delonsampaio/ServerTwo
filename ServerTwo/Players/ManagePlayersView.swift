@@ -81,6 +81,9 @@ struct ManagePlayersView: View {
             }
         }
         .navigationTitle("Manage Players")
+        // The large title truncates ("Manage Play...") at accessibility sizes;
+        // an inline title only there, the default mode everywhere else.
+        .navigationBarTitleDisplayMode(dynamicTypeSize.isAccessibilitySize ? .inline : .automatic)
         .toolbar {
             // Previously the only way to create a player was to start a
             // match — this lets someone pre-populate their regular group,
@@ -252,7 +255,7 @@ struct ManagePlayersView: View {
                 .buttonStyle(PillButtonStyle())
                 .fixedSize()
                 .accessibilityIdentifier("SetMe.\(player.name)")
-                .accessibilityLabel("Set \(player.name) as Me")
+                .accessibilityLabel("Set as Me for \(player.name)")
             }
         }
     }

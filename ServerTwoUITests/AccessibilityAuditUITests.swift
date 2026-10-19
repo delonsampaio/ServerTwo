@@ -69,6 +69,14 @@ final class AccessibilityAuditUITests: XCTestCase {
         }
         let summary = "A11Y-AUDIT-SUMMARY|\(screen)|\(countForScreen)"
         print(summary)
+        // Informational only: capacity of this screen's exceptions that went
+        // unused, so stale or too generous entries show up in the log.
+        for (index, entry) in AccessibilityAuditExceptions.all.enumerated() where entry.screen == screen {
+            let used = usedCounts[index, default: 0]
+            if used < entry.maxOccurrences {
+                print("A11Y-AUDIT-UNUSED|\(screen)|\(entry.auditType)|\(entry.descriptionContains)|used \(used) of \(entry.maxOccurrences)")
+            }
+        }
 
         let attachment = XCTAttachment(
             string: ([summary] + recordedIssues.filter { $0.hasPrefix("A11Y-AUDIT|\(screen)|") })
