@@ -216,6 +216,7 @@ struct ManagePlayersView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Color.accentColor.opacity(0.18), in: Capsule())
+                    .tapAreaPadding()
                     .accessibilityIdentifier("Me.\(player.name)")
             }
         }

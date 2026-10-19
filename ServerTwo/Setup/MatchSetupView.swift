@@ -254,7 +254,9 @@ struct MatchSetupView: View {
                             } label: {
                                 Label("Swap Partners", systemImage: "arrow.left.arrow.right")
                                     .font(.caption.weight(.semibold))
+                                    .tapAreaLabel()
                             }
+                            .tapAreaGiveBack()
                             .accessibilityIdentifier("Swap Partners")
                         }
                         Button {
@@ -262,7 +264,9 @@ struct MatchSetupView: View {
                         } label: {
                             Label("Swap Teams", systemImage: "arrow.up.arrow.down")
                                 .font(.caption.weight(.semibold))
+                                .tapAreaLabel()
                         }
+                        .tapAreaGiveBack()
                         .accessibilityIdentifier("Swap Teams")
                     }
                 }

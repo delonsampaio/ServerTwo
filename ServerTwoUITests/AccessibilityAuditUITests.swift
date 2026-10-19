@@ -4,10 +4,10 @@ import XCTest
 /// `app.performAccessibilityAudit()` on each main screen and records every
 /// issue it reports.
 ///
-/// While `strict` is `false` this is report-only: every issue is recorded and
-/// printed (grep the xcodebuild log for `A11Y-AUDIT|`) but ignored, so the
-/// tests always pass. Flipping `strict` to `true` makes any issue that does not
-/// match an explicit `knownFalsePositives` entry fail the test.
+/// Every issue is recorded and printed (grep the xcodebuild log for
+/// `A11Y-AUDIT|`). With `strict` on, an issue that does not match an entry of
+/// `AccessibilityAuditExceptions.all` fails the test; with it off the class is
+/// report-only.
 ///
 /// Log line format (one line per issue):
 /// `A11Y-AUDIT|<screen>|<auditType>|<element identifier or label>|<compactDescription>|<detailedDescription>`
@@ -17,43 +17,11 @@ import XCTest
 /// fails; that is deliberately not swallowed.
 @MainActor
 final class AccessibilityAuditUITests: XCTestCase {
-    /// Report-only while `false`. Flipped to `true` in the final accessibility
-    /// task, once real findings are fixed and false positives are listed.
-    private let strict = false
-
-    /// One entry per audit issue that is understood to be a false positive.
-    /// Only consulted when `strict == true`. An issue is ignored only when it
-    /// matches ALL of `screen`, `auditType`, `element` and `descriptionContains`.
-    /// Each entry must say why.
-    private struct KnownFalsePositive {
-        let screen: String
-        let auditType: String
-        let element: String
-        /// Substring of the issue's compact description (for example
-        /// "Contrast failed"), so a different problem on the same element is
-        /// not hidden by an entry for another one.
-        let descriptionContains: String
-        /// Why this issue is a false positive (or, for contrast items, why it
-        /// awaits a design decision).
-        let reason: String
-
-        init(screen: String, auditType: String, element: String, descriptionContains: String, reason: String) {
-            // An empty substring matches every description: it would act as a
-            // wildcard for the whole element, which is never intended.
-            precondition(!descriptionContains.isEmpty, "descriptionContains must not be empty")
-            self.screen = screen
-            self.auditType = auditType
-            self.element = element
-            self.descriptionContains = descriptionContains
-            self.reason = reason
-        }
-    }
-
-    private let knownFalsePositives: [KnownFalsePositive] = [
-        // Intentionally empty while report-only. Add entries (each with a
-        // `descriptionContains` and a `reason`) when a finding is verified to
-        // be a false positive.
-    ]
+    /// While `false` this is report-only (every issue is recorded and
+    /// ignored). While `true` any issue that does not match an entry of
+    /// `AccessibilityAuditExceptions.all` (in `AccessibilityAuditExceptions.swift`,
+    /// each entry with a reason) fails the test.
+    private let strict = true
 
     /// Every issue recorded during this test run, as the printed log lines.
     private var recordedIssues: [String] = []
@@ -73,6 +41,9 @@ final class AccessibilityAuditUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
 
         var countForScreen = 0
+        // How often each exception has been used during this audit call; an
+        // entry only absorbs up to its `maxOccurrences` issues.
+        var usedCounts: [Int: Int] = [:]
         try app.performAccessibilityAudit { [self] issue in
             let type = Self.name(for: issue.auditType)
             let elementID = Self.elementDescription(issue.element)
@@ -84,10 +55,17 @@ final class AccessibilityAuditUITests: XCTestCase {
             print(line)
 
             if !strict { return true }
-            return knownFalsePositives.contains {
-                $0.screen == screen && $0.auditType == type && $0.element == elementID
-                    && description.contains($0.descriptionContains)
+            let matchingID = Self.dateNormalized(elementID)
+            let matches = AccessibilityAuditExceptions.all.enumerated().filter { _, entry in
+                entry.screen == screen && entry.auditType == type && entry.elements.contains(matchingID)
+                    && description.contains(entry.descriptionContains)
             }
+            // The first matching entry that still has room absorbs the issue.
+            guard let match = matches.first(where: { index, entry in
+                usedCounts[index, default: 0] < entry.maxOccurrences
+            }) else { return false }
+            usedCounts[match.offset, default: 0] += 1
+            return true
         }
         let summary = "A11Y-AUDIT-SUMMARY|\(screen)|\(countForScreen)"
         print(summary)
@@ -108,6 +86,14 @@ final class AccessibilityAuditUITests: XCTestCase {
         let label = element.label
         if !label.isEmpty { return sanitize("label:" + label) }
         return "(unnamed \(element.elementType.rawValue))"
+    }
+
+    /// Elements named by a date (the History and Match Detail date labels)
+    /// change every day; exceptions refer to them as `label:<date>`.
+    private static func dateNormalized(_ element: String) -> String {
+        element.replacingOccurrences(
+            of: #"label:[A-Z][a-z]+ \d{1,2}, \d{4}"#, with: "label:<date>", options: .regularExpression
+        )
     }
 
     /// Keeps each record on a single line and free of the field separator.
