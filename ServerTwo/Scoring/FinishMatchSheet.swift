@@ -94,9 +94,9 @@ struct FinishMatchSheet: View {
             Circle()
                 .fill(Color.yellow.opacity(0.15))
                 .overlay(Circle().strokeBorder(Color.yellow.opacity(0.3), lineWidth: 1))
-                .frame(width: 60 * min(badgeScale, badgeScaleCap), height: 60 * min(badgeScale, badgeScaleCap))
+                .frame(width: 60 * max(1, min(badgeScale, badgeScaleCap)), height: 60 * max(1, min(badgeScale, badgeScaleCap)))
             Image(systemName: "trophy.fill")
-                .font(.system(size: 28 * min(badgeScale, badgeScaleCap), weight: .bold))
+                .font(.system(size: 28 * max(1, min(badgeScale, badgeScaleCap)), weight: .bold))
                 .foregroundStyle(.yellow)
         }
     }
@@ -130,7 +130,7 @@ struct FinishMatchSheet: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Text("\(value)")
-                .font(.system(size: min(scoreDigitSize, scoreDigitSizeCap), weight: .bold, design: .rounded))
+                .font(.system(size: max(36, min(scoreDigitSize, scoreDigitSizeCap)), weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .foregroundStyle(highlighted ? .primary : .secondary)

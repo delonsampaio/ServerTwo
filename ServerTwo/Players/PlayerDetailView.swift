@@ -119,7 +119,7 @@ struct PlayerDetailView: View {
 
                     if !recentForm.isEmpty {
                         Divider()
-                        AdaptiveStack(verticalAlignment: .leading, spacing: 8) {
+                        AdaptiveStack(columnAlignment: .leading, spacing: 8) {
                             Text("Recent Form")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)

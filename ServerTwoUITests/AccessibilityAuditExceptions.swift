@@ -63,6 +63,7 @@ enum AccessibilityAuditExceptions {
     static let all: [KnownFalsePositive] =
         clipped +
         behindsheet +
+        hitArea +
         dyn +
         c_accent +
         c_mixed +
@@ -108,6 +109,17 @@ enum AccessibilityAuditExceptions {
         KnownFalsePositive(
             screen: "CancelMatchPrompt", auditType: "elementDetection", elements: ["(no element)"],
             descriptionContains: "Potentially inaccessible text", reason: behindsheetReason
+        ),
+    ]
+
+    // MARK: Hit area
+
+    private static let hitAreaReason = "the \"Me\" status badge on a Manage Players row is a non-interactive Text (no gesture, not a control); the audit's hit-area heuristic measures its small accessibility node. Giving it a 44 pt accessibility frame only made it cover the player name above it for VoiceOver touch exploration, so it was left small on purpose. The controls on that row (Rename, Set as Me, photo) are all 44 pt."
+
+    private static let hitArea: [KnownFalsePositive] = [
+        KnownFalsePositive(
+            screen: "ManagePlayersWithRows", auditType: "hitRegion", elements: ["(no element)", "Me.Alice"],
+            descriptionContains: "Hit area is too small", reason: hitAreaReason
         ),
     ]
 

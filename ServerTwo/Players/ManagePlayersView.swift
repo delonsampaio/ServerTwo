@@ -219,7 +219,6 @@ struct ManagePlayersView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Color.accentColor.opacity(0.18), in: Capsule())
-                    .tapAreaPadding()
                     .accessibilityIdentifier("Me.\(player.name)")
             }
         }
@@ -230,16 +229,16 @@ struct ManagePlayersView: View {
     // the row — without one, two plain Buttons packed into one List row get
     // overlapping default tap regions and a tap aimed at one can fire the
     // other's action (observed: tapping "Set as Me" opened "Rename").
-    // `.bordered` (not `.borderless`) also gives each button its own visible
-    // pill chrome, so two of them sitting next to each other read as distinct
-    // tappable buttons instead of one run-on line of blue text.
+    // `PillButtonStyle` is that style. It draws a small pill with its own
+    // visible chrome (what `.bordered` was chosen for, as opposed to
+    // `.borderless`), so two buttons side by side read as distinct tappable
+    // buttons instead of one run-on line of blue text, and it gives each a
+    // 44 pt tall tap area without growing the row (`.bordered` +
+    // `.controlSize(.small)` cannot do that).
     // `.fixedSize()` keeps a longer name from squeezing these into
-    // wrapping/truncating. `PillButtonStyle` draws the same small pill but
-    // gives it a 44 pt tall tap area without growing the row (it replaces
-    // `.bordered` + `.controlSize(.small)`, which can't do that; it is the
-    // same kind of explicit non-default style).
+    // wrapping/truncating.
     private func actionButtons(for player: SavedPlayer) -> some View {
-        AdaptiveStack(verticalAlignment: .leading, spacing: 8) {
+        AdaptiveStack(columnAlignment: .leading, spacing: 8) {
             Button("Rename") {
                 renameText = player.name
                 renamingPlayer = player

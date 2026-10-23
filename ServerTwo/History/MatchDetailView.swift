@@ -156,7 +156,7 @@ struct MatchDetailView: View {
 
     private var resultCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            AdaptiveStack(horizontalAlignment: .firstTextBaseline, verticalAlignment: .leading, spacing: 8) {
+            AdaptiveStack(rowAlignment: .firstTextBaseline, columnAlignment: .leading, spacing: 8) {
                 Text("\(teamAName) vs \(teamBName)")
                     .font(.title2.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -164,7 +164,7 @@ struct MatchDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.primary)
             }
-            AdaptiveStack(verticalAlignment: .leading, spacing: 10) {
+            AdaptiveStack(columnAlignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "trophy.fill")
                         .accessibilityHidden(true)
@@ -190,7 +190,7 @@ struct MatchDetailView: View {
 
     private func gameCard(_ game: GameRecord) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            AdaptiveStack(verticalAlignment: .leading, spacing: 6) {
+            AdaptiveStack(columnAlignment: .leading, spacing: 6) {
                 Text("Game \(game.gameNumber)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -263,7 +263,7 @@ struct MatchDetailView: View {
                         .accessibilityLabel(AccessibilityText.pointRowLabel(
                             sequence: point.sequenceNumber,
                             scorerName: point.scoringTeam == .teamA ? teamAName : teamBName,
-                            scoreAfter: "\(point.teamAScoreAfter)-\(point.teamBScoreAfter)"
+                            scoreAfter: "\(point.teamAScoreAfter) to \(point.teamBScoreAfter)"
                         ))
                     }
                 }
@@ -282,7 +282,7 @@ struct MatchDetailView: View {
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
             Text("\(score)")
-                .font(.system(size: min(gameScoreSize, gameScoreSizeCap), weight: .bold, design: .rounded))
+                .font(.system(size: max(36, min(gameScoreSize, gameScoreSizeCap)), weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .foregroundStyle(won ? .primary : .secondary)

@@ -135,8 +135,20 @@ final class AccessibilityAuditUITests: XCTestCase {
         app.launch()
         if dismissOnboarding {
             dismissOnboardingIfPresented(app)
+            waitForOnboardingGone(app)
         }
         return app
+    }
+
+    /// The shared dismiss helper waits only 2 s for the onboarding controls and
+    /// returns right after tapping, so an audit could start while the sheet is
+    /// still on screen (the audit then covers the sheet, not Home). Waits
+    /// (bounded) until "Done" and "Skip" are both gone.
+    private func waitForOnboardingGone(_ app: XCUIApplication) {
+        XCTAssertTrue(
+            app.buttons["Done"].waitForNonExistence(timeout: 5) && app.buttons["Skip"].waitForNonExistence(timeout: 5),
+            "Onboarding ('Done' / 'Skip') was still on screen 5 s after being dismissed; refusing to audit it as another screen"
+        )
     }
 
     /// Play tab -> Start Match -> the coin-flip ("First Serve") screen.

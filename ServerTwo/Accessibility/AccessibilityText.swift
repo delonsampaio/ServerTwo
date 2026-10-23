@@ -23,7 +23,7 @@ enum AccessibilityText {
         form.map { resultWord(didWin: $0) }.joined(separator: ", ")
     }
 
-    /// `scoreAfter` is the running score after the point, like "4-2".
+    /// `scoreAfter` is the running score after the point, like "4 to 2" (not "4-2", which VoiceOver may read with a minus).
     static func pointRowLabel(sequence: Int, scorerName: String, scoreAfter: String) -> String {
         "Point \(sequence), \(scorerName) scored, \(scoreAfter)"
     }

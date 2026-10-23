@@ -155,7 +155,7 @@ struct ScoreCorrectionSheet: View {
                 .multilineTextAlignment(.center)
 
             Text("\(value)")
-                .font(.system(size: min(scoreDigitSize, scoreDigitSizeCap), weight: .bold, design: .rounded))
+                .font(.system(size: max(64, min(scoreDigitSize, scoreDigitSizeCap)), weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .contentTransition(reduceMotion ? .identity : .numericText())
@@ -250,7 +250,10 @@ private struct CorrectionSheetDetents: ViewModifier {
     func body(content: Content) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
             content.presentationDetents(Set(
-                SheetDetentPolicy.detents(height: scaledHeight, isAccessibilitySize: true)
+                SheetDetentPolicy.detents(
+                    height: SheetDetentPolicy.scaledHeight(design: 360, scaled: scaledHeight),
+                    isAccessibilitySize: true
+                )
             ))
         } else {
             content.presentationDetents([.height(360), .large])

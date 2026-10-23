@@ -20,4 +20,14 @@ final class AdaptiveSheetTests: XCTestCase {
             [.height(320), .large]
         )
     }
+
+    func testScaledHeightNeverBelowDesignHeight() {
+        // xSmall/Small/Medium scale the metric below the design height.
+        XCTAssertEqual(SheetDetentPolicy.scaledHeight(design: 320, scaled: 262), 320)
+        XCTAssertEqual(SheetDetentPolicy.scaledHeight(design: 320, scaled: 320), 320)
+    }
+
+    func testScaledHeightGrowsAboveDesignHeight() {
+        XCTAssertEqual(SheetDetentPolicy.scaledHeight(design: 320, scaled: 480), 480)
+    }
 }

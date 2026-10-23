@@ -22,8 +22,14 @@ struct CoinFlipView: View {
     // to 1.4x.
     @ScaledMetric(relativeTo: .largeTitle) private var coinScale: CGFloat = 1
     private let coinScaleCap: CGFloat = 1.4
+    /// Never below 1: `@ScaledMetric` also scales down below the default size.
+    private var coinFactor: CGFloat { max(1, min(coinScale, coinScaleCap)) }
 
     @State private var isFlipping = false
+    /// `flip()` settles 0.7 s later. If the screen was dismissed meanwhile
+    /// (Cancel), that late settle must neither set state nor announce
+    /// "<name> serves first" over whatever screen is showing now.
+    @State private var isOnScreen = true
     @State private var coinRotation: Double = 0
     @State private var result: Team?
     /// Which team's letter the coin currently shows — `nil` before the
@@ -129,6 +135,8 @@ struct CoinFlipView: View {
             }
         }
         .padding()
+        .onAppear { isOnScreen = true }
+        .onDisappear { isOnScreen = false }
         .navigationTitle("First Serve")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
@@ -164,18 +172,18 @@ struct CoinFlipView: View {
                 .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 4))
                 .overlay(Circle().inset(by: 8).strokeBorder(.white.opacity(0.15), lineWidth: 1.5))
                 .shadow(color: Color.accentColor.opacity(0.35), radius: 16, y: 6)
-                .frame(width: 120 * min(coinScale, coinScaleCap), height: 120 * min(coinScale, coinScaleCap))
+                .frame(width: 120 * coinFactor, height: 120 * coinFactor)
             // A neutral icon (not a team letter) before the first flip —
             // showing a letter from the very start made the coin look
             // identical to a `PlayerAvatarView` with that team already
             // pre-selected, before anyone had flipped anything.
             if let displayedTeam {
                 Text(letter(for: displayedTeam))
-                    .font(.system(size: 48 * min(coinScale, coinScaleCap), weight: .heavy, design: .rounded))
+                    .font(.system(size: 48 * coinFactor, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
             } else {
                 Image(systemName: "figure.pickleball")
-                    .font(.system(size: 44 * min(coinScale, coinScaleCap), weight: .bold))
+                    .font(.system(size: 44 * coinFactor, weight: .bold))
                     .foregroundStyle(.white)
             }
         }
@@ -219,6 +227,7 @@ struct CoinFlipView: View {
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + plan.settleDelay) {
+            guard isOnScreen else { return }
             isFlipping = false
             settle(on: outcome)
         }

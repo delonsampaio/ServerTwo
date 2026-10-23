@@ -46,8 +46,8 @@ final class AccessibilityTextTests: XCTestCase {
 
     func testPointRowLabel() {
         XCTAssertEqual(
-            AccessibilityText.pointRowLabel(sequence: 3, scorerName: "Team A", scoreAfter: "4-2"),
-            "Point 3, Team A scored, 4-2"
+            AccessibilityText.pointRowLabel(sequence: 3, scorerName: "Team A", scoreAfter: "4 to 2"),
+            "Point 3, Team A scored, 4 to 2"
         )
     }
 }

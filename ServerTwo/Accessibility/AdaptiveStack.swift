@@ -7,27 +7,27 @@ import SwiftUI
 struct AdaptiveStack<Content: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private let horizontalAlignment: VerticalAlignment
-    private let verticalAlignment: HorizontalAlignment
+    private let rowAlignment: VerticalAlignment
+    private let columnAlignment: HorizontalAlignment
     private let spacing: CGFloat?
     private let content: Content
 
     init(
-        horizontalAlignment: VerticalAlignment = .center,
-        verticalAlignment: HorizontalAlignment = .center,
+        rowAlignment: VerticalAlignment = .center,
+        columnAlignment: HorizontalAlignment = .center,
         spacing: CGFloat? = nil,
         @ViewBuilder content: () -> Content
     ) {
-        self.horizontalAlignment = horizontalAlignment
-        self.verticalAlignment = verticalAlignment
+        self.rowAlignment = rowAlignment
+        self.columnAlignment = columnAlignment
         self.spacing = spacing
         self.content = content()
     }
 
     var body: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: verticalAlignment, spacing: spacing))
-            : AnyLayout(HStackLayout(alignment: horizontalAlignment, spacing: spacing))
+            ? AnyLayout(VStackLayout(alignment: columnAlignment, spacing: spacing))
+            : AnyLayout(HStackLayout(alignment: rowAlignment, spacing: spacing))
         layout { content }
     }
 }

@@ -389,7 +389,7 @@ struct ScoringView: View {
             // The digits scale with Dynamic Type but stop at 128 pt, and never
             // wrap: a two-digit score must fit the half-width card.
             Text("\(score)")
-                .font(.system(size: min(scoreDigitSize, scoreDigitSizeCap), weight: .bold, design: .rounded))
+                .font(.system(size: max(108, min(scoreDigitSize, scoreDigitSizeCap)), weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)

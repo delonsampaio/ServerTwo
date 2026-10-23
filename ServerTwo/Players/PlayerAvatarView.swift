@@ -13,7 +13,7 @@ struct PlayerAvatarView: View {
     // The avatar grows with Dynamic Type (so its initials do too) but stops at
     // 1.6x, which keeps rows and chips from being taken over by it.
     @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 1
-    private var scaledSize: CGFloat { size * min(textScale, 1.6) }
+    private var scaledSize: CGFloat { size * max(1, min(textScale, 1.6)) }
 
     var body: some View {
         Group {

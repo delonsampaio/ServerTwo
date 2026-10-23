@@ -94,7 +94,7 @@ struct HomeView: View {
             MatchRepository(modelContext: modelContext).myResult(for: $0, in: match)
         }
         return VStack(alignment: .leading, spacing: 4) {
-            AdaptiveStack(horizontalAlignment: .firstTextBaseline, verticalAlignment: .leading, spacing: 8) {
+            AdaptiveStack(rowAlignment: .firstTextBaseline, columnAlignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Last Match")
                         .font(.caption.weight(.semibold))
@@ -186,7 +186,7 @@ struct HomeView: View {
                     // left, recent form (most-recent-first, matching how
                     // "how am I doing lately" is naturally read) on the
                     // right of the same row.
-                    AdaptiveStack(horizontalAlignment: .lastTextBaseline, verticalAlignment: .leading, spacing: 8) {
+                    AdaptiveStack(rowAlignment: .lastTextBaseline, columnAlignment: .leading, spacing: 8) {
                         Text("\(record.wins) - \(record.losses)")
                             .font(.title2.bold())
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -292,7 +292,7 @@ struct HomeView: View {
                         HStack(spacing: 16) {
                             ForEach(quickStartPlayers, id: \.id) { player in
                                 quickStartItem(player)
-                                    .frame(width: 68 * min(quickStartScale, 1.6))
+                                    .frame(width: 68 * max(1, min(quickStartScale, 1.6)))
                             }
                         }
                         .padding(.top, 6)
