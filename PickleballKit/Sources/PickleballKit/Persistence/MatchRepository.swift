@@ -10,6 +10,11 @@ extension Array {
 public enum MatchRepositoryError: Error, Equatable {
     case matchNotOver
     case invalidGameScore
+    /// The same player (by saved identity or by case-insensitive name) was
+    /// entered twice in one match. Carries the name as typed.
+    case duplicatePlayer(String)
+    case tooManyPlayers
+    case missingTeamSide
 }
 
 /// A match reconstructed from a saved in-progress snapshot, paired with
@@ -248,6 +253,57 @@ public final class MatchRepository {
         return record
     }
 
+    /// Replaces the players of a completed match's two sides — fixes a wrong
+    /// pick or fills a blank left at save time. Blank entries are dropped.
+    /// Names resolve like match setup does (a still-valid picked id wins,
+    /// otherwise `upsertSavedPlayer`, so a typed name links the existing
+    /// player instead of duplicating it). The same player twice anywhere in
+    /// the match throws `.duplicatePlayer` and a side with more than two
+    /// players throws `.tooManyPlayers`; both are checked BEFORE anything is
+    /// created or changed, so a rejected edit leaves no stray saved players.
+    /// Only `players` and `displayName` change: scores, winner, rules,
+    /// games and the point log are untouched, and every stat derives from
+    /// the linked players, so it follows on its own.
+    public func updateSides(
+        of match: MatchRecord,
+        teamA: [PlayerSlotEntry],
+        teamB: [PlayerSlotEntry]
+    ) throws {
+        guard let sideA = (match.teamSides ?? []).first(where: { $0.team == .teamA }),
+              let sideB = (match.teamSides ?? []).first(where: { $0.team == .teamB }) else {
+            throw MatchRepositoryError.missingTeamSide
+        }
+        let entriesA = teamA.filter { !$0.isBlank }
+        let entriesB = teamB.filter { !$0.isBlank }
+        guard entriesA.count <= 2, entriesB.count <= 2 else {
+            throw MatchRepositoryError.tooManyPlayers
+        }
+
+        let existing = try fetchAllSavedPlayers()
+        if let duplicate = PlayerSlotEntry.firstDuplicateName(in: entriesA + entriesB, among: existing) {
+            throw MatchRepositoryError.duplicatePlayer(duplicate)
+        }
+
+        do {
+            let playersA = try entriesA.compactMap { try resolvePlayer($0, among: existing) }
+            let playersB = try entriesB.compactMap { try resolvePlayer($0, among: existing) }
+            sideA.players = playersA
+            sideB.players = playersB
+            sideA.displayName = TeamNaming.displayName(forPlayerNames: playersA.map(\.name), team: .teamA)
+            sideB.displayName = TeamNaming.displayName(forPlayerNames: playersB.map(\.name), team: .teamB)
+            try modelContext.save()
+        } catch {
+            // Don't leave half-applied side edits pending in the context.
+            modelContext.rollback()
+            throw error
+        }
+    }
+
+    private func resolvePlayer(_ entry: PlayerSlotEntry, among players: [SavedPlayer]) throws -> SavedPlayer? {
+        if let player = entry.matchingPlayer(among: players) { return player }
+        return try upsertSavedPlayer(name: entry.name)
+    }
+
     public func fetchMatchHistory() throws -> [MatchRecord] {
         let descriptor = FetchDescriptor<MatchRecord>(
             sortBy: [
@@ -427,6 +483,10 @@ public final class MatchRepository {
             if let players = side.players, !players.isEmpty {
                 return players.contains { $0.id == player.id }
             }
+            // A side with nobody entered is named "Team A"/"Team B" — a
+            // placeholder, not a player, so it must never match a saved
+            // player who happens to be called that.
+            guard side.displayName != TeamNaming.placeholderName(for: side.team) else { return false }
             return side.displayName.components(separatedBy: " & ").contains {
                 $0.caseInsensitiveCompare(player.name) == .orderedSame
             }
