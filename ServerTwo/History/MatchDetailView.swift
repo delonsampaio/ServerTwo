@@ -199,6 +199,11 @@ struct MatchDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .tapAreaGiveBack(9)
+                    // Needed for the audit, not just for VoiceOver: without an explicit
+                    // label the audit evaluates the whole button element (outline and
+                    // tap padding included) and fails its contrast; with it the same
+                    // button passes (verified both ways).
+                    .accessibilityLabel("Edit Players")
                     .accessibilityHint("Change who played this match")
                     .accessibilityIdentifier("Edit Players")
                 }
