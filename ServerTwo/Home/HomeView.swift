@@ -27,6 +27,8 @@ struct HomeView: View {
     @State private var selectedQuickStartPlayers: [SavedPlayer] = []
     @State private var loadError: Error?
     @State private var isShowingPaywall = false
+    // Bumped after Edit Players saved; see `refreshAfterPlayersEdited`.
+    @State private var editRevision = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,8 +36,10 @@ struct HomeView: View {
                 VStack(spacing: 16) {
                     if let lastMatch = matches.first {
                         lastMatchCard(lastMatch)
+                            .id(editRevision)
                         quickStartRow
                         matchesPlayedCard
+                            .id(editRevision)
                         // Share now lives in the Last Match card's own
                         // header once Pro is unlocked — this slot is only
                         // needed for the upsell banner while it's locked.
@@ -76,7 +80,7 @@ struct HomeView: View {
         }
         .navigationTitle("Server Two")
         .task { loadMatches() }
-        .refreshAfterPlayersEdited { loadMatches() }
+        .refreshAfterPlayersEdited(revision: $editRevision) { loadMatches() }
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
         }

@@ -14,6 +14,8 @@ struct PlayerDetailView: View {
     @State private var recentForm: [Bool] = []
     @State private var matches: [MatchRecord] = []
     @State private var loadError: Error?
+    // Bumped after Edit Players saved; see `refreshAfterPlayersEdited`.
+    @State private var editRevision = 0
     @State private var mePlayer: SavedPlayer?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     // 22 pt and 54 pt at the default text size; they scale with Dynamic Type.
@@ -175,6 +177,7 @@ struct PlayerDetailView: View {
                         // reason to fight for the plain, reliable style.
                         NavigationLink(destination: MatchDetailView(match: match, onRematch: onRematch)) {
                             matchRow(match)
+                                .id(editRevision)
                         }
                     }
                 }
@@ -183,7 +186,7 @@ struct PlayerDetailView: View {
         .navigationTitle(player.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { loadRecord() }
-        .refreshAfterPlayersEdited { loadRecord() }
+        .refreshAfterPlayersEdited(revision: $editRevision) { loadRecord() }
         .refreshable { loadRecord() }
     }
 

@@ -6,48 +6,6 @@ import PickleballKit
 /// blank left at save time. Only the sides' players and names change; scores,
 /// winner, rules and the point log stay as they were (see
 /// `MatchRepository.updateSides`).
-extension Notification.Name {
-    /// Posted after Edit Players saves. History, Home and a player's screen
-    /// each load their matches once per view lifetime, so a plain pop back
-    /// would otherwise leave their rows and stats stale until pull-to-refresh.
-    static let matchPlayersEdited = Notification.Name("ServerTwo.matchPlayersEdited")
-}
-
-/// Rebuilds a screen that was showing matches once an edit happened.
-/// SwiftData's change tracking did not reliably re-render these screens after
-/// Edit Players changed a side (the detail and History kept the old names
-/// although the models were already updated, verified in a UI test), so the
-/// refresh is explicit: the notification only marks the screen stale, and the
-/// rebuild happens when it next appears — never while a pushed Match Detail
-/// (or the sheet) that belongs to it is still on screen.
-private struct RefreshAfterPlayersEdited: ViewModifier {
-    let reload: @MainActor () -> Void
-    @State private var isStale = false
-    @State private var revision = 0
-
-    func body(content: Content) -> some View {
-        content
-            .id(revision)
-            .onReceive(NotificationCenter.default.publisher(for: .matchPlayersEdited)) { _ in
-                isStale = true
-            }
-            .onAppear {
-                guard isStale else { return }
-                isStale = false
-                reload()
-                revision += 1
-            }
-    }
-}
-
-extension View {
-    /// Reloads (`reload`) and rebuilds this screen the next time it appears
-    /// after Edit Players saved.
-    func refreshAfterPlayersEdited(_ reload: @escaping @MainActor () -> Void) -> some View {
-        modifier(RefreshAfterPlayersEdited(reload: reload))
-    }
-}
-
 struct EditMatchPlayersSheet: View {
     let match: MatchRecord
 
@@ -116,6 +74,7 @@ struct EditMatchPlayersSheet: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                         .disabled(problem != nil)
+                        .accessibilityHint(problem ?? "")
                         .accessibilityIdentifier("EditPlayers.Save")
                 }
             }
@@ -123,6 +82,14 @@ struct EditMatchPlayersSheet: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .adaptiveSheetDetents(height: 560)
+        // A stale "Couldn't save" must not resurface after the user changed anything.
+        .onChange(of: teamA) { saveError = nil }
+        .onChange(of: teamB) { saveError = nil }
+        // The reason appears below the fields, away from the focused one, so
+        // VoiceOver would not otherwise notice it.
+        .onChange(of: problem) { _, newProblem in
+            if let newProblem { VoiceOverAnnouncement.post(newProblem) }
+        }
         .task { loadSavedPlayers() }
     }
 

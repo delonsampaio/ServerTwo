@@ -202,7 +202,7 @@ final class MatchRepositoryUpdateSidesTests: XCTestCase {
         XCTAssertEqual(try side(.teamA, of: match).displayName, "Zed")
     }
 
-    func testTwoSavedPlayersSharingANameAreToldApartByTheSelectedId() throws {
+    func testTwoSavedPlayersSharingANameAreToldApartByTheSelectedIdInBothOrders() throws {
         let (repository, context) = try makeRepository()
         let mike1 = try XCTUnwrap(repository.upsertSavedPlayer(name: "Mike"))
         let mike2 = SavedPlayer(name: "Mike")
@@ -210,9 +210,28 @@ final class MatchRepositoryUpdateSidesTests: XCTestCase {
         try context.save()
         let match = try quickLog(repository, teamA: [mike1])
 
+        // Picking either one must stick, whichever the unsorted fetch returns
+        // first: a name lookup alone would always give the same one.
         try repository.updateSides(of: match, teamA: [PlayerSlotEntry(name: "Mike", savedPlayerID: mike2.id)], teamB: [])
-
         XCTAssertEqual(try side(.teamA, of: match).players?.map(\.id), [mike2.id])
+        try repository.updateSides(of: match, teamA: [PlayerSlotEntry(name: "Mike", savedPlayerID: mike1.id)], teamB: [])
+        XCTAssertEqual(try side(.teamA, of: match).players?.map(\.id), [mike1.id])
+    }
+
+    func testAFailureAfterNewPlayersAreInsertedLeavesNoOrphanAndNoSideChange() throws {
+        let (repository, _) = try makeRepository()
+        let mike = try XCTUnwrap(repository.upsertSavedPlayer(name: "Mike"))
+        let match = try quickLog(repository, teamA: [mike])
+        struct Boom: Error {}
+
+        XCTAssertThrowsError(try repository.updateSides(
+            of: match, teamA: entries("Zed", "Amy"), teamB: entries("Quinn"), beforeSave: { throw Boom() }
+        ))
+
+        XCTAssertEqual(try repository.fetchAllSavedPlayers().map(\.name), ["Mike"], "no orphan Zed/Amy/Quinn")
+        XCTAssertEqual(try side(.teamA, of: match).displayName, "Mike")
+        XCTAssertEqual(try side(.teamA, of: match).players?.map(\.id), [mike.id])
+        XCTAssertEqual(try side(.teamB, of: match).displayName, "Team B")
     }
 
     // MARK: Stats follow
@@ -341,9 +360,8 @@ final class MatchRepositoryUpdateSidesTests: XCTestCase {
         )) { XCTAssertEqual($0 as? MatchRepositoryError, .duplicatePlayer("delon")) }
     }
 
-    func testOpeningAndCancellingNeverTouchTheRoster() throws {
-        // Updating is the only thing that creates players: a rejected edit
-        // (the closest repository-level stand-in for Cancel) adds nobody.
+    func testARejectedEditCreatesNoSavedPlayer() throws {
+        // Duplicates are rejected before anything is created.
         let (repository, _) = try makeRepository()
         let match = try quickLog(repository)
         XCTAssertThrowsError(try repository.updateSides(of: match, teamA: entries("Zed"), teamB: entries("zed")))

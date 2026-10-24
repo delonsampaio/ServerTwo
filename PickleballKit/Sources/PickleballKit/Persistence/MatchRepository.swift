@@ -261,6 +261,12 @@ public final class MatchRepository {
     /// the match throws `.duplicatePlayer` and a side with more than two
     /// players throws `.tooManyPlayers`; both are checked BEFORE anything is
     /// created or changed, so a rejected edit leaves no stray saved players.
+    /// New saved players are inserted WITHOUT their own save (unlike
+    /// `upsertSavedPlayer`) and everything is committed by ONE `save()` at the
+    /// end; if anything after the first insert throws, `rollback()` discards
+    /// the new players and the sides are put back as they were, so no orphan
+    /// player is left behind or synced. (`rollback()` also drops any
+    /// unrelated unsaved change in the context, as every rollback does.)
     /// Only `players` and `displayName` change: scores, winner, rules,
     /// games and the point log are untouched, and every stat derives from
     /// the linked players, so it follows on its own.
@@ -268,6 +274,18 @@ public final class MatchRepository {
         of match: MatchRecord,
         teamA: [PlayerSlotEntry],
         teamB: [PlayerSlotEntry]
+    ) throws {
+        try updateSides(of: match, teamA: teamA, teamB: teamB, beforeSave: nil)
+    }
+
+    /// `beforeSave` exists only as a test seam: it runs after both sides are
+    /// assigned and before the single `save()`, so a test can make that
+    /// step fail and check that nothing is left behind.
+    func updateSides(
+        of match: MatchRecord,
+        teamA: [PlayerSlotEntry],
+        teamB: [PlayerSlotEntry],
+        beforeSave: (() throws -> Void)?
     ) throws {
         guard let sideA = (match.teamSides ?? []).first(where: { $0.team == .teamA }),
               let sideB = (match.teamSides ?? []).first(where: { $0.team == .teamB }) else {
@@ -284,24 +302,38 @@ public final class MatchRepository {
             throw MatchRepositoryError.duplicatePlayer(duplicate)
         }
 
+        // `rollback()` alone does not put the live sides' values back (verified
+        // by a test), so the originals are restored by hand on failure.
+        let original = (a: (sideA.players, sideA.displayName), b: (sideB.players, sideB.displayName))
         do {
-            let playersA = try entriesA.compactMap { try resolvePlayer($0, among: existing) }
-            let playersB = try entriesB.compactMap { try resolvePlayer($0, among: existing) }
+            let playersA = entriesA.map { resolvePlayer($0, among: existing) }
+            let playersB = entriesB.map { resolvePlayer($0, among: existing) }
             sideA.players = playersA
             sideB.players = playersB
             sideA.displayName = TeamNaming.displayName(forPlayerNames: playersA.map(\.name), team: .teamA)
             sideB.displayName = TeamNaming.displayName(forPlayerNames: playersB.map(\.name), team: .teamB)
+            try beforeSave?()
             try modelContext.save()
         } catch {
-            // Don't leave half-applied side edits pending in the context.
+            // `rollback()` discards every player inserted above (none was saved
+            // yet), so a failure leaves no orphan SavedPlayer; the sides get
+            // their original players and names back explicitly.
             modelContext.rollback()
+            sideA.players = original.a.0
+            sideA.displayName = original.a.1
+            sideB.players = original.b.0
+            sideB.displayName = original.b.1
             throw error
         }
     }
 
-    private func resolvePlayer(_ entry: PlayerSlotEntry, among players: [SavedPlayer]) throws -> SavedPlayer? {
+    private func resolvePlayer(_ entry: PlayerSlotEntry, among players: [SavedPlayer]) -> SavedPlayer {
         if let player = entry.matchingPlayer(among: players) { return player }
-        return try upsertSavedPlayer(name: entry.name)
+        // Not `upsertSavedPlayer`: that saves immediately, which a later
+        // failure in `updateSides` could no longer undo.
+        let player = SavedPlayer(name: entry.name.trimmingCharacters(in: .whitespacesAndNewlines))
+        modelContext.insert(player)
+        return player
     }
 
     public func fetchMatchHistory() throws -> [MatchRecord] {

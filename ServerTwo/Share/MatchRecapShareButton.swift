@@ -3,6 +3,9 @@ import PickleballKit
 
 struct MatchRecapShareButton: View {
     let match: MatchRecord
+    /// Changes when the caller knows the match was edited, since reading the
+    /// names in `.task(id:)` below only re-runs when this view's body does.
+    var refreshKey = 0
     @State private var renderedImage: Image?
 
     var body: some View {
@@ -17,7 +20,7 @@ struct MatchRecapShareButton: View {
         }
         // Keyed on the side names so the exported card is re-rendered after
         // Edit Players (a bare `.task` would keep the first render forever).
-        .task(id: (match.teamSides ?? []).map(\.displayName).joined(separator: "|")) {
+        .task(id: "\(refreshKey)|" + (match.teamSides ?? []).map(\.displayName).joined(separator: "|")) {
             renderedImage = renderCardImage()
         }
     }

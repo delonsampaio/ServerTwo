@@ -9,6 +9,8 @@ struct MatchHistoryListView: View {
     @State private var mePlayer: SavedPlayer?
     @State private var loadError: Error?
     @State private var filterPlayerID: UUID?
+    // Bumped after Edit Players saved; see `refreshAfterPlayersEdited`.
+    @State private var editRevision = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     // 22 pt and 54 pt at the default text size; they scale with Dynamic Type.
     @ScaledMetric(relativeTo: .caption2) private var resultBadgeSize: CGFloat = 22
@@ -56,6 +58,7 @@ struct MatchHistoryListView: View {
             if !matches.isEmpty {
                 Section {
                     StatsSummaryView(matches: filteredMatches, mePlayer: mePlayer, repository: MatchRepository(modelContext: modelContext))
+                        .id(editRevision)
                 }
             }
             Section(filterPlayerName.map { "Matches · \($0)" } ?? "Matches") {
@@ -79,6 +82,7 @@ struct MatchHistoryListView: View {
                     ForEach(filteredMatches) { match in
                         NavigationLink(value: match) {
                             matchRow(match)
+                                .id(editRevision)
                         }
                     }
                 }
@@ -96,7 +100,7 @@ struct MatchHistoryListView: View {
             MatchDetailView(match: match, onRematch: onRematch)
         }
         .task { loadMatches() }
-        .refreshAfterPlayersEdited { loadMatches() }
+        .refreshAfterPlayersEdited(revision: $editRevision) { loadMatches() }
         .refreshable { loadMatches() }
     }
 
@@ -211,6 +215,12 @@ struct MatchHistoryListView: View {
             matches = try repository.fetchMatchHistory()
             mePlayer = try repository.fetchMePlayer()
             loadError = nil
+            // An edit (or deletion) can leave the filtered player in no match
+            // at all; clear the filter instead of showing an empty list that
+            // names nobody.
+            if let filterPlayerID, !availableFilterPlayers.contains(where: { $0.id == filterPlayerID }) {
+                self.filterPlayerID = nil
+            }
         } catch {
             matches = []
             loadError = error
