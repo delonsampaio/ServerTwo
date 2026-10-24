@@ -183,6 +183,7 @@ struct PlayerDetailView: View {
         .navigationTitle(player.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { loadRecord() }
+        .refreshAfterPlayersEdited { loadRecord() }
         .refreshable { loadRecord() }
     }
 

@@ -96,6 +96,7 @@ struct MatchHistoryListView: View {
             MatchDetailView(match: match, onRematch: onRematch)
         }
         .task { loadMatches() }
+        .refreshAfterPlayersEdited { loadMatches() }
         .refreshable { loadMatches() }
     }
 

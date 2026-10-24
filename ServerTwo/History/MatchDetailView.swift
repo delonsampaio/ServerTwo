@@ -5,6 +5,11 @@ struct MatchDetailView: View {
     let match: MatchRecord
     let onRematch: (RematchRequest) -> Void
 
+    @State private var isEditingPlayers = false
+    // Bumped when the Edit Players sheet closes: the match models are already
+    // updated by then, but this screen (and the share image) is rebuilt
+    // explicitly because SwiftData observation did not re-render it reliably.
+    @State private var refreshRevision = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     // 36 pt, 24 pt and 6 pt at the default text size; they scale with Dynamic
     // Type (the score digits stop at 52 pt and never wrap).
@@ -122,6 +127,10 @@ struct MatchDetailView: View {
                 }
             }
             .padding()
+            .id(refreshRevision)
+        }
+        .sheet(isPresented: $isEditingPlayers, onDismiss: { refreshRevision += 1 }) {
+            EditMatchPlayersSheet(match: match)
         }
         .navigationTitle("Match Detail")
         .toolbar {
@@ -150,6 +159,7 @@ struct MatchDetailView: View {
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 MatchRecapShareButton(match: match)
+                    .id(refreshRevision)
             }
         }
     }
@@ -160,9 +170,37 @@ struct MatchDetailView: View {
                 Text("\(teamAName) vs \(teamBName)")
                     .font(.title2.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(match.completedAt, style: .date)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
+                // In the card next to the title, not in the toolbar (which
+                // already holds Rematch and Share). The sheet saves straight
+                // into `match`; `refreshRevision` rebuilds this screen when
+                // the sheet closes.
+                VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 4) {
+                    Text(match.completedAt, style: .date)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                    Button {
+                        isEditingPlayers = true
+                    } label: {
+                        // Outlined text in `.primary` rather than
+                        // `PillButtonStyle`: the audit's contrast check fails
+                        // the accent blue on this card, and it also fails
+                        // this button once a pencil icon sits next to the
+                        // text (verified: text alone passes), so there is no
+                        // icon. Same 44 pt tap area (`tapAreaLabel`).
+                        Text("Edit Players")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.35), lineWidth: 1))
+                        .tapAreaLabel(9)
+                    }
+                    .buttonStyle(.plain)
+                    .tapAreaGiveBack(9)
+                    .accessibilityLabel("Edit Players")
+                    .accessibilityHint("Change who played this match")
+                    .accessibilityIdentifier("Edit Players")
+                }
             }
             AdaptiveStack(columnAlignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {

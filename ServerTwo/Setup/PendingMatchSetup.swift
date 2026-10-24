@@ -25,10 +25,10 @@ struct PendingMatchSetup: Equatable {
     /// blank team name reads the same way in both places instead of two
     /// separately-maintained fallbacks drifting apart.
     var resolvedTeamAName: String {
-        teamAName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Team A" : teamAName
+        TeamNaming.resolvedName(teamAName, team: .teamA)
     }
 
     var resolvedTeamBName: String {
-        teamBName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Team B" : teamBName
+        TeamNaming.resolvedName(teamBName, team: .teamB)
     }
 }

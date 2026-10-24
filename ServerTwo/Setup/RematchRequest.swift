@@ -45,7 +45,7 @@ struct RematchRequest: Equatable, Identifiable {
     }
 
     private static func playerSlots(for side: TeamSide) -> (PlayerSlot, PlayerSlot?) {
-        let players = side.players ?? []
+        let players = side.orderedPlayers
         if !players.isEmpty {
             let first = PlayerSlot(name: players[0].name, savedPlayerID: players[0].id)
             let second = players.count > 1 ? PlayerSlot(name: players[1].name, savedPlayerID: players[1].id) : nil

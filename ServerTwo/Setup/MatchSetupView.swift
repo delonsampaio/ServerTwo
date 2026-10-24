@@ -556,16 +556,10 @@ struct MatchSetupView: View {
 
     /// Both names are trimmed, and EITHER being blank falls back to the other
     /// alone — the previous version only checked `player2`, so a doubles team
-    /// with a blank Player 1 produced a leading " & ".
+    /// with a blank Player 1 produced a leading " & ". The rule itself lives
+    /// in `TeamNaming`, shared with Edit Players on a saved match.
     private func combinedName(_ player1: String, _ player2: String) -> String {
-        let p1 = player1.trimmingCharacters(in: .whitespacesAndNewlines)
-        let p2 = player2.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard playMode == .doubles else { return p1 }
-        switch (p1.isEmpty, p2.isEmpty) {
-        case (false, false): return "\(p1) & \(p2)"
-        case (true, false): return p2
-        default: return p1
-        }
+        TeamNaming.joinedName(playMode == .doubles ? [player1, player2] : [player1])
     }
 
     /// Wraps a name field's binding so that any edit the user TYPES (as
@@ -707,13 +701,11 @@ struct MatchSetupView: View {
     }
 
     private var quickLogTeamAName: String {
-        let name = combinedName(teamAPlayer1, teamAPlayer2)
-        return name.isEmpty ? "Team A" : name
+        TeamNaming.resolvedName(combinedName(teamAPlayer1, teamAPlayer2), team: .teamA)
     }
 
     private var quickLogTeamBName: String {
-        let name = combinedName(teamBPlayer1, teamBPlayer2)
-        return name.isEmpty ? "Team B" : name
+        TeamNaming.resolvedName(combinedName(teamBPlayer1, teamBPlayer2), team: .teamB)
     }
 
     private func presentQuickLogSheet() {

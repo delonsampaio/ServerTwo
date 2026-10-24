@@ -15,7 +15,9 @@ struct MatchRecapShareButton: View {
                 ProgressView()
             }
         }
-        .task {
+        // Keyed on the side names so the exported card is re-rendered after
+        // Edit Players (a bare `.task` would keep the first render forever).
+        .task(id: (match.teamSides ?? []).map(\.displayName).joined(separator: "|")) {
             renderedImage = renderCardImage()
         }
     }

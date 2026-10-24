@@ -76,6 +76,7 @@ struct HomeView: View {
         }
         .navigationTitle("Server Two")
         .task { loadMatches() }
+        .refreshAfterPlayersEdited { loadMatches() }
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
         }
