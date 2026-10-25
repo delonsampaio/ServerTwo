@@ -636,6 +636,36 @@ public final class MatchRepository {
         )
     }
 
+    /// Deletes one completed match. The match's `TeamSide`, `GameRecord` and
+    /// `PointEvent` rows go with it through their `.cascade` delete rules;
+    /// `SavedPlayer` rows stay (`TeamSide.players` is `.nullify`), and every
+    /// stat derives from the remaining matches, so it follows on its own.
+    /// One `save()` at the end; on failure the error is rethrown and the match
+    /// is left exactly as it was.
+    ///
+    /// The delete is staged and saved in a short-lived context of the same
+    /// container rather than in `modelContext`. `rollback()` cannot undo a
+    /// staged delete of a match graph: it traps inside SwiftData ("Unexpected
+    /// backing data for snapshot creation", reproduced with in-memory and
+    /// file stores, for a cascade or a single `PointEvent`). A failed save
+    /// here simply discards the throwaway context, so the caller's context
+    /// never holds a half-applied delete.
+    public func deleteMatch(_ match: MatchRecord) throws {
+        try deleteMatch(match, beforeSave: nil)
+    }
+
+    /// `beforeSave` exists only as a test seam: it runs after the delete is
+    /// staged and before the single `save()`, so a test can make that step
+    /// fail and check that the match is left intact.
+    func deleteMatch(_ match: MatchRecord, beforeSave: (() throws -> Void)?) throws {
+        let scratch = ModelContext(modelContext.container)
+        scratch.autosaveEnabled = false
+        let target = scratch.model(for: match.persistentModelID)
+        scratch.delete(target)
+        try beforeSave?()
+        try scratch.save()
+    }
+
     /// Deletes every completed match. Cascades to each match's `TeamSide`,
     /// `GameRecord`, and `PointEvent` rows via their `.cascade` delete rules.
     public func deleteAllMatchHistory() throws {
