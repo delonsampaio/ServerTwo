@@ -27,9 +27,9 @@ struct HowToPlayView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Served either by dropping the ball and hitting it off the bounce (the \"drop serve\"), or by hitting it out of the air with an underhand, upward paddle motion, contacting the ball below your waist. Either way, the serve travels diagonally and must land in the opposite service box.")
                         Text("All lines are in — including the serve's sideline, centerline, and baseline. The one exception is the kitchen line, which is out on a serve.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                         Text("A serve that clips the net but still lands in the correct box is live play, not a replay — that changed in 2021.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                 }
 
@@ -60,13 +60,13 @@ struct HowToPlayView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("A rally ends the instant any of these happens:")
                         Text("• The ball goes out of bounds")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                         Text("• The ball hits the net and doesn't clear it")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                         Text("• The ball bounces twice on one side before being returned")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                         Text("• The two-bounce rule or kitchen rule (above) gets violated")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                 }
 
@@ -78,9 +78,9 @@ struct HowToPlayView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Standard games are played to 11 points, win by 2 — only the serving side can score. Server Two also supports games to 15 or 21, and a rally-scoring format where either side can score, if you'd rather play that way.")
                         Text("In doubles, the score is called as three numbers: serving team's score, receiving team's score, then which server is up (1 or 2). Each team gets two servers per turn before a side-out — except the very first serve of every game, which starts at server 2 (\"0-0-2\"), since there's no partner who already lost a turn yet. After every game the teams switch sides, and the team that received first in that game serves first in the next one (Rule 21.F.2). Server Two tracks all of this automatically.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                         Text("When your team scores, the server switches to the other side of the court to serve the next point — you only switch sides when you score, never after losing a rally.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                 }
 
@@ -102,7 +102,7 @@ struct HowToPlayView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("A quick reference for pickleball's core rules — serving, scoring, and the two rules that trip up most beginners.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
         }
     }
 

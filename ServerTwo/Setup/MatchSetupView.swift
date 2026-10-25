@@ -213,7 +213,7 @@ struct MatchSetupView: View {
             // players never needs scrolling past four static rules
             // sections first — the rules themselves are still here, just
             // consolidated into one card below instead of four.
-            Section("Mode") {
+            Section(header: Text("Mode").foregroundStyle(Color.secondaryText)) {
                 Picker("Mode", selection: $playMode) {
                     Text("Singles").tag(PlayMode.singles)
                     Text("Doubles").tag(PlayMode.doubles)
@@ -221,7 +221,7 @@ struct MatchSetupView: View {
                 .pickerStyle(.segmented)
             }
 
-            Section("Team A") {
+            Section(header: Text("Team A").foregroundStyle(Color.secondaryText)) {
                 TextField(playMode == .doubles ? "Player 1" : "Player Name", text: trackedTextBinding(text: $teamAPlayer1, selectedID: $teamAPlayer1ID))
                     .focused($focusedField, equals: .teamAPlayer1)
                     .accessibilityIdentifier("Team A Player Name")
@@ -255,6 +255,7 @@ struct MatchSetupView: View {
                 // actions on the pairing between the two teams.
                 HStack {
                     Text("Team B")
+                        .foregroundStyle(Color.secondaryText)
                     Spacer()
                     HStack(spacing: 14) {
                         // "Swap Teams" only flips which side an existing
@@ -286,6 +287,8 @@ struct MatchSetupView: View {
                         .tapAreaGiveBack()
                         .accessibilityIdentifier("Swap Teams")
                     }
+                    // Accent TEXT on the grouped background (see `accentText`).
+                    .tint(Color.accentText)
                 }
             } footer: {
                 // Below both teams' fields, where the problem is: same
@@ -294,12 +297,12 @@ struct MatchSetupView: View {
                 if let reason = duplicateReason {
                     Text(reason)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.errorRed)
                         .accessibilityIdentifier("Setup.DuplicatePlayerReason")
                 }
             }
 
-            Section("Match Rules") {
+            Section(header: Text("Match Rules").foregroundStyle(Color.secondaryText)) {
                 // Segmented (not the Form-default drill-down row) —
                 // unchanged from before consolidation, just relocated.
                 Picker("Scoring", selection: $scoringFormatKind) {
@@ -381,7 +384,7 @@ struct MatchSetupView: View {
             }
             .padding(.vertical, -12)
             .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(Color.accentText)
             .padding(.bottom, 4)
             .disabled(duplicateReason != nil)
             .accessibilityHint(duplicateReason ?? "")
@@ -841,9 +844,9 @@ struct MatchSetupView: View {
                         Text(quickLogTeamBName)
                     }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                 }
-                Section("Game Scores") {
+                Section(header: Text("Game Scores").foregroundStyle(Color.secondaryText)) {
                     ForEach(state?.visibleEntries ?? []) { entry in
                         QuickLogRow(
                             gameID: entry.id,
@@ -969,7 +972,7 @@ fileprivate struct QuickLogRow: View {
         HStack {
             Text("Game \(gameID)")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .frame(width: gameLabelWidth, alignment: .leading)
             TextField("0", text: $teamAText)
                 .keyboardType(.numberPad)
@@ -980,7 +983,7 @@ fileprivate struct QuickLogRow: View {
                 }
                 .accessibilityIdentifier("QuickLog.Game\(gameID).TeamAScore")
             Text("–")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
             TextField("0", text: $teamBText)
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)

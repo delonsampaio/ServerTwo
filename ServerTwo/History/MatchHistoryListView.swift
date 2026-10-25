@@ -62,7 +62,7 @@ struct MatchHistoryListView: View {
                         .id(editRevision)
                 }
             }
-            Section(filterPlayerName.map { "Matches · \($0)" } ?? "Matches") {
+            Section(header: Text(filterPlayerName.map { "Matches · \($0)" } ?? "Matches").foregroundStyle(Color.secondaryText)) {
                 if matches.isEmpty, loadError != nil {
                     // A swallowed fetch failure used to masquerade as a genuine
                     // empty state, which reads as "your history was deleted."
@@ -95,7 +95,7 @@ struct MatchHistoryListView: View {
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
-                            .tint(.red)
+                            .tint(Color.lossRed)
                             .accessibilityIdentifier("Delete.\(rowIdentifier(match))")
                         }
                     }
@@ -186,15 +186,15 @@ struct MatchHistoryListView: View {
                 .accessibilityIdentifier("\(teamAName) vs \(teamBName)")
             Text(match.completedAt, style: .date)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
         }
         let badge = Group {
             if let myResult {
                 Text(myResult ? "W" : "L")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(myResult ? .green : .red)
+                    .foregroundStyle(myResult ? Color.winGreenText : Color.errorRed)
                     .frame(width: resultBadgeSize, height: resultBadgeSize)
-                    .background(myResult ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
+                    .background((myResult ? Color.winGreen : Color.lossRed).opacity(Color.resultBadgeTintOpacity), in: Circle())
                     .accessibilityLabel(AccessibilityText.resultWord(didWin: myResult))
             }
         }

@@ -249,7 +249,7 @@ struct ScoreCorrectionSheet: View {
 
             Text(isModified ? "Was \(original)" : "Current")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(isModified ? Color.accentColor : Color.secondary)
+                .foregroundStyle(isModified ? Color.accentText : Color.secondaryText)
                 .padding(.bottom, 8)
 
             HStack(spacing: 8) {
@@ -344,16 +344,16 @@ struct ScoreCorrectionSheet: View {
             case .unreachable(let text):
                 Label(text, systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.errorRed)
                     .accessibilityIdentifier("ScoreCorrection.Hint")
             case .endsGame:
                 Label("Saving ends this game", systemImage: "flag.checkered")
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.accentText)
             case .rule(let text):
                 Text(text)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
         .multilineTextAlignment(.center)

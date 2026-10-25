@@ -71,6 +71,8 @@ struct ScoringView: View {
                         ))
                     }
                 }
+                // Red TEXT on the toolbar glass (see `errorRed`).
+                .tint(Color.errorRed)
                 .accessibilityIdentifier("Cancel Match")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -438,7 +440,7 @@ struct ScoringView: View {
                 serverNumber: serverNumber, isMatchOver: match.isMatchOver
             ))
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .multilineTextAlignment(.center)
                 // Wraps at accessibility sizes; never squeezed into a truncation.
                 .fixedSize(horizontal: false, vertical: true)
@@ -596,12 +598,12 @@ private struct ServingBadgeSlot: View {
             if let text {
                 Label(text, systemImage: "circle.grid.cross.fill")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.accentText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Color.accentColor.opacity(0.18), in: Capsule())
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
             } else {
                 Color.clear
             }

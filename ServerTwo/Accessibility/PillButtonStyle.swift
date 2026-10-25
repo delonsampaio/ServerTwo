@@ -11,7 +11,7 @@ struct PillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.caption.weight(.semibold))
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(Color.accentText)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(Color(.secondarySystemFill), in: Capsule())

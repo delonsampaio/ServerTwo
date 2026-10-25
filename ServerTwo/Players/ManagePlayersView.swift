@@ -215,10 +215,10 @@ struct ManagePlayersView: View {
             if player.isMe {
                 Text("Me")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.accentText)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.18), in: Capsule())
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
                     .accessibilityIdentifier("Me.\(player.name)")
             }
         }

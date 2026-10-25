@@ -40,17 +40,17 @@ struct PlayerDetailView: View {
                         if player.isMe {
                             Text("Me")
                                 .font(.caption2.weight(.bold))
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(Color.accentText)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.accentColor.opacity(0.18), in: Capsule())
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
                         }
                     }
                     if let record {
                         let total = record.wins + record.losses
                         Text("\(total) Match\(total == 1 ? "" : "es") Played")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -98,7 +98,7 @@ struct PlayerDetailView: View {
                             HStack {
                                 Text("As Your Partner")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                                 Spacer()
                                 Text("\(asPartner.wins) - \(asPartner.losses)")
                                     .font(.subheadline.weight(.bold).monospacedDigit())
@@ -110,7 +110,7 @@ struct PlayerDetailView: View {
                             HStack {
                                 Text("As Your Opponent")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.secondaryText)
                                 Spacer()
                                 Text("\(asOpponent.wins) - \(asOpponent.losses)")
                                     .font(.subheadline.weight(.bold).monospacedDigit())
@@ -124,7 +124,7 @@ struct PlayerDetailView: View {
                         AdaptiveStack(columnAlignment: .leading, spacing: 8) {
                             Text("Recent Form")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 // The strip below carries this same label.
                                 .accessibilityHidden(true)
@@ -136,7 +136,7 @@ struct PlayerDetailView: View {
                                         .font(.caption2.bold())
                                         .foregroundStyle(.white)
                                         .frame(width: resultBadgeSize, height: resultBadgeSize)
-                                        .background(didWin ? Color.green : Color.red, in: Circle())
+                                        .background(didWin ? Color.winGreen : Color.lossRed, in: Circle())
                                 }
                             }
                             // One stop that reads the results in the order they
@@ -208,7 +208,7 @@ struct PlayerDetailView: View {
                 .foregroundStyle(.primary)
             Text(label)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.85)
         }
@@ -236,15 +236,15 @@ struct PlayerDetailView: View {
                 .foregroundStyle(.primary)
             Text(match.completedAt, style: .date)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
         }
         let badge = Group {
             if let result {
                 Text(result ? "W" : "L")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(result ? .green : .red)
+                    .foregroundStyle(result ? Color.winGreenText : Color.errorRed)
                     .frame(width: resultBadgeSize, height: resultBadgeSize)
-                    .background(result ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
+                    .background((result ? Color.winGreen : Color.lossRed).opacity(Color.resultBadgeTintOpacity), in: Circle())
                     .accessibilityLabel(AccessibilityText.resultWord(didWin: result))
             }
         }

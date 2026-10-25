@@ -86,7 +86,7 @@ struct EditMatchPlayersSheet: View {
                 if let reason = problem ?? saveError {
                     Text(reason)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.errorRed)
                         .accessibilityIdentifier("EditPlayers.Problem")
                 }
                 // Equal-width, full-width actions like FinishMatchSheet's: the
@@ -143,7 +143,7 @@ struct EditMatchPlayersSheet: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text(isWinner ? "\(title) · Winner" : title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .accessibilityLabel(isWinner ? "\(title), winner" : title)
                 .accessibilityAddTraits(.isHeader)
             ForEach(slots.wrappedValue.indices, id: \.self) { index in
@@ -188,7 +188,7 @@ struct EditMatchPlayersSheet: View {
                         entry.wrappedValue = PlayerSlotEntry(name: "")
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                             .frame(minWidth: 44, minHeight: 44)
                             .contentShape(Rectangle())
                     }

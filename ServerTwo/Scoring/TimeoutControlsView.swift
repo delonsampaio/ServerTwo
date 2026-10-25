@@ -30,6 +30,11 @@ struct TimeoutControlsView: View {
         }
         .disabled(remaining <= 0)
         .buttonStyle(.bordered)
+        // A bordered button fills with the tint and draws its label in it too,
+        // which never reaches 4.5:1 for a blue on its own blue wash: keep the
+        // blue wash (`accentText` tint) and set the label in `.primary`.
+        .tint(Color.accentText)
+        .foregroundStyle(.primary)
         .controlSize(.large)
         .accessibilityLabel("\(name) timeout, \(remaining) remaining")
     }

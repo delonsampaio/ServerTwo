@@ -73,7 +73,7 @@ struct CoinFlipView: View {
                     // everything else when the coin lands.
                     Text(subtitle)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(result == nil ? .secondary : .primary)
+                        .foregroundStyle(result == nil ? Color.secondaryText : Color.primary)
                         .accessibilityIdentifier("FirstServeResult")
 
                     if let result {
@@ -129,6 +129,10 @@ struct CoinFlipView: View {
                         .accessibilityIdentifier("Team B Won Spin")
                     }
                     .buttonStyle(.bordered)
+                    // Blue wash with a `.primary` label: a bordered button's label
+                    // in its own tint never reaches 4.5:1 (see TimeoutControlsView).
+                    .tint(Color.accentText)
+                    .foregroundStyle(.primary)
                 }
                 .padding()
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -150,6 +154,9 @@ struct CoinFlipView: View {
                 Button("Cancel", role: .cancel) {
                     activeMatchController.cancelPendingMatch()
                 }
+                // Accent TEXT on the toolbar glass: `accentText` is the
+                // text-tuned blue (the fill accent is for white-on-accent).
+                .tint(Color.accentText)
                 .accessibilityIdentifier("Cancel Coin Flip")
             }
         }

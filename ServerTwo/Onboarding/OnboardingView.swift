@@ -46,7 +46,7 @@ struct OnboardingView: View {
                         .multilineTextAlignment(.center)
                     Text("Score singles and doubles matches point by point. Server Two keeps track of who's serving, which side everyone's on, and your stats over time.")
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
 
                     VStack(alignment: .leading, spacing: 16) {
                         featureRow(
@@ -79,7 +79,7 @@ struct OnboardingView: View {
                         .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         Text("Set this once so your personal win/loss record starts tracking automatically.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                             .multilineTextAlignment(.center)
                     }
 
@@ -104,6 +104,8 @@ struct OnboardingView: View {
                     Button("Done") {
                         finish()
                     }
+                    // Accent TEXT on the toolbar glass (see `accentText`).
+                    .tint(Color.accentText)
                     .accessibilityIdentifier("Done")
                 }
             }
@@ -121,7 +123,7 @@ struct OnboardingView: View {
                 Text(title).font(.subheadline.weight(.semibold))
                 Text(detail)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
         }
         .accessibilityElement(children: .combine)

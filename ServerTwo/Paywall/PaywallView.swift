@@ -20,7 +20,7 @@ struct PaywallView: View {
                         .multilineTextAlignment(.center)
                     Text("The free version lets you play \(activeMatchController.demoMatchLimit) full match\(activeMatchController.demoMatchLimit == 1 ? "" : "es"), start to finish. Unlock Server Two Pro for a one-time $1.99 to play unlimited matches, forever.")
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
 
                     Button {
                         activeMatchController.unlockPro()
@@ -36,7 +36,7 @@ struct PaywallView: View {
                     Button("Restore Purchases") {
                         // Stub: Phase 4 wires this to a real StoreKit restore call.
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                     .disabled(true)
                 }
             }
@@ -46,6 +46,8 @@ struct PaywallView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Not Now") { dismiss() }
+                        // Accent TEXT on the toolbar glass (see `accentText`).
+                        .tint(Color.accentText)
                         .accessibilityIdentifier("Not Now")
                 }
             }

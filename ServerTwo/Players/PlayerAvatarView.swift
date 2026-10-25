@@ -45,8 +45,20 @@ struct PlayerAvatarView: View {
     /// which an arbitrary hashed hue can't guarantee. Keyed off the
     /// player's stable `id` (not their name, which can be edited) so a
     /// given person's color never changes from a rename.
+    ///
+    /// The same eight hues in the same order as before (blue, teal, indigo,
+    /// orange, pink, purple, mint, brown; the index mapping is untouched),
+    /// darkened until the white initials reach at least 5.4:1 (the system colours
+    /// were 2.1 to 4.1:1; the audit measures rendered pixels, so there is margin
+    /// over 4.5). White-on-fill ratios: blue #0A5FD0 5.90, teal #0E6E7D 5.92,
+    /// indigo #4B49C4 6.89, orange #A65200 5.49, pink #C71F45 5.66, purple
+    /// #8636B8 6.49, mint #0A7358 5.82, brown #775B3B 6.28. Fixed sRGB
+    /// values (not adaptive) so a person keeps the same colour in light and
+    /// dark mode.
     private static let palette: [Color] = [
-        .blue, .teal, .indigo, .orange, .pink, .purple, .mint, .brown,
+        Color(srgbHex: 0x0A5FD0), Color(srgbHex: 0x0E6E7D), Color(srgbHex: 0x4B49C4),
+        Color(srgbHex: 0xA65200), Color(srgbHex: 0xC71F45), Color(srgbHex: 0x8636B8),
+        Color(srgbHex: 0x0A7358), Color(srgbHex: 0x775B3B),
     ]
 
     /// `UUID.hashValue` is seeded randomly per process launch (same as

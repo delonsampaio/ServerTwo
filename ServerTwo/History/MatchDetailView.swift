@@ -168,6 +168,8 @@ struct MatchDetailView: View {
                     Button("Rematch") {
                         onRematch(request)
                     }
+                    // Accent TEXT on the toolbar glass (see `accentText`).
+                    .tint(Color.accentText)
                     .accessibilityIdentifier("Rematch")
                 }
             }
@@ -199,7 +201,7 @@ struct MatchDetailView: View {
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .overlay(Capsule().strokeBorder(Color.red, lineWidth: 1.5))
+                .overlay(Capsule().strokeBorder(Color.errorRed, lineWidth: 1.5))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -289,7 +291,7 @@ struct MatchDetailView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.orange, in: Capsule())
+                        .background(Color.tagOrange, in: Capsule())
                 }
                 if game.id == longestGameID {
                     Text("Longest Game")
@@ -297,7 +299,7 @@ struct MatchDetailView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.blue, in: Capsule())
+                        .background(Color.accentColor, in: Capsule())
                 }
             }
             // Names and scores are visually separated (name small/secondary,
@@ -329,7 +331,7 @@ struct MatchDetailView: View {
                         HStack(spacing: 10) {
                             Text("\(point.sequenceNumber)")
                                 .font(.caption.monospacedDigit())
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Color.secondaryText)
                                 .frame(width: sequenceColumnWidth, alignment: .leading)
                             Circle()
                                 .fill(point.scoringTeam == .teamA ? Color.accentColor : Color.orange)
@@ -373,7 +375,7 @@ struct MatchDetailView: View {
                 .font(.system(size: max(36, min(gameScoreSize, gameScoreSizeCap)), weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
-                .foregroundStyle(won ? .primary : .secondary)
+                .foregroundStyle(won ? Color.primary : Color.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: alignment == .leading ? .leading : .trailing)
     }

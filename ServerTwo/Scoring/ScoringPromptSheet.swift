@@ -260,7 +260,7 @@ struct ScoringPromptSheet: View {
                     teamAScore: teamAScore, teamBScore: teamBScore
                 ))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.7)
             }
@@ -295,13 +295,13 @@ struct ScoringPromptSheet: View {
                     .font(.subheadline.weight(.semibold))
                 Text(Self.switchSidesLine)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                 Text(Self.firstServeLine(name: firstServerName))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
                 Text("Next game starts at 0-0.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondaryText)
             }
             dismissButton(Self.startNextGameTitle(afterGame: gameNumber))
         }
@@ -354,10 +354,10 @@ struct ScoringPromptSheet: View {
                     dismiss()
                 } label: {
                     buttonLabel("Cancel Match")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.errorRed)
                 }
                 .buttonStyle(.glass)
-                .tint(.red)
+                .tint(Color.errorRed)
                 .accessibilityIdentifier("Confirm Cancel Match")
             }
             .controlSize(.large)
@@ -437,12 +437,12 @@ struct ScoringPromptSheet: View {
                 .font(.subheadline.weight(.medium))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
             Text("\(value)")
                 .font(.system(size: max(64, min(scoreDigitSize, scoreDigitSizeCap)), weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
-                .foregroundStyle(highlighted ? .primary : .secondary)
+                .foregroundStyle(highlighted ? Color.primary : Color.secondaryText)
         }
         .frame(maxWidth: .infinity)
     }

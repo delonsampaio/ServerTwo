@@ -54,7 +54,7 @@ struct MatchRecapCardView: View {
 
             Text("Server Two")
                 .font(.caption.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
         }
         .padding(32)
         .frame(width: 360, height: 360)

@@ -17,7 +17,7 @@ struct SettingsView: View {
             // alongside a tutorial. Showing the active "Me" player here
             // (when one's set) gives at-a-glance feedback without having
             // to drill in.
-            Section("Players") {
+            Section(header: Text("Players").foregroundStyle(Color.secondaryText)) {
                 NavigationLink {
                     ManagePlayersView(onRematch: onRematch)
                 } label: {
@@ -29,14 +29,14 @@ struct SettingsView: View {
                         if let mePlayer {
                             Text(mePlayer.name)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.secondaryText)
                         }
                     }
                 }
                 .accessibilityIdentifier("Manage Players")
             }
 
-            Section("Audio & Haptics") {
+            Section(header: Text("Audio & Haptics").foregroundStyle(Color.secondaryText)) {
                 Label {
                     Toggle("Voice Announcer", isOn: $appSettings.voiceAnnouncerEnabled)
                 } icon: {
@@ -51,7 +51,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Appearance") {
+            Section(header: Text("Appearance").foregroundStyle(Color.secondaryText)) {
                 Label {
                     Picker("Theme", selection: $appSettings.theme) {
                         ForEach(ColorSchemePreference.allCases) { theme in
@@ -64,7 +64,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Help") {
+            Section(header: Text("Help").foregroundStyle(Color.secondaryText)) {
                 NavigationLink {
                     HowToPlayView()
                 } label: {
@@ -82,7 +82,7 @@ struct SettingsView: View {
                     Text("Version")
                     Spacer()
                     Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondaryText)
                 }
             }
         }

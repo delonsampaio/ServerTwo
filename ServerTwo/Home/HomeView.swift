@@ -55,7 +55,7 @@ struct HomeView: View {
                         .padding(.top, 40)
                     } else {
                         Text("Play your first match to see it here.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.secondaryText)
                             .multilineTextAlignment(.center)
                             .padding(.top, 60)
                     }
@@ -111,9 +111,9 @@ struct HomeView: View {
                         if let myResult {
                             Text(myResult ? "W" : "L")
                                 .font(.caption2.weight(.bold))
-                                .foregroundStyle(myResult ? .green : .red)
+                                .foregroundStyle(myResult ? Color.winGreenText : Color.errorRed)
                                 .frame(width: resultBadgeSize, height: resultBadgeSize)
-                                .background(myResult ? Color.green.opacity(0.2) : Color.red.opacity(0.2), in: Circle())
+                                .background((myResult ? Color.winGreen : Color.lossRed).opacity(Color.resultBadgeTintOpacity), in: Circle())
                                 .accessibilityLabel(AccessibilityText.resultWord(didWin: myResult))
                         }
                         if match.matchFormat == .bestOfOne, let onlyGame = games.first {
@@ -182,7 +182,7 @@ struct HomeView: View {
                         if streak > 0 {
                             Text("🔥 \(streak) streak")
                                 .font(.subheadline.bold())
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(Color.orangeText)
                                 .accessibilityIdentifier("WinStreak")
                                 .accessibilityLabel("\(streak) win streak")
                         }
@@ -210,7 +210,7 @@ struct HomeView: View {
                                         .font(.subheadline.bold())
                                         .foregroundStyle(.white)
                                         .frame(width: formDotSize, height: formDotSize)
-                                        .background(didWin ? Color.green : Color.red, in: Circle())
+                                        .background(didWin ? Color.winGreen : Color.lossRed, in: Circle())
                                 }
                             }
                             // One stop that reads the results in the order
@@ -324,12 +324,12 @@ struct HomeView: View {
                             Circle().strokeBorder(.primary.opacity(0.12), lineWidth: 1)
                         )
                         .overlay(
-                            Circle().stroke(isSelected ? Color.green : Color.clear, lineWidth: 3)
+                            Circle().stroke(isSelected ? Color.winGreen : Color.clear, lineWidth: 3)
                         )
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.green, .white)
+                            .foregroundStyle(Color.winGreen, .white)
                             .offset(x: 4, y: -4)
                     }
                 }

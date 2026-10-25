@@ -128,12 +128,12 @@ struct FinishMatchSheet: View {
                 .font(.subheadline.weight(.medium))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondaryText)
             Text("\(value)")
                 .font(.system(size: max(36, min(scoreDigitSize, scoreDigitSizeCap)), weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
-                .foregroundStyle(highlighted ? .primary : .secondary)
+                .foregroundStyle(highlighted ? Color.primary : Color.secondaryText)
         }
         .frame(maxWidth: .infinity)
     }
