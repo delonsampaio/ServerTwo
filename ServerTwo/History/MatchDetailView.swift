@@ -173,40 +173,9 @@ struct MatchDetailView: View {
                 Text("\(teamAName) vs \(teamBName)")
                     .font(.title2.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
-                // In the card next to the title, not in the toolbar (which
-                // already holds Rematch and Share). The sheet saves straight
-                // into `match`; `refreshRevision` refreshes this content.
-                VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 4) {
-                    Text(match.completedAt, style: .date)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                    Button {
-                        isEditingPlayers = true
-                    } label: {
-                        // Outlined text in `.primary` rather than
-                        // `PillButtonStyle`: the audit's contrast check fails
-                        // the accent blue on this card, and it also fails
-                        // this button once a pencil icon sits next to the
-                        // text (verified: text alone passes), so there is no
-                        // icon. Same 44 pt tap area (`tapAreaLabel`).
-                        Text("Edit Players")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.35), lineWidth: 1))
-                            .tapAreaLabel(9)
-                    }
-                    .buttonStyle(.plain)
-                    .tapAreaGiveBack(9)
-                    // Needed for the audit, not just for VoiceOver: without an explicit
-                    // label the audit evaluates the whole button element (outline and
-                    // tap padding included) and fails its contrast; with it the same
-                    // button passes (verified both ways).
-                    .accessibilityLabel("Edit Players")
-                    .accessibilityHint("Change who played this match")
-                    .accessibilityIdentifier("Edit Players")
-                }
+                Text(match.completedAt, style: .date)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
             }
             AdaptiveStack(columnAlignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
@@ -226,6 +195,36 @@ struct MatchDetailView: View {
                         .foregroundStyle(.primary)
                 }
             }
+            // Its own row at the bottom of the card, left-aligned under the
+            // result, not squeezed under the date (it looked stuck there) and
+            // not in the toolbar (which already holds Rematch and Share). The
+            // sheet saves straight into `match`; `refreshRevision` refreshes
+            // this content.
+            Button {
+                isEditingPlayers = true
+            } label: {
+                // Outlined text in `.primary` rather than `PillButtonStyle`:
+                // the audit's contrast check fails the accent blue on this
+                // card, and it also fails this button once a pencil icon sits
+                // next to the text (verified: text alone passes), so there is
+                // no icon. Same 44 pt tap area (`tapAreaLabel`).
+                Text("Edit Players")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.35), lineWidth: 1))
+                    .tapAreaLabel(9)
+            }
+            .buttonStyle(.plain)
+            .tapAreaGiveBack(9)
+            // Needed for the audit, not just for VoiceOver: without an explicit
+            // label the audit evaluates the whole button element (outline and
+            // tap padding included) and fails its contrast; with it the same
+            // button passes (verified both ways).
+            .accessibilityLabel("Edit Players")
+            .accessibilityHint("Change who played this match")
+            .accessibilityIdentifier("Edit Players")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
