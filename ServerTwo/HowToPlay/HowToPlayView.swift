@@ -131,7 +131,7 @@ struct HowToPlayView: View {
 
     /// A simplified top-down diagram: backcourt on each side, with the
     /// 7-foot non-volley zone flanking the net in the middle. Drawn with
-    /// native shapes (matching CourtDiagramView's approach) rather than an
+    /// native shapes rather than an
     /// image, so it stays crisp at any size and themes automatically.
     private var kitchenDiagram: some View {
         HStack(spacing: 0) {
