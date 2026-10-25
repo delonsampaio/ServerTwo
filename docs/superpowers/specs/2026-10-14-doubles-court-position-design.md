@@ -29,6 +29,8 @@ Note this is unrelated to the existing "Switch Sides" feature (`hasSideSwitched`
 
 ## Live state
 
+> **Superseded** by "Adapted design (2026-10-24)" below: the overrides are now kept per game, inherited by later games and persisted.
+
 Two new non-persisted properties on `ActiveMatchController` — this is UI/session state, never written to `GameRecord`/`MatchRecord`, so it doesn't need the undo-safe array treatment the Chemistry/Game Duration spec's `gameCompletionDates` needed (that tracked real data being saved to history; this is a display convenience discarded the moment the match ends):
 
 ```swift
@@ -107,6 +109,8 @@ private func partnerPositions(for team: Team, match: PickleballMatch) -> Partner
 
 (`guard case .sideOut = ...` — not `== .sideOut` — since `ScoringFormat` is an enum with an associated value on its other case, matching convention already used elsewhere in this codebase, e.g. `if case .rally(let freeze) = configuration.scoringFormat`.)
 
+> **Superseded** by "Adapted design (2026-10-24)": the active server is NOT highlighted at all. The `activeServerSide` section below is kept for history only.
+
 **Highlighting the active server is not simply "the right-side player."** An earlier draft of this design assumed the server is always on the right while their team is serving — wrong: once the server wins a point and the team's score becomes odd, they swap to the *left* and continue serving from there. The active server's side is a direct, independent parity check — `scoreIsEven ? .right : .left` — not an assumption piggybacked on `isServing` and "right." Still zero new engine state: both the position formula and the active-server side come from the same already-exposed score.
 
 ```swift
@@ -116,6 +120,8 @@ private func activeServerSide(score: Int) -> PlayerSlot {
 ```
 
 ## UI integration
+
+> **Superseded** by "Adapted design (2026-10-24)": the flip badge inside the card (and its `ZStack` sibling workaround) is gone; badges are display only and the swap lives in the Correct Score sheet.
 
 **The flip badges cannot live inside `scoreZone`'s existing `Button`.** `scoreZone` (`ServerTwo/Scoring/ScoringView.swift:241-300`) is already one big `Button { recordPoint }` wrapping its entire card as the label. A nested `Button` inside another `Button`'s `label:` closure is a real, known SwiftUI/XCUITest trap, not a theoretical one: SwiftUI's accessibility tree collapses a `Button`'s label into one atomic element, so an inner `Button` is invisible to `app.buttons["..."]` in XCUITest — and the usual workaround (`.accessibilityElement(children: .contain)` on the outer button) breaks the *outer* button's own identification (`scoreZone.teamA` stops being a `.button` and every existing UI test that taps it breaks). This codebase has already hit this exact category of bug once — `ManagePlayersView`'s Rename/Set-as-Me buttons needed restructuring specifically because two interactive controls sharing one row stole each other's taps (see that file's own comments) — and solved it the same way this needs to be solved: **the flip control is a sibling layered on top via `ZStack`, never a child inside the scoring button's label.**
 
@@ -211,3 +217,16 @@ Falls back to today's unchanged single-line name for singles and rally-scored ma
 - No support for "stacking" (a real, legal advanced doubles strategy where partners voluntarily position off the textbook diagonal slots after the serve) — this models the standard, non-stacking position only. Flagged, not silently ignored: a team using stacking will see badges that don't match their actual on-court positions. Casual/recreational play (this app's stated audience) overwhelmingly doesn't stack; this is an accepted limitation, not an oversight.
 - No position tracking for rally-scored or singles matches — see Context above.
 - No persistence of the override flip, or of position history, to `GameRecord`/`MatchRecord` — purely live display state, gone once the match ends, same as `correctingTeam` or `focusedField`.
+
+## Adapted design (2026-10-24)
+
+The score card changed after this spec was written (a plain `VStack` with `TapOrHoldModifier`, one accessibility element with a custom label, a default action and a "Correct score" action, and a SERVER 1/SERVER 2 badge), and an external review corrected two points. What was built:
+
+- **The rule is unchanged.** Side-out doubles only; a team's own score parity decides positions: `player1OnRight = (teamScore % 2 == 0) != swapped`. Singles and rally scoring show nothing. The pure computation is `PartnerPositions.make(teamName:score:swapped:)` (app target, unit tested); the team name is split on the exact literal " & ".
+- **No bolding of the active server.** Score parity cannot say which partner is serving: two different histories reach the same score and server number with different servers. The card already shows "SERVER 1/SERVER 2" in its badge, so both partners are shown with equal weight (this replaces the whole `activeServerSide` idea).
+- **Badges are display only.** A tappable badge cannot live inside the card: it conflicts with the tap/hold gesture and is unreachable for VoiceOver inside the card's `.ignore` element. Each partner row is a small outlined circle with R or L (so it cannot read as an initial) next to the name; rows are fixed by player (Player 1 on top), only the letter changes.
+- **The swap is in the Correct Score sheet.** For each team with positions the sheet shows a "Swap R/L" button with a live preview ("Delon R · Katie L"). The choice is held until Save (Cancel discards). Save is enabled when the scores changed to a reachable pair, or a swap changed; a swap alone never calls the score commit. If the scores were edited to an unreachable pair, Save stays off even with a swap. The swap is applied to the game being edited before the score commit, because a correction can end the game. The sheet's design height is 440 (instead of 360) only when a swap control is shown.
+- **Overrides are per game, persisted and inherited.** The state lives in `ActiveMatchController`, keyed by game index (`match.completedGames.count`) and team, stored in UserDefaults next to the active names, restored in `resumeIfNeeded` and cleared when a new match starts, and on finish and cancel. A game without an entry inherits the nearest earlier game's setting (default false), so a pair that stands in swapped order keeps it across games; an explicit change at game N affects N and later games without their own entry. Entries are never wiped when the game number goes down, so undoing into game N-1 still finds its setting. (The old "reset on every game change" rule is dropped.)
+- **Hidden when the names do not split.** A name that is not exactly two non-empty names around " & " ("Team A", one name typed) shows its normal single name line and no positions, as does any singles or rally match. When one card has partner rows and the other has one name, both name areas reserve the same height so the big digits stay aligned. The partner block's Dynamic Type growth is capped at accessibility2.
+- **VoiceOver.** The score zone label keeps its prefix "<name>, <N> points", then ", serving, server n" as before, then ", Delon on the right, Katie on the left". The hint becomes "Double tap to score a point. Use the Actions rotor to correct the score or swap partner positions." when positions are shown. The identifier, button trait, default action and "Correct score" action are unchanged.
+- **Leftovers.** The serving card drops its tint and thick border once the match is over; the onboarding "Automatic Court Positions" text now says what the app does; the unused `CourtDiagramView` was deleted.

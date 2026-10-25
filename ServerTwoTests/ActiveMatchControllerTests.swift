@@ -615,3 +615,175 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertEqual(controller.gameCompletionDates.count, 1)
     }
 }
+
+/// Per-game "partners started the other way round" overrides for the court
+/// positions shown on the score cards (doubles side-out).
+@MainActor
+final class StartingSideOverrideTests: XCTestCase {
+    private typealias Keys = ActiveMatchController.Keys
+
+    private func makeController(
+        container: ModelContainer? = nil, defaults: UserDefaults? = nil
+    ) throws -> (ActiveMatchController, ModelContainer, UserDefaults) {
+        let container = try container ?? PersistenceContainer.makeInMemoryContainer()
+        let defaults = defaults ?? UserDefaults(suiteName: UUID().uuidString)!
+        return (ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults), container, defaults)
+    }
+
+    private func start(_ controller: ActiveMatchController) {
+        controller.stageMatch(PendingMatchSetup(
+            configuration: GameConfiguration(playMode: .doubles), matchFormat: .bestOfFive,
+            teamAName: "Delon & Katie", teamBName: "Fred & Gina",
+            teamAPlayerIDs: [], teamBPlayerIDs: []
+        ))
+        controller.confirmFirstServe(.teamA)
+    }
+
+    func testDefaultsToNotSwapped() throws {
+        let (controller, _, _) = try makeController()
+        start(controller)
+        for game in 0...3 {
+            XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: game))
+            XCTAssertFalse(controller.startingSidesSwapped(for: .teamB, gameIndex: game))
+        }
+    }
+
+    func testTeamsAreIndependent() throws {
+        let (controller, _, _) = try makeController()
+        start(controller)
+        controller.setStartingSidesSwapped(true, for: .teamA, gameIndex: 0)
+        XCTAssertTrue(controller.startingSidesSwapped(for: .teamA, gameIndex: 0))
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamB, gameIndex: 0))
+    }
+
+    func testAnExplicitChangeAffectsThatGameAndLaterGamesWithoutTheirOwnEntry() throws {
+        let (controller, _, _) = try makeController()
+        start(controller)
+        controller.setStartingSidesSwapped(true, for: .teamA, gameIndex: 1)
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: 0), "an earlier game is unaffected")
+        XCTAssertTrue(controller.startingSidesSwapped(for: .teamA, gameIndex: 1))
+        XCTAssertTrue(controller.startingSidesSwapped(for: .teamA, gameIndex: 2), "later games inherit")
+        XCTAssertTrue(controller.startingSidesSwapped(for: .teamA, gameIndex: 4))
+    }
+
+    func testALaterExplicitEntryWinsOverInheritance() throws {
+        let (controller, _, _) = try makeController()
+        start(controller)
+        controller.setStartingSidesSwapped(true, for: .teamA, gameIndex: 0)
+        controller.setStartingSidesSwapped(false, for: .teamA, gameIndex: 2)
+        XCTAssertTrue(controller.startingSidesSwapped(for: .teamA, gameIndex: 1))
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: 2))
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: 3))
+    }
+
+    func testUndoingBackIntoAnEarlierGameStillFindsItsSetting() throws {
+        let (controller, _, _) = try makeController()
+        start(controller)
+        controller.setStartingSidesSwapped(true, for: .teamA, gameIndex: 0)
+        playOutGame(controller, winner: .teamA)
+        XCTAssertEqual(controller.match?.completedGames.count, 1)
+        controller.setStartingSidesSwapped(false, for: .teamA, gameIndex: 1)
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: 1))
+
+        controller.undo() // back into game 1 (index 0)
+        XCTAssertEqual(controller.match?.completedGames.count, 0)
+        XCTAssertTrue(controller.startingSidesSwapped(for: .teamA, gameIndex: 0))
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: 1), "game 2's own entry is kept too")
+    }
+
+    func testPersistsAcrossARelaunch() throws {
+        let (first, container, defaults) = try makeController()
+        start(first)
+        first.recordPoint(for: .teamA)
+        first.setStartingSidesSwapped(true, for: .teamA, gameIndex: 0)
+        first.setStartingSidesSwapped(true, for: .teamB, gameIndex: 1)
+
+        let (resumed, _, _) = try makeController(container: container, defaults: defaults)
+        XCTAssertNotNil(resumed.match)
+        XCTAssertTrue(resumed.startingSidesSwapped(for: .teamA, gameIndex: 0))
+        XCTAssertTrue(resumed.startingSidesSwapped(for: .teamA, gameIndex: 3), "inheritance survives too")
+        XCTAssertFalse(resumed.startingSidesSwapped(for: .teamB, gameIndex: 0))
+        XCTAssertTrue(resumed.startingSidesSwapped(for: .teamB, gameIndex: 1))
+    }
+
+    func testClearedWhenANewMatchStarts() throws {
+        let (controller, _, defaults) = try makeController()
+        start(controller)
+        controller.setStartingSidesSwapped(true, for: .teamA, gameIndex: 0)
+        start(controller) // stage + confirm again without finishing: a new match
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: 0))
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamAStartingSidesSwapped))
+    }
+
+    func testClearedWhenTheMatchIsCancelled() throws {
+        let (controller, container, defaults) = try makeController()
+        start(controller)
+        controller.setStartingSidesSwapped(true, for: .teamA, gameIndex: 0)
+        controller.cancelActiveMatch()
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: 0))
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamAStartingSidesSwapped))
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamBStartingSidesSwapped))
+
+        // A relaunch over the same defaults must not bring anything back.
+        let (relaunched, _, _) = try makeController(container: container, defaults: defaults)
+        XCTAssertFalse(relaunched.startingSidesSwapped(for: .teamA, gameIndex: 0))
+    }
+
+    func testClearedWhenTheMatchIsFinished() throws {
+        let (controller, _, defaults) = try makeController()
+        start(controller)
+        controller.setStartingSidesSwapped(true, for: .teamB, gameIndex: 0)
+        XCTAssertNotNil(defaults.object(forKey: Keys.activeTeamBStartingSidesSwapped))
+        playOutGame(controller, winner: .teamA)
+        playOutGame(controller, winner: .teamA)
+        playOutGame(controller, winner: .teamA)
+        _ = try controller.finishMatch()
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamB, gameIndex: 0))
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamAStartingSidesSwapped))
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamBStartingSidesSwapped))
+    }
+
+    func testPartnerPositionsFollowTheTeamScoreAndTheOverride() throws {
+        let (controller, _, _) = try makeController()
+        start(controller)
+        XCTAssertEqual(controller.partnerPositions(for: .teamA)?.player1Side, .right)
+        controller.recordPoint(for: .teamA) // team A serves first and scores
+        XCTAssertEqual(controller.partnerPositions(for: .teamA)?.player1Side, .left)
+        XCTAssertEqual(controller.partnerPositions(for: .teamB)?.player1Side, .right, "team B scored nothing")
+        controller.setStartingSidesSwapped(true, for: .teamA, gameIndex: 0)
+        XCTAssertEqual(controller.partnerPositions(for: .teamA)?.player1Side, .right)
+    }
+
+    func testNoPartnerPositionsForSinglesRallyOrUnsplitNames() throws {
+        for configuration in [
+            GameConfiguration(playMode: .singles),
+            GameConfiguration(playMode: .doubles, scoringFormat: .rally(freeze: false)),
+        ] {
+            let (controller, _, _) = try makeController()
+            controller.stageMatch(PendingMatchSetup(
+                configuration: configuration, matchFormat: .bestOfOne,
+                teamAName: "Delon & Katie", teamBName: "Fred & Gina",
+                teamAPlayerIDs: [], teamBPlayerIDs: []
+            ))
+            controller.confirmFirstServe(.teamA)
+            XCTAssertFalse(controller.showsPartnerPositions)
+            XCTAssertNil(controller.partnerPositions(for: .teamA))
+        }
+        let (controller, _, _) = try makeController()
+        controller.stageMatch(PendingMatchSetup(
+            configuration: GameConfiguration(), matchFormat: .bestOfOne,
+            teamAName: "Team A", teamBName: "Fred & Gina",
+            teamAPlayerIDs: [], teamBPlayerIDs: []
+        ))
+        controller.confirmFirstServe(.teamA)
+        XCTAssertNil(controller.partnerPositions(for: .teamA))
+        XCTAssertNotNil(controller.partnerPositions(for: .teamB))
+    }
+
+    func testSettingWithoutAnActiveMatchStoresNothing() throws {
+        let (controller, _, defaults) = try makeController()
+        controller.setStartingSidesSwapped(true, for: .teamA, gameIndex: 0)
+        XCTAssertFalse(controller.startingSidesSwapped(for: .teamA, gameIndex: 0))
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamAStartingSidesSwapped))
+    }
+}

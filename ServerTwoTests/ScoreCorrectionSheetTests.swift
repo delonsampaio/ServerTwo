@@ -51,6 +51,49 @@ final class ScoreCorrectionSheetTests: XCTestCase {
         XCTAssertTrue(canSave(config, from: (9, 9), to: (20, 3)))
     }
 
+    private func plan(
+        from current: (Int, Int), to proposed: (Int, Int), swapChanged: Bool
+    ) -> ScoreCorrectionSheet.SavePlan? {
+        ScoreCorrectionSheet.savePlan(
+            configuration: elevenWinByTwo,
+            currentTeamA: current.0, currentTeamB: current.1,
+            proposedTeamA: proposed.0, proposedTeamB: proposed.1,
+            swapChanged: swapChanged
+        )
+    }
+
+    func testASwapAloneEnablesSaveAndDoesNotCommitScores() {
+        let swapOnly = plan(from: (9, 9), to: (9, 9), swapChanged: true)
+        XCTAssertEqual(swapOnly, .init(commitsScores: false, commitsSwaps: true))
+        XCTAssertTrue(ScoreCorrectionSheet.canSave(
+            configuration: elevenWinByTwo, currentTeamA: 9, currentTeamB: 9,
+            proposedTeamA: 9, proposedTeamB: 9, swapChanged: true
+        ))
+    }
+
+    func testScoresAloneBehaveAsBefore() {
+        XCTAssertEqual(plan(from: (9, 9), to: (12, 11), swapChanged: false), .init(commitsScores: true, commitsSwaps: false))
+        XCTAssertNil(plan(from: (9, 9), to: (9, 9), swapChanged: false))
+        XCTAssertNil(plan(from: (9, 9), to: (12, 9), swapChanged: false))
+    }
+
+    func testScoresAndASwapTogetherCommitBoth() {
+        XCTAssertEqual(plan(from: (9, 9), to: (12, 11), swapChanged: true), .init(commitsScores: true, commitsSwaps: true))
+    }
+
+    func testAnUnreachableEditedPairKeepsSaveOffEvenWithASwap() {
+        XCTAssertNil(plan(from: (9, 9), to: (12, 9), swapChanged: true))
+    }
+
+    func testASwapWorksInAGameWhoseCurrentPairIsAlreadyUnreachable() {
+        XCTAssertEqual(plan(from: (12, 9), to: (12, 9), swapChanged: true), .init(commitsScores: false, commitsSwaps: true))
+    }
+
+    func testDesignHeightGrowsOnlyWhenASwapControlIsShown() {
+        XCTAssertEqual(ScoreCorrectionSheet.designHeight(showsSwapControl: false), 360)
+        XCTAssertEqual(ScoreCorrectionSheet.designHeight(showsSwapControl: true), 440)
+    }
+
     func testHintMentionsTheTargetAndWinByTwoOnlyWhenEnabled() {
         let withWinByTwo = ScoreCorrectionSheet.hintText(configuration: elevenWinByTwo, teamA: 12, teamB: 9)
         XCTAssertTrue(withWinByTwo.contains("12"))

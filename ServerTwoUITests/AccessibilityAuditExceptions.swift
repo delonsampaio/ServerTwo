@@ -92,6 +92,12 @@ enum AccessibilityAuditExceptions {
             descriptionContains: "Text clipped", maxOccurrences: 4, reason: clippedReason
         ),
         KnownFalsePositive(
+            // Same static heuristic, on the long inline navigation title of a
+            // named doubles match (the only text it reports there).
+            screen: "ScoringWithPartnerPositions", auditType: "textClipped", elements: ["label:Delon & Katie vs Fred & Gina"],
+            descriptionContains: "Text clipped", reason: clippedReason
+        ),
+        KnownFalsePositive(
             screen: "Scoring@AXXL", auditType: "textClipped", elements: ["label:Team A", "label:Team A vs Team B", "label:Team B", "label:Timeout (2)"],
             descriptionContains: "Text clipped", maxOccurrences: 4, reason: clippedReason
         ),
@@ -133,6 +139,8 @@ enum AccessibilityAuditExceptions {
 
     private static let dynOnboardingReason = "reviewed: \"Done\" is the system toolbar button text, which has no API to scale it further; looked at at AX4: intact"
 
+    private static let dynPartnerReason = "reviewed, by design: the same Scoring items (see dynScoringReason), plus the partner rows of a named doubles card: the names (headline) and the R/L badges scale with Dynamic Type but the block is deliberately capped at accessibility2 so two rows plus the digits still fit a half-width card, which is what the audit reports as partially unsupported. Looked at at AX4 with short names (Delon, Katie, Fred, Gina): nothing clipped (long names and AX5 are on the device-check list)"
+
     private static let dynScoringReason = "reviewed, by design: score digits are scaled up to a 128 pt maximum and shrink to fit rather than wrap; the \"SERVER 2\" badge (\"SERVER 1\" / \"SERVING\" in other modes) is deliberately capped at accessibility1 so it does not truncate; \"Tap to Score\" and \"Tap for Side Out\" (\"Tap for 2nd Server\" with server 1) are caption2 hints that wrap to two lines at AX sizes; \"Cancel Match\" is system toolbar text. Looked at at AX4 with short names: nothing clipped (long names and AX5 are on the device-check list)"
 
     private static let dyn: [KnownFalsePositive] = [
@@ -155,6 +163,11 @@ enum AccessibilityAuditExceptions {
         KnownFalsePositive(
             screen: "Scoring", auditType: "dynamicType", elements: ["Cancel Match", "label:0", "label:SERVER 2", "label:Tap for Side Out", "label:Tap to Score"],
             descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 6, reason: dynScoringReason
+        ),
+        KnownFalsePositive(
+            screen: "ScoringWithPartnerPositions", auditType: "dynamicType",
+            elements: ["Cancel Match", "label:0", "label:SERVER 2", "label:Tap for Side Out", "label:Tap to Score", "label:Delon", "label:Fred", "label:Gina", "label:Katie", "label:L", "label:R"],
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 14, reason: dynPartnerReason
         ),
         KnownFalsePositive(
             screen: "Scoring@AXXL", auditType: "dynamicType", elements: ["Cancel Match", "label:0", "label:SERVER 2", "label:Tap for Side Out", "label:Tap to Score"],
@@ -204,6 +217,10 @@ enum AccessibilityAuditExceptions {
             descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_accentReason
         ),
         KnownFalsePositive(
+            screen: "ScoringWithPartnerPositions", auditType: "contrast", elements: ["Cancel Match", "label:SERVER 2", "label:Timeout (2)"],
+            descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_accentReason
+        ),
+        KnownFalsePositive(
             screen: "Scoring@AXXL", auditType: "contrast", elements: ["Cancel Match", "label:SERVER 2", "label:Timeout (2)"],
             descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_accentReason
         ),
@@ -246,8 +263,12 @@ enum AccessibilityAuditExceptions {
             descriptionContains: "Contrast nearly passed", maxOccurrences: 7, reason: c_secondaryReason
         ),
         KnownFalsePositive(
-            screen: "Onboarding", auditType: "contrast", elements: ["label:Always know which partner belongs on the left or right court.", "label:Score singles and doubles matches point by point. Server Two keeps track of who's serving, which side everyone's on, and your stats over time.", "label:See your record with every partner and against every rival.", "label:Set this once so your personal win/loss record starts tracking automatically.", "label:Tap a card to score a point, or press and hold to fix a disputed score."],
+            screen: "Onboarding", auditType: "contrast", elements: ["label:Doubles side-out games show which partner is on the left or right. Hold a score card to swap them if you started the other way round.", "label:Score singles and doubles matches point by point. Server Two keeps track of who's serving, which side everyone's on, and your stats over time.", "label:See your record with every partner and against every rival.", "label:Set this once so your personal win/loss record starts tracking automatically.", "label:Tap a card to score a point, or press and hold to fix a disputed score."],
             descriptionContains: "Contrast nearly passed", maxOccurrences: 5, reason: c_secondaryReason
+        ),
+        KnownFalsePositive(
+            screen: "ScoringWithPartnerPositions", auditType: "contrast", elements: ["label:Tap for Side Out", "label:Tap to Score"],
+            descriptionContains: "Contrast nearly passed", maxOccurrences: 2, reason: c_secondaryReason
         ),
         KnownFalsePositive(
             screen: "Scoring", auditType: "contrast", elements: ["label:Tap for Side Out", "label:Tap to Score"],

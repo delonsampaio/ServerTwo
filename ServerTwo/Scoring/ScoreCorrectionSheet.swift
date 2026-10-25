@@ -12,7 +12,12 @@ struct ScoreCorrectionSheet: View {
     let currentTeamAScore: Int
     let currentTeamBScore: Int
     let configuration: GameConfiguration
+    /// True in doubles side-out matches: the only place partner positions exist.
+    let positionsEnabled: Bool
     let onCommit: (_ teamA: Int, _ teamB: Int) -> Void
+    /// Called once per team whose swap changed, BEFORE `onCommit`: a score
+    /// correction can end the game, and the swap belongs to the game being edited.
+    let onCommitSwap: (_ team: Team, _ swapped: Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -23,6 +28,11 @@ struct ScoreCorrectionSheet: View {
     private let scoreDigitSizeCap: CGFloat = 88
     @State private var newTeamAScore: Int
     @State private var newTeamBScore: Int
+    // Held here until Save (Cancel discards), like the scores.
+    @State private var newTeamASwapped: Bool
+    @State private var newTeamBSwapped: Bool
+    private let currentTeamASwapped: Bool
+    private let currentTeamBSwapped: Bool
 
     init(
         teamAName: String,
@@ -30,28 +40,73 @@ struct ScoreCorrectionSheet: View {
         currentTeamAScore: Int,
         currentTeamBScore: Int,
         configuration: GameConfiguration,
-        onCommit: @escaping (_ teamA: Int, _ teamB: Int) -> Void
+        positionsEnabled: Bool = false,
+        teamASwapped: Bool = false,
+        teamBSwapped: Bool = false,
+        onCommit: @escaping (_ teamA: Int, _ teamB: Int) -> Void,
+        onCommitSwap: @escaping (_ team: Team, _ swapped: Bool) -> Void = { _, _ in }
     ) {
         self.teamAName = teamAName
         self.teamBName = teamBName
         self.currentTeamAScore = currentTeamAScore
         self.currentTeamBScore = currentTeamBScore
         self.configuration = configuration
+        self.positionsEnabled = positionsEnabled
         self.onCommit = onCommit
+        self.onCommitSwap = onCommitSwap
+        currentTeamASwapped = teamASwapped
+        currentTeamBSwapped = teamBSwapped
+        _newTeamASwapped = State(initialValue: teamASwapped)
+        _newTeamBSwapped = State(initialValue: teamBSwapped)
         _newTeamAScore = State(initialValue: currentTeamAScore)
         _newTeamBScore = State(initialValue: currentTeamBScore)
     }
 
-    /// Save is off while the pair is unreachable (including when the CURRENT
-    /// pair is already unreachable — the user must fix it) and while nothing
-    /// has changed (avoids a junk undo entry).
+    /// What a Save would do; nil when Save is off.
+    struct SavePlan: Equatable {
+        let commitsScores: Bool
+        let commitsSwaps: Bool
+    }
+
+    /// Save is off while the proposed pair is unreachable (including when the
+    /// CURRENT pair is already unreachable — the user must fix it) and while
+    /// nothing has changed (avoids a junk undo entry). A changed swap alone
+    /// enables Save and never calls the score commit, so it works even in a game
+    /// whose current pair is a zombie. If the scores were edited to an
+    /// unreachable pair AND a swap changed, Save stays off: committing the swap
+    /// would otherwise have to quietly drop (or worse, apply) the bad scores.
+    static func savePlan(
+        configuration: GameConfiguration,
+        currentTeamA: Int, currentTeamB: Int,
+        proposedTeamA: Int, proposedTeamB: Int,
+        swapChanged: Bool = false
+    ) -> SavePlan? {
+        let scoresChanged = proposedTeamA != currentTeamA || proposedTeamB != currentTeamB
+        if scoresChanged, !configuration.isReachableGameScore(teamA: proposedTeamA, teamB: proposedTeamB) {
+            return nil
+        }
+        guard scoresChanged || swapChanged else { return nil }
+        return SavePlan(commitsScores: scoresChanged, commitsSwaps: swapChanged)
+    }
+
     static func canSave(
         configuration: GameConfiguration,
         currentTeamA: Int, currentTeamB: Int,
-        proposedTeamA: Int, proposedTeamB: Int
+        proposedTeamA: Int, proposedTeamB: Int,
+        swapChanged: Bool = false
     ) -> Bool {
-        let isUnchanged = proposedTeamA == currentTeamA && proposedTeamB == currentTeamB
-        return !isUnchanged && configuration.isReachableGameScore(teamA: proposedTeamA, teamB: proposedTeamB)
+        savePlan(
+            configuration: configuration,
+            currentTeamA: currentTeamA, currentTeamB: currentTeamB,
+            proposedTeamA: proposedTeamA, proposedTeamB: proposedTeamB,
+            swapChanged: swapChanged
+        ) != nil
+    }
+
+    /// The sheet's design height: taller when a swap control is shown. The
+    /// detent is never smaller than this (see `SheetDetentPolicy.scaledHeight`).
+    static func designHeight(showsSwapControl: Bool) -> CGFloat {
+        showsSwapControl ? 440 : 360
     }
 
     static func hintText(configuration: GameConfiguration, teamA: Int, teamB: Int) -> String {
@@ -87,12 +142,40 @@ struct ScoreCorrectionSheet: View {
         newTeamAScore != currentTeamAScore || newTeamBScore != currentTeamBScore
     }
 
-    private var canSave: Bool {
-        Self.canSave(
+    private var swapChanged: Bool {
+        newTeamASwapped != currentTeamASwapped || newTeamBSwapped != currentTeamBSwapped
+    }
+
+    private var savePlan: SavePlan? {
+        Self.savePlan(
             configuration: configuration,
             currentTeamA: currentTeamAScore, currentTeamB: currentTeamBScore,
-            proposedTeamA: newTeamAScore, proposedTeamB: newTeamBScore
+            proposedTeamA: newTeamAScore, proposedTeamB: newTeamBScore,
+            swapChanged: swapChanged
         )
+    }
+
+    /// The positions a team would have if Save were tapped now (new score, new
+    /// swap), or nil when this team has none (singles, rally, unsplit name).
+    private func positions(for team: Team) -> PartnerPositions? {
+        guard positionsEnabled else { return nil }
+        return team == .teamA
+            ? PartnerPositions.make(teamName: teamAName, score: newTeamAScore, swapped: newTeamASwapped)
+            : PartnerPositions.make(teamName: teamBName, score: newTeamBScore, swapped: newTeamBSwapped)
+    }
+
+    private var showsSwapControl: Bool {
+        positions(for: .teamA) != nil || positions(for: .teamB) != nil
+    }
+
+    private func save() {
+        guard let plan = savePlan else { return }
+        if plan.commitsSwaps {
+            if newTeamASwapped != currentTeamASwapped { onCommitSwap(.teamA, newTeamASwapped) }
+            if newTeamBSwapped != currentTeamBSwapped { onCommitSwap(.teamB, newTeamBSwapped) }
+        }
+        if plan.commitsScores { onCommit(newTeamAScore, newTeamBScore) }
+        dismiss()
     }
 
     var body: some View {
@@ -105,11 +188,13 @@ struct ScoreCorrectionSheet: View {
                     AdaptiveStack(spacing: 12) {
                         scoreColumn(
                             name: teamAName, original: currentTeamAScore, score: $newTeamAScore,
-                            idPrefix: "ScoreCorrection.TeamA"
+                            idPrefix: "ScoreCorrection.TeamA",
+                            positions: positions(for: .teamA), swapped: $newTeamASwapped
                         )
                         scoreColumn(
                             name: teamBName, original: currentTeamBScore, score: $newTeamBScore,
-                            idPrefix: "ScoreCorrection.TeamB"
+                            idPrefix: "ScoreCorrection.TeamB",
+                            positions: positions(for: .teamB), swapped: $newTeamBSwapped
                         )
                     }
                     footer
@@ -126,16 +211,13 @@ struct ScoreCorrectionSheet: View {
                         .accessibilityIdentifier("ScoreCorrection.Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        onCommit(newTeamAScore, newTeamBScore)
-                        dismiss()
-                    }
-                    .disabled(!canSave)
+                    Button("Save") { save() }
+                    .disabled(savePlan == nil)
                     .accessibilityIdentifier("ScoreCorrection.Save")
                 }
             }
         }
-        .modifier(CorrectionSheetDetents())
+        .modifier(CorrectionSheetDetents(designHeight: Self.designHeight(showsSwapControl: showsSwapControl)))
         .presentationDragIndicator(.visible)
     }
 
@@ -143,7 +225,8 @@ struct ScoreCorrectionSheet: View {
     /// its label and the integer score as its VALUE (tests read `.value`);
     /// the +/- buttons stay individually focusable with descriptive labels.
     private func scoreColumn(
-        name: String, original: Int, score: Binding<Int>, idPrefix: String
+        name: String, original: Int, score: Binding<Int>, idPrefix: String,
+        positions: PartnerPositions?, swapped: Binding<Bool>
     ) -> some View {
         let value = score.wrappedValue
         let isModified = value != original
@@ -194,6 +277,10 @@ struct ScoreCorrectionSheet: View {
             }
             .buttonStyle(.glass)
             .buttonRepeatBehavior(.enabled)
+
+            if showsSwapControl {
+                swapControl(name: name, idPrefix: idPrefix, positions: positions, swapped: swapped)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 12)
@@ -210,6 +297,41 @@ struct ScoreCorrectionSheet: View {
         }
         .sensoryFeedback(.selection, trigger: value)
         .accessibilityElement(children: .contain)
+    }
+
+    /// Partner swap for one team, with a live preview of the resulting
+    /// positions. A team without positions gets an invisible copy instead, so
+    /// the two columns stay the same height.
+    @ViewBuilder
+    private func swapControl(
+        name: String, idPrefix: String, positions: PartnerPositions?, swapped: Binding<Bool>
+    ) -> some View {
+        let control = VStack(spacing: 2) {
+            Button {
+                swapped.wrappedValue.toggle()
+            } label: {
+                Label("Swap R/L", systemImage: "arrow.left.arrow.right")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel("Swap right and left for \(name)")
+            .accessibilityIdentifier("\(idPrefix)SwapPositions")
+
+            Text(positions?.previewText ?? " ")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("\(idPrefix)PositionsPreview")
+        }
+        .padding(.top, 6)
+        if positions != nil {
+            control
+        } else {
+            control.hidden().accessibilityHidden(true)
+        }
     }
 
     private var footer: some View {
@@ -245,18 +367,24 @@ struct ScoreCorrectionSheet: View {
 /// accessibility sizes it uses the scaled height plus `.large`.
 private struct CorrectionSheetDetents: ViewModifier {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat = 360
+    @ScaledMetric private var scaledHeight: CGFloat
+    private let designHeight: CGFloat
+
+    init(designHeight: CGFloat) {
+        self.designHeight = designHeight
+        _scaledHeight = ScaledMetric(wrappedValue: designHeight, relativeTo: .body)
+    }
 
     func body(content: Content) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
             content.presentationDetents(Set(
                 SheetDetentPolicy.detents(
-                    height: SheetDetentPolicy.scaledHeight(design: 360, scaled: scaledHeight),
+                    height: SheetDetentPolicy.scaledHeight(design: designHeight, scaled: scaledHeight),
                     isAccessibilitySize: true
                 )
             ))
         } else {
-            content.presentationDetents([.height(360), .large])
+            content.presentationDetents([.height(designHeight), .large])
         }
     }
 }

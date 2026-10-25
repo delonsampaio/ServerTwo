@@ -102,8 +102,19 @@ struct ScoringView: View {
                     currentTeamAScore: match.currentGame.state.teamAScore,
                     currentTeamBScore: match.currentGame.state.teamBScore,
                     configuration: match.configuration,
+                    positionsEnabled: activeMatchController.showsPartnerPositions,
+                    teamASwapped: activeMatchController.startingSidesSwapped(for: .teamA, gameIndex: match.completedGames.count),
+                    teamBSwapped: activeMatchController.startingSidesSwapped(for: .teamB, gameIndex: match.completedGames.count),
                     onCommit: { teamA, teamB in
                         activeMatchController.correctScores(teamA: teamA, teamB: teamB)
+                    },
+                    onCommitSwap: { team, swapped in
+                        // The sheet calls this before `onCommit`, so the index is
+                        // still the game being edited even if the correction ends it.
+                        activeMatchController.setStartingSidesSwapped(
+                            swapped, for: team,
+                            gameIndex: activeMatchController.match?.completedGames.count ?? 0
+                        )
                     }
                 )
                 .onAppear { correctionSheetOnScreen = true }
@@ -370,6 +381,14 @@ struct ScoringView: View {
         let serverNumber = match.currentGame.state.serverNumber
         let scoringIsSideOut = match.configuration.scoringFormat == .sideOut
         let isDoubles = match.configuration.playMode == .doubles
+        // Both teams are looked up (not just this one): when either shows partner
+        // rows, both name areas reserve the same height so the digits line up.
+        let positions = activeMatchController.partnerPositions(for: team)
+        let reservesPartnerRows = activeMatchController.partnerPositions(for: .teamA) != nil
+            || activeMatchController.partnerPositions(for: .teamB) != nil
+        // The tint and thick border follow the serve, which a decided match no
+        // longer has (the badge and spoken "serving" go for the same reason).
+        let showsServing = isServing && !match.isMatchOver
         // A finished match has no server: the badge and spoken "serving" go, so
         // the disabled cards stop looking live.
         let badgeText = ServingBadge.text(
@@ -397,14 +416,11 @@ struct ScoringView: View {
             // for (see the type above). Sizes pushed up (name to
             // .title, score to 108pt) to actually use the height
             // these full-height cards have to give.
-            Text(name)
-                .font(.title.weight(.bold))
-                .foregroundStyle(.primary)
-                // A long name wraps onto a second line at accessibility
-                // sizes instead of shrinking or truncating.
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
-                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.6)
-                .multilineTextAlignment(.center)
+            // Doubles side-out cards show the two partners with their court side
+            // (see `ScoreCardNameArea`). That block's Dynamic Type growth is
+            // capped; every other match keeps today's uncapped single name.
+            ScoreCardNameArea(name: name, positions: positions, reservesPartnerRows: reservesPartnerRows)
+                .dynamicTypeSize(reservesPartnerRows ? ...DynamicTypeSize.accessibility2 : ...DynamicTypeSize.accessibility5)
             // The digits scale with Dynamic Type but stop at 128 pt, and never
             // wrap: a two-digit score must fit the half-width card.
             Text("\(score)")
@@ -431,11 +447,11 @@ struct ScoringView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(isServing ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05))
+                .fill(showsServing ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(isServing ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: isServing ? 2 : 1)
+                .strokeBorder(showsServing ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: showsServing ? 2 : 1)
         )
         .contentShape(Rectangle())
         // Tap to score, hold to correct — decided from the touch's own timing
@@ -481,11 +497,88 @@ struct ScoringView: View {
             isServing: badgeText != nil,
             serverNumber: badgeText == nil ? nil : ServingBadge.spokenServerNumber(
                 scoringIsSideOut: scoringIsSideOut, isDoubles: isDoubles, serverNumber: serverNumber
-            )
+            ),
+            positions: positions
         ))
-        .accessibilityHint(AccessibilityText.scoreZoneHint)
+        .accessibilityHint(positions == nil
+            ? AccessibilityText.scoreZoneHint
+            : AccessibilityText.scoreZoneHintWithPositions)
     }
 
+}
+
+/// The name area of a score card: the single name line, or, for a doubles
+/// side-out team whose name splits into two, both partners (Player 1 on top;
+/// rows are fixed by PLAYER and only the R/L badge changes, so "find my name,
+/// read the letter" works at a glance). Both partners get equal weight: the score
+/// cannot say which of them is serving (two different histories reach the same
+/// score and server number with different servers), and the card's badge already
+/// shows SERVER 1/2.
+///
+/// When `reservesPartnerRows`, the area has the same minimum height on both
+/// cards (partner rows or one name), so the big score digits stay aligned even
+/// when only one team has two names.
+private struct ScoreCardNameArea: View {
+    let name: String
+    let positions: PartnerPositions?
+    let reservesPartnerRows: Bool
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    // The caller caps the Dynamic Type size, and these scale with that cap.
+    @ScaledMetric(relativeTo: .headline) private var rowHeight: CGFloat = 26
+    @ScaledMetric(relativeTo: .title) private var titleLineHeight: CGFloat = 38
+    @ScaledMetric(relativeTo: .caption2) private var badgeSize: CGFloat = 22
+    private let rowSpacing: CGFloat = 4
+
+    private var reservedHeight: CGFloat {
+        max(
+            2 * rowHeight + rowSpacing,
+            titleLineHeight * (dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+        )
+    }
+
+    var body: some View {
+        Group {
+            if let positions {
+                VStack(alignment: .leading, spacing: rowSpacing) {
+                    partnerRow(positions.player1Name, side: positions.player1Side)
+                    partnerRow(positions.player2Name, side: positions.player2Side)
+                }
+                .padding(.horizontal, 8)
+            } else {
+                // Both sides stay full .primary contrast — the serving card's
+                // border, tint, and badge already distinguish it, and dimming
+                // the receiving side hurts the courtside-glare legibility this
+                // screen is built for.
+                Text(name)
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(.primary)
+                    // A long name wraps onto a second line at accessibility
+                    // sizes instead of shrinking or truncating.
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                    .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.6)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(minHeight: reservesPartnerRows ? reservedHeight : nil)
+    }
+
+    private func partnerRow(_ name: String, side: PartnerPositions.Side) -> some View {
+        HStack(spacing: 6) {
+            // An outlined circle, so a lone "R" or "L" cannot read as the first
+            // initial of the name next to it. Only .primary, so contrast holds.
+            Text(side.badge)
+                .font(.caption2.weight(.heavy).monospaced())
+                .foregroundStyle(.primary)
+                .frame(width: badgeSize, height: badgeSize)
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.25), lineWidth: 1))
+            Text(name)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+    }
 }
 
 /// The fixed-height slot at the top of a score card: the serving badge when

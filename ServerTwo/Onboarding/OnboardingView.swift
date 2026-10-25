@@ -52,7 +52,7 @@ struct OnboardingView: View {
                         featureRow(
                             icon: "arrow.left.arrow.right.circle.fill",
                             title: "Automatic Court Positions",
-                            detail: "Always know which partner belongs on the left or right court."
+                            detail: "Doubles side-out games show which partner is on the left or right. Hold a score card to swap them if you started the other way round."
                         )
                         featureRow(
                             icon: "hand.tap.fill",

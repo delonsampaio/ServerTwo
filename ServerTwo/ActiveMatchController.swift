@@ -50,6 +50,10 @@ final class ActiveMatchController {
         /// resumed match can still be attributed to its saved players.
         static let activeTeamAPlayerIDs = "activeMatchTeamAPlayerIDs"
         static let activeTeamBPlayerIDs = "activeMatchTeamBPlayerIDs"
+        /// `[String: Bool]` (game index as a string -> explicit swap flag) per
+        /// team; see `StartingSideOverrides`.
+        static let activeTeamAStartingSidesSwapped = "activeMatchTeamAStartingSidesSwapped"
+        static let activeTeamBStartingSidesSwapped = "activeMatchTeamBStartingSidesSwapped"
     }
 
     private var lifecycleState: MatchLifecycleState = .idle
@@ -98,6 +102,11 @@ final class ActiveMatchController {
     /// hands the whole array to `saveCompletedMatch`, which is the only
     /// place it's written to disk.
     private(set) var gameCompletionDates: [Date?] = []
+
+    /// Live, persisted display state for the partner positions on the score
+    /// cards (see `StartingSideOverrides`). Observed, so the cards update when
+    /// the correction sheet changes it.
+    private var startingSideOverrides = StartingSideOverrides()
 
     private let repository: MatchRepository
     private let userDefaults: UserDefaults
@@ -149,6 +158,7 @@ final class ActiveMatchController {
             teamBPlayerIDs: storedPlayerIDs(forKey: Keys.activeTeamBPlayerIDs)
         ))
         gameCompletionDates = Array(repeating: nil, count: resumed.match.completedGames.count)
+        restoreStartingSideOverrides()
     }
 
     /// Invalid strings are ignored. A player deleted since the match began is
@@ -157,7 +167,69 @@ final class ActiveMatchController {
         (userDefaults.stringArray(forKey: key) ?? []).compactMap(UUID.init(uuidString:))
     }
 
+    /// Whether `team`'s partners started `gameIndex` in the swapped order (Player 2
+    /// on the right). Display-only: it never touches the match or its history.
+    func startingSidesSwapped(for team: Team, gameIndex: Int) -> Bool {
+        startingSideOverrides.isSwapped(for: team, gameIndex: gameIndex)
+    }
+
+    /// Records an explicit setting for `gameIndex` (`match.completedGames.count`
+    /// is the current one). Later games without their own entry inherit it.
+    /// Persisted right away like the active names, so a relaunch keeps it.
+    func setStartingSidesSwapped(_ value: Bool, for team: Team, gameIndex: Int) {
+        guard case .active = lifecycleState else { return }
+        startingSideOverrides.set(value, for: team, gameIndex: gameIndex)
+        persistStartingSideOverrides()
+    }
+
+    /// Positions exist only in doubles SIDE-OUT scoring: in rally scoring the
+    /// serve changes on every point, so a team's score no longer decides who
+    /// stands where. `false` also when there is no match.
+    var showsPartnerPositions: Bool {
+        guard let configuration = match?.configuration else { return false }
+        return configuration.playMode == .doubles && configuration.scoringFormat == .sideOut
+    }
+
+    /// The partner positions to show for `team` right now, or nil (singles,
+    /// rally, or a name that does not split into two).
+    func partnerPositions(for team: Team) -> PartnerPositions? {
+        guard showsPartnerPositions, let match else { return nil }
+        let gameIndex = match.completedGames.count
+        return PartnerPositions.make(
+            teamName: team == .teamA ? teamAName : teamBName,
+            score: match.currentGame.state.score(for: team),
+            swapped: startingSidesSwapped(for: team, gameIndex: gameIndex)
+        )
+    }
+
+    private func persistStartingSideOverrides() {
+        for (team, key) in [
+            (Team.teamA, Keys.activeTeamAStartingSidesSwapped),
+            (Team.teamB, Keys.activeTeamBStartingSidesSwapped),
+        ] {
+            let stored = startingSideOverrides.stored(for: team)
+            if stored.isEmpty {
+                userDefaults.removeObject(forKey: key)
+            } else {
+                userDefaults.set(stored, forKey: key)
+            }
+        }
+    }
+
+    private func restoreStartingSideOverrides() {
+        startingSideOverrides = StartingSideOverrides(
+            teamA: userDefaults.dictionary(forKey: Keys.activeTeamAStartingSidesSwapped) as? [String: Bool] ?? [:],
+            teamB: userDefaults.dictionary(forKey: Keys.activeTeamBStartingSidesSwapped) as? [String: Bool] ?? [:]
+        )
+    }
+
     private func clearStoredActiveMatchDetails() {
+        // Also here (not only in the lifecycle methods): finish, cancel and the
+        // test reset all come through this one place, so a setting can never
+        // leak into the next match.
+        startingSideOverrides = StartingSideOverrides()
+        userDefaults.removeObject(forKey: Keys.activeTeamAStartingSidesSwapped)
+        userDefaults.removeObject(forKey: Keys.activeTeamBStartingSidesSwapped)
         userDefaults.removeObject(forKey: Keys.activeTeamAName)
         userDefaults.removeObject(forKey: Keys.activeTeamBName)
         userDefaults.removeObject(forKey: Keys.activeTeamAPlayerIDs)
@@ -186,6 +258,10 @@ final class ActiveMatchController {
     /// determines who serves first. A no-op if nothing is staged.
     func confirmFirstServe(_ firstServingTeam: Team) {
         guard case .staged(let setup) = lifecycleState else { return }
+        // A new match starts from the default positions, whatever the previous
+        // one left behind.
+        startingSideOverrides = StartingSideOverrides()
+        persistStartingSideOverrides()
         userDefaults.set(setup.resolvedTeamAName, forKey: Keys.activeTeamAName)
         userDefaults.set(setup.resolvedTeamBName, forKey: Keys.activeTeamBName)
         userDefaults.set(setup.teamAPlayerIDs.map(\.uuidString), forKey: Keys.activeTeamAPlayerIDs)
@@ -325,5 +401,43 @@ final class ActiveMatchController {
     private func persistSnapshot() {
         guard case .active(let info) = lifecycleState else { return }
         try? repository.saveInProgressSnapshot(for: info.match, startedAt: info.startedAt)
+    }
+}
+
+/// Which of a team's two partners started each game on the right, as explicit
+/// per-game entries. Entries are kept even when the game number goes down (an
+/// undo back into game N-1 must still find N-1's setting), and a game without
+/// an entry inherits the nearest earlier game's, so a pair that stands in
+/// swapped order keeps it across games.
+struct StartingSideOverrides: Equatable {
+    /// Game index (as a string, so the dictionary is a valid property list for
+    /// UserDefaults) -> whether Player 2 starts on the right.
+    private var teamA: [String: Bool]
+    private var teamB: [String: Bool]
+
+    init(teamA: [String: Bool] = [:], teamB: [String: Bool] = [:]) {
+        self.teamA = teamA
+        self.teamB = teamB
+    }
+
+    func isSwapped(for team: Team, gameIndex: Int) -> Bool {
+        let entries = team == .teamA ? teamA : teamB
+        let nearest = entries
+            .compactMap { key, value in Int(key).map { ($0, value) } }
+            .filter { $0.0 <= gameIndex }
+            .max { $0.0 < $1.0 }
+        return nearest?.1 ?? false
+    }
+
+    mutating func set(_ value: Bool, for team: Team, gameIndex: Int) {
+        if team == .teamA {
+            teamA[String(gameIndex)] = value
+        } else {
+            teamB[String(gameIndex)] = value
+        }
+    }
+
+    func stored(for team: Team) -> [String: Bool] {
+        team == .teamA ? teamA : teamB
     }
 }

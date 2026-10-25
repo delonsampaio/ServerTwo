@@ -152,7 +152,10 @@ final class AccessibilityAuditUITests: XCTestCase {
     }
 
     /// Play tab -> Start Match -> the coin-flip ("First Serve") screen.
-    private func openCoinFlip(_ app: XCUIApplication, teamA: String? = nil, teamB: String? = nil) {
+    private func openCoinFlip(
+        _ app: XCUIApplication, teamA: String? = nil, teamB: String? = nil,
+        teamAPartner: String? = nil, teamBPartner: String? = nil
+    ) {
         app.tabBars.buttons["Play"].tap()
         // Names (doubles mode, one field per team) create saved players when
         // the match finishes; see SavedPlayersUITests.
@@ -167,6 +170,14 @@ final class AccessibilityAuditUITests: XCTestCase {
             scrollUntilVisible(field, in: app)
             field.tap()
             field.typeText(teamB)
+        }
+        // The Player 2 fields only exist in doubles mode (the default).
+        for (partner, identifier) in [(teamAPartner, "Team A Player 2 Name"), (teamBPartner, "Team B Player 2 Name")] {
+            guard let partner else { continue }
+            let field = app.textFields.matching(identifier: identifier).firstMatch
+            scrollUntilVisible(field, in: app)
+            field.tap()
+            field.typeText(partner)
         }
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
@@ -243,6 +254,16 @@ final class AccessibilityAuditUITests: XCTestCase {
         openCoinFlip(app)
         beginMatchFromCoinFlip(app)
         try auditScoringAndCancelPrompt(app)
+    }
+
+    /// Doubles side-out with typed names: each card shows two partner rows with
+    /// an R/L badge, which the default `testScoring` (unnamed teams) never draws.
+    func testScoringWithPartnerPositions() throws {
+        let app = launchApp()
+        openCoinFlip(app, teamA: "Delon", teamB: "Fred", teamAPartner: "Katie", teamBPartner: "Gina")
+        beginMatchFromCoinFlip(app)
+        XCTAssertTrue(app.buttons["scoreZone.teamA"].label.contains("Delon on the right, Katie on the left"))
+        try audit(app, screen: "ScoringWithPartnerPositions", anchor: app.buttons["scoreZone.teamA"])
     }
 
     func testHistoryAndMatchDetail() throws {
