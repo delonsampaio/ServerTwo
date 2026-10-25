@@ -132,6 +132,8 @@ enum AccessibilityAuditExceptions {
 
     private static let dynOnboardingReason = "reviewed: \"Done\" is the system toolbar button text, which has no API to scale it further; looked at at AX4: intact"
 
+    private static let dynPlayersReason = "reviewed: Manage Players row text. The audit reports it in some runs and not in others (it was dropped once because it did not fire in one run, then fired in the next full run), so it stays listed: Alice, the \"Me\" badge and a long name (\"Bartholomew Featherstonehaugh\") were looked at at AX4: they scale and wrap, nothing is truncated (the long name breaks mid-word across 5 lines at AX4 because the row is narrow; wrapping is not truncation, judged acceptable, listed for the device checks)"
+
     private static let dynPartnerReason = "reviewed, by design: the same Scoring items (see dynScoringReason), plus the partner rows of a named doubles card: the names (headline) and the R/L badges scale with Dynamic Type but the block is deliberately capped at accessibility2 so two rows plus the digits still fit a half-width card, which is what the audit reports as partially unsupported. Looked at at AX4 with short names (Delon, Katie, Fred, Gina): nothing clipped (long names and AX5 are on the device-check list)"
 
     private static let dynScoringReason = "reviewed, by design: score digits are scaled up to a 128 pt maximum and shrink to fit rather than wrap; the \"SERVER 2\" badge (\"SERVER 1\" / \"SERVING\" in other modes) is deliberately capped at accessibility1 so it does not truncate; \"Tap to Score\" and \"Tap for Side Out\" (\"Tap for 2nd Server\" with server 1) are caption2 hints that wrap to two lines at AX sizes; \"Cancel Match\" is system toolbar text. Looked at at AX4 with short names: nothing clipped (long names and AX5 are on the device-check list)"
@@ -144,6 +146,10 @@ enum AccessibilityAuditExceptions {
         KnownFalsePositive(
             screen: "MatchDetail", auditType: "dynamicType", elements: ["Rematch", "label:0", "label:11"],
             descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 3, reason: dynMatchDetailReason
+        ),
+        KnownFalsePositive(
+            screen: "ManagePlayersWithRows", auditType: "dynamicType", elements: ["Me.Alice", "PlayerRow.Alice", "PlayerRow.Bob"],
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 3, reason: dynPlayersReason
         ),
         KnownFalsePositive(
             screen: "Onboarding", auditType: "dynamicType", elements: ["Done"],

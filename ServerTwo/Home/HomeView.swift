@@ -34,7 +34,12 @@ struct HomeView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 16) {
-                    if let lastMatch = matches.first {
+                    // `hasBeenDeleted`: a delete from another tab can leave this body
+                    // running once more with the just-deleted record still in
+                    // `matches`; reading its properties (the card and the Pro
+                    // share button both do) traps in SwiftData, so it is skipped
+                    // by id first (see `MatchDeleted`).
+                    if let lastMatch = matches.first, !MatchDeleted.hasBeenDeleted(lastMatch.persistentModelID) {
                         lastMatchCard(lastMatch)
                             .id(editRevision)
                         quickStartRow

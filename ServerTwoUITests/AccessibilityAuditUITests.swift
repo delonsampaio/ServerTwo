@@ -26,6 +26,26 @@ final class AccessibilityAuditUITests: XCTestCase {
     /// Every issue recorded during this test run, as the printed log lines.
     private var recordedIssues: [String] = []
 
+    // MARK: - Appearance
+
+    /// The exceptions in `AccessibilityAuditExceptions.swift` were measured in
+    /// dark mode (how the app looks on the phone), so the audit sets it
+    /// itself instead of inheriting whatever appearance the simulator happens
+    /// to be left in: the same screens give different contrast findings in
+    /// light and dark, and a run in the other appearance would fail on
+    /// findings that are known and accepted there (light mode is not audited).
+    override func setUp() async throws {
+        try await super.setUp()
+        XCUIDevice.shared.appearance = .dark
+    }
+
+    /// `.unspecified` cannot be set (the system rejects it), so the simulator
+    /// goes back to light, the appearance it is normally left in.
+    override func tearDown() async throws {
+        XCUIDevice.shared.appearance = .light
+        try await super.tearDown()
+    }
+
     // MARK: - Harness
 
     /// Runs the audit on the current screen. `anchor` is an element that must
