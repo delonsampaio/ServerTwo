@@ -18,6 +18,26 @@ one gate, enforced once, in the shared engine — not scattered across
 features — so it can't be bypassed via the standalone Watch app and so the
 test matrix stays small.
 
+**As built (Phase 4).** The gate is now "one free completed match for life"
+checked when starting a match (`ActiveMatchController.canStartNewMatch`), not
+a points cap; a live match is never interrupted. `StoreManager` (iOS target,
+`ServerTwo/Store/`) sells the non-consumable `com.delonsampaio.ServerTwo.pro`
+with Family Sharing: it loads the product and its localized price, runs
+purchase (verified, unverified, cancelled, Ask to Buy pending) and Restore
+Purchases (`AppStore.sync()`), and listens to `Transaction.updates` for the
+whole app lifetime. After every purchase, restore or update it recomputes the
+entitlement from all of `Transaction.currentEntitlements` (revoked entries
+never count, so a refund re-locks) and pushes the result into
+`ActiveMatchController.proUnlocked`; the UserDefaults flag (`proEntitlementCache`)
+only seeds the first frame. The paywall, Settings ("Server Two Pro" section)
+and Home banner all show the App Store price. UI tests use a fake store
+(`-UITest-` launch arguments); the real StoreKit paths are covered by
+`SKTestSession` unit tests against `ServerTwoTests/Products.storekit`. Still
+manual and owner-only: creating the in-app purchase in App Store Connect,
+the Paid Apps Agreement and tax/banking, the review screenshot, and testing
+with a Sandbox account on a device (see `docs/app-store-connect-setup.md`).
+The App Group entitlement flag for Watch/Widget (section 3.5) is not built yet.
+
 ## 2. Feature Set
 
 ### V1 (free demo = full feature set, capped at 5 pts/game; $1.99 removes the cap)
