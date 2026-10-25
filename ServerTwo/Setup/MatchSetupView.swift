@@ -912,12 +912,11 @@ struct MatchSetupView: View {
         guard let state = quickLogState, state.isDecided, duplicateReason == nil else { return }
 
         let players = resolvedTeamPlayers()
-        let repository = MatchRepository(modelContext: modelContext)
         // A failed save must not look like success: keep the sheet open and
         // the typed scores intact so the user can retry (mirrors the Finish
         // Match "Save Failed" alert in ScoringView).
         do {
-            _ = try repository.saveQuickLoggedMatch(
+            _ = try activeMatchController.saveQuickLoggedMatch(
                 configuration: state.configuration,
                 matchFormat: state.matchFormat,
                 teamAName: quickLogTeamAName,

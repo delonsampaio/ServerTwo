@@ -54,6 +54,10 @@ final class ActiveMatchController {
         /// team; see `StartingSideOverrides`.
         static let activeTeamAStartingSidesSwapped = "activeMatchTeamAStartingSidesSwapped"
         static let activeTeamBStartingSidesSwapped = "activeMatchTeamBStartingSidesSwapped"
+        /// Completed matches ever saved on this device, never decreased. The
+        /// demo gate reads this next to the history count so deleting the one
+        /// free match cannot reopen the free demo.
+        static let lifetimeCompletedMatchCount = "lifetimeCompletedMatchCount"
     }
 
     private var lifecycleState: MatchLifecycleState = .idle
@@ -126,10 +130,60 @@ final class ActiveMatchController {
 
     /// True if the user may start a new match: either they're unlocked, or
     /// they haven't yet used up `demoMatchLimit` completed matches.
+    ///
+    /// The count is the larger of the persisted lifetime counter and the
+    /// history count. History alone would let a free user finish a match,
+    /// delete it and play again; the counter alone would miss matches saved
+    /// before the counter existed (it starts at 0 for them, so history decides).
     var canStartNewMatch: Bool {
         guard !proUnlocked else { return true }
-        let completedCount = (try? repository.fetchMatchHistory().count) ?? 0
-        return completedCount < demoMatchLimit
+        return effectiveCompletedMatchCount(historyCount: currentHistoryCount()) < demoMatchLimit
+    }
+
+    private func currentHistoryCount() -> Int {
+        (try? repository.fetchMatchHistory().count) ?? 0
+    }
+
+    private func effectiveCompletedMatchCount(historyCount: Int) -> Int {
+        max(userDefaults.integer(forKey: Keys.lifetimeCompletedMatchCount), historyCount)
+    }
+
+    /// Call after EVERY successful save of a completed match. `historyCountBeforeSave`
+    /// is read before the save so the counter catches up with matches that
+    /// predate it, and a delete followed by a new match keeps counting up
+    /// rather than restarting from the (smaller) history.
+    private func recordCompletedMatchSaved(historyCountBeforeSave: Int) {
+        let stored = userDefaults.integer(forKey: Keys.lifetimeCompletedMatchCount)
+        userDefaults.set(max(stored, historyCountBeforeSave) + 1, forKey: Keys.lifetimeCompletedMatchCount)
+    }
+
+    /// Quick Log's save, routed through the controller (instead of straight to
+    /// the repository) so it counts toward the demo limit exactly like a
+    /// finished live match.
+    @discardableResult
+    func saveQuickLoggedMatch(
+        configuration: GameConfiguration,
+        matchFormat: MatchFormat,
+        teamAName: String,
+        teamBName: String,
+        gameScores: [(teamA: Int, teamB: Int)],
+        teamAPlayers: [SavedPlayer] = [],
+        teamBPlayers: [SavedPlayer] = [],
+        completedAt: Date = Date()
+    ) throws -> MatchRecord {
+        let historyCountBeforeSave = currentHistoryCount()
+        let record = try repository.saveQuickLoggedMatch(
+            configuration: configuration,
+            matchFormat: matchFormat,
+            teamAName: teamAName,
+            teamBName: teamBName,
+            gameScores: gameScores,
+            teamAPlayers: teamAPlayers,
+            teamBPlayers: teamBPlayers,
+            completedAt: completedAt
+        )
+        recordCompletedMatchSaved(historyCountBeforeSave: historyCountBeforeSave)
+        return record
     }
 
     init(modelContext: ModelContext, userDefaults: UserDefaults = .standard) {
@@ -325,6 +379,7 @@ final class ActiveMatchController {
         }
         let teamAPlayers = try repository.fetchSavedPlayers(ids: info.teamAPlayerIDs)
         let teamBPlayers = try repository.fetchSavedPlayers(ids: info.teamBPlayerIDs)
+        let historyCountBeforeSave = currentHistoryCount()
         let record = try repository.saveCompletedMatch(
             info.match,
             teamAName: info.teamAName,
@@ -334,6 +389,7 @@ final class ActiveMatchController {
             teamBPlayers: teamBPlayers,
             gameCompletionDates: gameCompletionDates
         )
+        recordCompletedMatchSaved(historyCountBeforeSave: historyCountBeforeSave)
         lifecycleState = .idle
         clearStoredActiveMatchDetails()
         return record
@@ -380,6 +436,9 @@ final class ActiveMatchController {
     /// players too, a "Me" flag set by an earlier run could silently
     /// persist and make a later run's own "mark as Me" step a no-op.
     func clearAllMatchHistoryForTesting() {
+        // The lifetime counter is part of the demo budget, so a clean slate
+        // must reset it too.
+        userDefaults.removeObject(forKey: Keys.lifetimeCompletedMatchCount)
         try? repository.deleteAllMatchHistory()
         try? repository.deleteAllSavedPlayers()
     }

@@ -229,8 +229,9 @@ final class ActiveMatchControllerTests: XCTestCase {
 
     /// A staged-but-not-yet-flipped match is never persisted — only an
     /// active match's snapshot is. Accepted trade-off: a crash/relaunch
-    /// during the coin-flip screen loses that staged setup, same as it
-    /// always lost player attribution across a resume.
+    /// during the coin-flip screen loses that staged setup (the user just
+    /// goes through Setup again). Players are not part of that loss: an
+    /// ACTIVE match's player ids are stored next to its snapshot.
     func testResumeIfNeededDoesNotRestoreAStagedButUnconfirmedMatch() throws {
         let suite = UUID().uuidString
         let container = try PersistenceContainer.makeInMemoryContainer()
@@ -366,6 +367,130 @@ final class ActiveMatchControllerTests: XCTestCase {
         _ = try controller.finishMatch()
 
         XCTAssertFalse(controller.canStartNewMatch, "The free demo limit should be used up after one completed match")
+    }
+
+    // MARK: - Lifetime demo count (deleting a match must not reopen the free demo)
+
+    private func finishOneLiveMatch(_ controller: ActiveMatchController) throws {
+        start(controller, configuration: GameConfiguration(winningScore: .eleven, winByTwo: true), teamAName: "A", teamBName: "B")
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        _ = try controller.finishMatch()
+    }
+
+    private func quickLogOneMatch(_ controller: ActiveMatchController) throws {
+        try controller.saveQuickLoggedMatch(
+            configuration: GameConfiguration(winningScore: .eleven, winByTwo: true),
+            matchFormat: .bestOfOne,
+            teamAName: "A",
+            teamBName: "B",
+            gameScores: [(teamA: 11, teamB: 5)]
+        )
+    }
+
+    /// Deletes through a second context on the same store, like the History
+    /// screen's own context does.
+    private func deleteAllMatches(in container: ModelContainer) throws {
+        try MatchRepository(modelContext: ModelContext(container)).deleteAllMatchHistory()
+    }
+
+    func testDeletingTheOnlyLiveMatchDoesNotReopenTheFreeDemo() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        controller.demoMatchLimit = 1
+
+        try finishOneLiveMatch(controller)
+        XCTAssertFalse(controller.canStartNewMatch)
+
+        try deleteAllMatches(in: container)
+        XCTAssertFalse(controller.canStartNewMatch, "Deleting the free match must not give the free user another one")
+    }
+
+    func testDeletingAQuickLoggedMatchDoesNotReopenTheFreeDemo() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        controller.demoMatchLimit = 1
+        XCTAssertTrue(controller.canStartNewMatch)
+
+        try quickLogOneMatch(controller)
+        XCTAssertFalse(controller.canStartNewMatch, "A Quick Log save uses up the free match like a live one")
+
+        try deleteAllMatches(in: container)
+        XCTAssertFalse(controller.canStartNewMatch)
+    }
+
+    func testTheLifetimeCountKeepsCountingAcrossADeleteAndSurvivesRelaunch() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        controller.demoMatchLimit = 3
+
+        try quickLogOneMatch(controller)
+        try deleteAllMatches(in: container)
+        try quickLogOneMatch(controller)
+        try finishOneLiveMatch(controller)
+        // 3 saved in total, only 2 left in history after the first delete
+        // happened; history alone would say 2 and allow a fourth.
+        XCTAssertEqual(defaults.integer(forKey: ActiveMatchController.Keys.lifetimeCompletedMatchCount), 3)
+        XCTAssertFalse(controller.canStartNewMatch)
+
+        let afterRelaunch = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        afterRelaunch.demoMatchLimit = 3
+        XCTAssertFalse(afterRelaunch.canStartNewMatch)
+    }
+
+    func testProIsNeverGatedByTheLifetimeCount() throws {
+        let (controller, _) = try makeController()
+        controller.demoMatchLimit = 1
+        try quickLogOneMatch(controller)
+        XCTAssertFalse(controller.canStartNewMatch)
+
+        controller.unlockPro()
+        XCTAssertTrue(controller.canStartNewMatch)
+    }
+
+    func testExistingHistoryWithoutAStoredCounterStillGatesAndCatchesTheCounterUp() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        // History saved by a build that had no counter (nothing in defaults).
+        try MatchRepository(modelContext: ModelContext(container)).saveQuickLoggedMatch(
+            configuration: GameConfiguration(winningScore: .eleven, winByTwo: true),
+            matchFormat: .bestOfOne,
+            teamAName: "A",
+            teamBName: "B",
+            gameScores: [(teamA: 11, teamB: 3)]
+        )
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        controller.demoMatchLimit = 1
+        XCTAssertFalse(controller.canStartNewMatch, "History alone must still gate a user who has no stored counter")
+
+        // The next save catches the counter up to history + 1, so a later
+        // delete of everything still leaves the budget used up.
+        controller.demoMatchLimit = 2
+        XCTAssertTrue(controller.canStartNewMatch)
+        try quickLogOneMatch(controller)
+        XCTAssertEqual(defaults.integer(forKey: ActiveMatchController.Keys.lifetimeCompletedMatchCount), 2)
+        try deleteAllMatches(in: container)
+        XCTAssertFalse(controller.canStartNewMatch)
+    }
+
+    func testAFreshInstallStillAllowsTheFirstMatch() throws {
+        let (controller, defaults) = try makeController()
+        controller.demoMatchLimit = 1
+        XCTAssertEqual(defaults.integer(forKey: ActiveMatchController.Keys.lifetimeCompletedMatchCount), 0)
+        XCTAssertTrue(controller.canStartNewMatch)
+    }
+
+    func testClearingAllHistoryForTestingResetsTheLifetimeCount() throws {
+        let (controller, defaults) = try makeController()
+        controller.demoMatchLimit = 1
+        try quickLogOneMatch(controller)
+        XCTAssertFalse(controller.canStartNewMatch)
+
+        controller.clearAllMatchHistoryForTesting()
+        XCTAssertNil(defaults.object(forKey: ActiveMatchController.Keys.lifetimeCompletedMatchCount))
+        XCTAssertTrue(controller.canStartNewMatch)
     }
 
     func testUnlockProLiftsTheDemoMatchLimitAndPersistsAcrossRelaunch() throws {
