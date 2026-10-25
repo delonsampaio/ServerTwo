@@ -96,4 +96,62 @@ final class EditMatchPlayersValidationTests: XCTestCase {
         let slots = EditMatchPlayersValidation.slots(current, count: 2)
         XCTAssertTrue(slots.allSatisfy(\.isBlank))
     }
+
+    // MARK: hasChanges
+
+    func testHasChangesIsFalseWhenNothingWasTouched() {
+        let id = UUID()
+        let a = [PlayerSlotEntry(name: "Mike", savedPlayerID: id), entry("")]
+        let b = [entry("Bob"), entry("")]
+        XCTAssertFalse(EditMatchPlayersValidation.hasChanges(initialTeamA: a, initialTeamB: b, teamA: a, teamB: b))
+    }
+
+    func testHasChangesIsTrueForOneChangedName() {
+        let a = [entry("Mike"), entry("")]
+        let b = [entry("Bob"), entry("")]
+        XCTAssertTrue(EditMatchPlayersValidation.hasChanges(
+            initialTeamA: a, initialTeamB: b, teamA: [entry("Mike"), entry("")], teamB: [entry("Rob"), entry("")]
+        ))
+    }
+
+    func testHasChangesIgnoresCaseAndWhitespaceOnlyEdits() {
+        let a = [entry("Mike"), entry("")]
+        let b = [entry("Bob"), entry("")]
+        XCTAssertFalse(EditMatchPlayersValidation.hasChanges(
+            initialTeamA: a, initialTeamB: b, teamA: [entry(" mike "), entry("  ")], teamB: [entry("BOB"), entry("")]
+        ))
+    }
+
+    func testHasChangesIsTrueWhenABlankSlotIsFilled() {
+        let a = [entry("Mike"), entry("")]
+        XCTAssertTrue(EditMatchPlayersValidation.hasChanges(
+            initialTeamA: a, initialTeamB: [entry("")], teamA: [entry("Mike"), entry("Zed")], teamB: [entry("")]
+        ))
+    }
+
+    func testHasChangesIsTrueWhenAFilledSlotIsBlanked() {
+        let a = [entry("Mike"), entry("Zed")]
+        XCTAssertTrue(EditMatchPlayersValidation.hasChanges(
+            initialTeamA: a, initialTeamB: [entry("")], teamA: [entry("Mike"), entry("")], teamB: [entry("")]
+        ))
+    }
+
+    func testHasChangesIsTrueWhenTheTwoTeamsSwapPlayers() {
+        let a = [entry("Mike")]
+        let b = [entry("Bob")]
+        XCTAssertTrue(EditMatchPlayersValidation.hasChanges(initialTeamA: a, initialTeamB: b, teamA: b, teamB: a))
+    }
+
+    func testHasChangesIsTrueWhenAPickedPlayerChangesButTheNameTextDoesNot() {
+        let mike1 = SavedPlayer(name: "Mike")
+        let mike2 = SavedPlayer(name: "Mike")
+        XCTAssertTrue(EditMatchPlayersValidation.hasChanges(
+            initialTeamA: [entry("Mike", mike1)], initialTeamB: [entry("")],
+            teamA: [entry("Mike", mike2)], teamB: [entry("")]
+        ))
+        XCTAssertTrue(EditMatchPlayersValidation.hasChanges(
+            initialTeamA: [entry("Mike", mike1)], initialTeamB: [entry("")],
+            teamA: [entry("Mike")], teamB: [entry("")]
+        ), "dropping the picked id (re-linking by typing) is a change too")
+    }
 }

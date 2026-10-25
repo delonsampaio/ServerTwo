@@ -35,6 +35,24 @@ final class EditMatchPlayersUITests: XCTestCase {
 
         let teamASlot = app.textFields["EditPlayers.TeamA.Slot1"]
         XCTAssertTrue(teamASlot.waitForExistence(timeout: 2))
+
+        // Nothing changed yet, so Save is off (and there is no error line).
+        let save = app.buttons["EditPlayers.Save"]
+        XCTAssertFalse(save.isEnabled)
+        XCTAssertFalse(app.staticTexts["EditPlayers.Problem"].exists)
+        let clearTeamASlot = app.buttons["EditPlayers.TeamA.Slot1.Clear"]
+        XCTAssertFalse(clearTeamASlot.exists, "an empty field has nothing to clear")
+
+        // The clear button appears once there is text and empties the field in
+        // one tap; the slot is then back to what it opened with, so Save is off.
+        teamASlot.tap()
+        teamASlot.typeText("Temp")
+        XCTAssertTrue(clearTeamASlot.waitForExistence(timeout: 2))
+        XCTAssertTrue(save.isEnabled)
+        clearTeamASlot.tap()
+        XCTAssertFalse(clearTeamASlot.exists)
+        XCTAssertFalse(save.isEnabled)
+
         teamASlot.tap()
         teamASlot.typeText("Zed")
         let teamBSlot = app.textFields["EditPlayers.TeamB.Slot1"]
@@ -43,7 +61,6 @@ final class EditMatchPlayersUITests: XCTestCase {
 
         // The keyboard covers Save, so dismiss it first.
         teamBSlot.typeText("\n")
-        let save = app.buttons["EditPlayers.Save"]
         XCTAssertTrue(save.isEnabled)
         save.tap()
 

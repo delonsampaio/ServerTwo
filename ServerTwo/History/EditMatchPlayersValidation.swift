@@ -44,4 +44,35 @@ enum EditMatchPlayersValidation {
         }
         return SetupPlayerValidation.reason(forDuplicate: name)
     }
+
+    /// Whether the slots differ from what the sheet opened with. Names compare
+    /// trimmed and case-insensitively (the same equivalence the duplicate check
+    /// uses, so " mike " is still Mike) but the picked id counts too: two saved
+    /// players can share a name, and re-picking the other one is a real change.
+    /// Save stays disabled while this is `false`, which also stops an untouched
+    /// legacy match from silently linking its typed names as new saved players.
+    static func hasChanges(
+        initialTeamA: [PlayerSlotEntry],
+        initialTeamB: [PlayerSlotEntry],
+        teamA: [PlayerSlotEntry],
+        teamB: [PlayerSlotEntry]
+    ) -> Bool {
+        func normalized(_ entries: [PlayerSlotEntry]) -> [SlotKey] {
+            entries.map { entry in
+                // Every blank slot is the same "nobody", whatever stray id it kept.
+                entry.isBlank
+                    ? SlotKey(name: "", savedPlayerID: nil)
+                    : SlotKey(
+                        name: entry.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                        savedPlayerID: entry.savedPlayerID
+                    )
+            }
+        }
+        return normalized(initialTeamA) != normalized(teamA) || normalized(initialTeamB) != normalized(teamB)
+    }
+
+    private struct SlotKey: Equatable {
+        let name: String
+        let savedPlayerID: UUID?
+    }
 }
