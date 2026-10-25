@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 extension Notification.Name {
     /// Posted after Edit Players saves. History, Home and a player's screen
@@ -7,7 +8,8 @@ extension Notification.Name {
     static let matchPlayersEdited = Notification.Name("ServerTwo.matchPlayersEdited")
 }
 
-/// Reloads a screen's matches once, the next time it appears after an edit.
+/// Reloads a screen's matches once, the next time it appears after an edit
+/// (or after a match was deleted, `.matchDeleted`).
 /// The notification only marks the screen stale; the reload waits for the
 /// next `onAppear` so it never runs while a pushed Match Detail (or the
 /// sheet) that belongs to this screen is still on screen.
@@ -25,7 +27,10 @@ private struct RefreshAfterPlayersEdited: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onReceive(NotificationCenter.default.publisher(for: .matchPlayersEdited)) { _ in
+            .onReceive(
+                NotificationCenter.default.publisher(for: .matchPlayersEdited)
+                    .merge(with: NotificationCenter.default.publisher(for: .matchDeleted))
+            ) { _ in
                 isStale = true
             }
             .onAppear {

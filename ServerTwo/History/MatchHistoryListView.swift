@@ -9,6 +9,7 @@ struct MatchHistoryListView: View {
     @State private var mePlayer: SavedPlayer?
     @State private var loadError: Error?
     @State private var filterPlayerID: UUID?
+    @State private var pendingDeletion: PendingMatchDeletion?
     // Bumped after Edit Players saved; see `refreshAfterPlayersEdited`.
     @State private var editRevision = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -84,6 +85,19 @@ struct MatchHistoryListView: View {
                             matchRow(match)
                                 .id(editRevision)
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            // Not `role: .destructive`: that role collapses the
+                            // row as if it were already deleted, and it did not
+                            // come back when the alert was cancelled. The red is
+                            // the system red.
+                            Button {
+                                pendingDeletion = PendingMatchDeletion(match: match)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            .tint(.red)
+                            .accessibilityIdentifier("Delete.\(rowIdentifier(match))")
+                        }
                     }
                 }
             }
@@ -102,6 +116,15 @@ struct MatchHistoryListView: View {
         .task { loadMatches() }
         .refreshAfterPlayersEdited(revision: $editRevision) { loadMatches() }
         .refreshable { loadMatches() }
+        .deleteMatchAlert(pending: $pendingDeletion) { loadMatches() }
+    }
+
+    /// The row title's identifier, "<A> vs <B>".
+    private func rowIdentifier(_ match: MatchRecord) -> String {
+        let sides = match.teamSides ?? []
+        let teamA = sides.first { $0.team == .teamA }?.displayName ?? "Team A"
+        let teamB = sides.first { $0.team == .teamB }?.displayName ?? "Team B"
+        return "\(teamA) vs \(teamB)"
     }
 
     private var filterMenu: some View {

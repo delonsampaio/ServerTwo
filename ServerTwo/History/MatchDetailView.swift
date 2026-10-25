@@ -6,6 +6,11 @@ struct MatchDetailView: View {
     let onRematch: (RematchRequest) -> Void
 
     @State private var isEditingPlayers = false
+    @State private var pendingDeletion: PendingMatchDeletion?
+    // Set the moment the match is deleted: the body stops reading `match` so a
+    // re-render during the pop back never touches the deleted record.
+    @State private var isDeleted = false
+    @Environment(\.dismiss) private var dismiss
     // Bumped when Edit Players saves: the match models are already updated by
     // then, but this screen's content (and the share image) is refreshed
     // explicitly because SwiftData observation did not re-render it reliably.
@@ -119,12 +124,27 @@ struct MatchDetailView: View {
     }
 
     var body: some View {
+        Group {
+            if isDeleted {
+                Color.clear
+            } else {
+                content
+            }
+        }
+        .deleteMatchAlert(pending: $pendingDeletion) {
+            isDeleted = true
+            dismiss()
+        }
+    }
+
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 resultCard
                 ForEach(orderedGames) { game in
                     gameCard(game)
                 }
+                deleteButton
             }
             .padding()
             .id(refreshRevision)
@@ -165,6 +185,31 @@ struct MatchDetailView: View {
                 MatchRecapShareButton(match: match, refreshKey: refreshRevision)
             }
         }
+    }
+
+    /// The last thing in the scroll content: not in the toolbar (Rematch and
+    /// Share live there) and not in the result card. The alert asks first.
+    private var deleteButton: some View {
+        Button(role: .destructive) {
+            pendingDeletion = PendingMatchDeletion(match: match)
+        } label: {
+            // `.primary` text in a red outline (the same recipe as Edit
+            // Players): the audit's contrast check fails red text.
+            Text("Delete Match")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .overlay(Capsule().strokeBorder(Color.red, lineWidth: 1.5))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // The label is the visible text, so Voice Control's "tap Delete
+        // Match" works. It is also needed for the audit: without an explicit
+        // label it evaluates the whole outlined element and fails its contrast
+        // (the same as Edit Players).
+        .accessibilityLabel("Delete Match")
+        .accessibilityHint("Removes the match and its point log")
+        .accessibilityIdentifier("Delete Match")
     }
 
     private var resultCard: some View {
