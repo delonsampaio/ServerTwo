@@ -54,7 +54,7 @@ final class EditMatchPlayersValidationTests: XCTestCase {
         let reason = EditMatchPlayersValidation.problem(
             teamA: [entry("Mike", mike)], teamB: [entry("Mike", mike)], savedPlayers: [mike]
         )
-        XCTAssertEqual(reason, "Mike is listed more than once.")
+        XCTAssertEqual(reason, "Mike is listed more than once. Add an initial to tell them apart, for example Mike S.")
         XCTAssertFalse(reason?.contains("\n") ?? true)
     }
 
@@ -62,7 +62,7 @@ final class EditMatchPlayersValidationTests: XCTestCase {
         let mike = SavedPlayer(name: "Mike")
         XCTAssertEqual(
             EditMatchPlayersValidation.problem(teamA: [entry("Mike", mike), entry("")], teamB: [entry(" mike ")], savedPlayers: [mike]),
-            "mike is listed more than once."
+            "mike is listed more than once. Add an initial to tell them apart, for example Mike S."
         )
         XCTAssertNotNil(EditMatchPlayersValidation.problem(teamA: [entry("Zed")], teamB: [entry("zed")], savedPlayers: []))
     }
@@ -87,7 +87,7 @@ final class EditMatchPlayersValidationTests: XCTestCase {
         let delon = SavedPlayer(name: "Delon")
         XCTAssertEqual(
             EditMatchPlayersValidation.problem(teamA: [entry("Delon", delon)], teamB: [entry("delon ")], savedPlayers: [delon]),
-            "delon is listed more than once."
+            "delon is listed more than once. Add an initial to tell them apart, for example Mike S."
         )
     }
 

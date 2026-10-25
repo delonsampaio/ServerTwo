@@ -94,6 +94,9 @@ fileprivate struct QuickLogState {
 struct MatchSetupView: View {
     @Environment(ActiveMatchController.self) private var activeMatchController
     @Environment(\.modelContext) private var modelContext
+    // Live, so the repeated-player check sees players saved or deleted while
+    // this screen is open.
+    @Query private var savedPlayers: [SavedPlayer]
 
     /// Set by a "Rematch" button on Home or a match's History detail
     /// screen, consumed once via `.onChange` below, which is what makes
@@ -179,6 +182,20 @@ struct MatchSetupView: View {
 
     private enum NameField: Hashable {
         case teamAPlayer1, teamAPlayer2, teamBPlayer1, teamBPlayer2
+    }
+
+    /// Why a match can't be started or logged yet: the same person is
+    /// entered twice (in one team or across both). `nil` when it can.
+    /// Decided by the same identity rule as the Edit Players sheet.
+    private var duplicateReason: String? {
+        SetupPlayerValidation.duplicateName(
+            teamA: [PlayerSlotEntry(name: teamAPlayer1, savedPlayerID: teamAPlayer1ID),
+                    PlayerSlotEntry(name: teamAPlayer2, savedPlayerID: teamAPlayer2ID)],
+            teamB: [PlayerSlotEntry(name: teamBPlayer1, savedPlayerID: teamBPlayer1ID),
+                    PlayerSlotEntry(name: teamBPlayer2, savedPlayerID: teamBPlayer2ID)],
+            isDoubles: playMode == .doubles,
+            among: savedPlayers
+        ).map(SetupPlayerValidation.reason(forDuplicate:))
     }
 
     var body: some View {
@@ -270,6 +287,16 @@ struct MatchSetupView: View {
                         .accessibilityIdentifier("Swap Teams")
                     }
                 }
+            } footer: {
+                // Below both teams' fields, where the problem is: same
+                // style as the Edit Players sheet's reason line. It wraps at
+                // any text size (no fixed height).
+                if let reason = duplicateReason {
+                    Text(reason)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("Setup.DuplicatePlayerReason")
+                }
             }
 
             Section("Match Rules") {
@@ -328,6 +355,8 @@ struct MatchSetupView: View {
             .tint(Color.accentColor)
             .controlSize(.large)
             .padding()
+            .disabled(duplicateReason != nil)
+            .accessibilityHint(duplicateReason ?? "")
             .accessibilityIdentifier("Start Match")
 
             // Visually secondary (a plain text button, not competing with
@@ -354,9 +383,16 @@ struct MatchSetupView: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
             .padding(.bottom, 4)
+            .disabled(duplicateReason != nil)
+            .accessibilityHint(duplicateReason ?? "")
             .accessibilityIdentifier("Log Final Score Instead")
         }
         .navigationTitle("New Match")
+        // The reason appears below the fields, away from the focused one, so
+        // VoiceOver would not otherwise notice it (same as Edit Players).
+        .onChange(of: duplicateReason) { _, newReason in
+            if let newReason { VoiceOverAnnouncement.post(newReason) }
+        }
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
         }
@@ -586,6 +622,7 @@ struct MatchSetupView: View {
     }
 
     private func startMatch() {
+        guard duplicateReason == nil else { return }
         let scoringFormat: ScoringFormat = scoringFormatKind == .sideOut ? .sideOut : .rally(freeze: rallyFreeze)
         let configuration = GameConfiguration(
             playMode: playMode,
@@ -827,7 +864,8 @@ struct MatchSetupView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveQuickLoggedMatch() }
-                        .disabled(!(state?.isDecided ?? false))
+                        .disabled(!(state?.isDecided ?? false) || duplicateReason != nil)
+                        .accessibilityHint(duplicateReason ?? "")
                         .accessibilityIdentifier("Save")
                 }
                 // .numberPad has no Return key, so this is the only way to
@@ -868,7 +906,7 @@ struct MatchSetupView: View {
         // no-ops, never on stale data.
         quickLogCommitTask?.cancel()
         quickLogState?.commit()
-        guard let state = quickLogState, state.isDecided else { return }
+        guard let state = quickLogState, state.isDecided, duplicateReason == nil else { return }
 
         let players = resolvedTeamPlayers()
         let repository = MatchRepository(modelContext: modelContext)

@@ -42,6 +42,6 @@ enum EditMatchPlayersValidation {
         guard let name = PlayerSlotEntry.firstDuplicateName(in: teamA + teamB, among: savedPlayers) else {
             return nil
         }
-        return "\(name) is listed more than once."
+        return SetupPlayerValidation.reason(forDuplicate: name)
     }
 }

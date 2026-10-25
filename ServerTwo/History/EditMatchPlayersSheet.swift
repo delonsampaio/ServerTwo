@@ -173,7 +173,7 @@ struct EditMatchPlayersSheet: View {
             dismiss()
         } catch let error as MatchRepositoryError {
             if case .duplicatePlayer(let name) = error {
-                saveError = "\(name) is listed more than once."
+                saveError = SetupPlayerValidation.reason(forDuplicate: name)
             } else {
                 saveError = "Couldn't save these players. Please try again."
             }
