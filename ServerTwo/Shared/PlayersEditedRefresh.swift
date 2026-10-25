@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import Combine
 
 extension Notification.Name {
@@ -6,6 +7,50 @@ extension Notification.Name {
     /// each load their matches once per view lifetime, so a plain pop back
     /// would otherwise leave their rows and stats stale until pull-to-refresh.
     static let matchPlayersEdited = Notification.Name("ServerTwo.matchPlayersEdited")
+    /// Posted after a match is deleted, carrying its `persistentModelID` (see
+    /// `MatchDeleted`). Open screens drop that match at once through
+    /// `onMatchDeleted`, then reload on their next appearance like
+    /// `matchPlayersEdited`.
+    static let matchDeleted = Notification.Name("ServerTwo.matchDeleted")
+}
+
+/// The payload of `.matchDeleted`. It is the deleted match's id and nothing
+/// else on purpose: screens still hold the deleted `MatchRecord` objects, and
+/// reading `teamSides`/`games` from one traps in SwiftData ("backing data could
+/// no longer be found"), whereas reading an id is safe. Read the id BEFORE
+/// deleting.
+enum MatchDeleted {
+    private static let idKey = "matchID"
+
+    /// Every match deleted in this process. A row's content can still be
+    /// evaluated with the deleted record AFTER the screen dropped it from its
+    /// array (reproduced: Player detail on another tab, the row label ran again
+    /// in the render pass that followed the delete). A `@State` copy of this set
+    /// was NOT reliable there (the stale evaluation read an old, empty value),
+    /// so rows ask this process-wide set instead, by id only, before reading
+    /// anything else from their match. Ids are permanent and never reused.
+    private(set) static var deletedIDs: Set<PersistentIdentifier> = []
+
+    static func hasBeenDeleted(_ id: PersistentIdentifier) -> Bool {
+        deletedIDs.contains(id)
+    }
+
+    static func post(matchID: PersistentIdentifier) {
+        deletedIDs.insert(matchID)
+        NotificationCenter.default.post(name: .matchDeleted, object: nil, userInfo: [idKey: matchID])
+    }
+
+    static func matchID(in notification: Notification) -> PersistentIdentifier? {
+        notification.userInfo?[idKey] as? PersistentIdentifier
+    }
+}
+
+extension Array where Element: PersistentModel {
+    /// The array without the model with this id. Compares ids only, so it is
+    /// safe on an array that still holds the deleted model.
+    func removing(modelID: PersistentIdentifier) -> [Element] {
+        filter { $0.persistentModelID != modelID }
+    }
 }
 
 /// Reloads a screen's matches once, the next time it appears after an edit
@@ -43,6 +88,17 @@ private struct RefreshAfterPlayersEdited: ViewModifier {
 }
 
 extension View {
+    /// Runs `action` with the id of every match deleted anywhere in the app,
+    /// immediately (not on the next appear). A screen that keeps `MatchRecord`s
+    /// in `@State` uses this to drop the deleted one before anything can read
+    /// its properties; the normal reload on next appear still follows.
+    func onMatchDeleted(perform action: @escaping @MainActor (PersistentIdentifier) -> Void) -> some View {
+        onReceive(NotificationCenter.default.publisher(for: .matchDeleted)) { notification in
+            guard let id = MatchDeleted.matchID(in: notification) else { return }
+            action(id)
+        }
+    }
+
     func refreshAfterPlayersEdited(revision: Binding<Int>, reload: @escaping @MainActor () -> Void) -> some View {
         modifier(RefreshAfterPlayersEdited(revision: revision, reload: reload))
     }

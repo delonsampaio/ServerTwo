@@ -2,15 +2,27 @@ import XCTest
 
 @MainActor
 final class DeleteMatchUITests: XCTestCase {
-    /// Launches clean and quick-logs one match with blank names (the shortest
-    /// way to a completed match), saved as "Team A vs Team B".
-    private func launchWithOneLoggedMatch() -> XCUIApplication {
+    /// Launches clean and quick-logs one match, saved as "Team A vs Team B"
+    /// when no names are given (the shortest way to a completed match), or
+    /// as "<A> vs <B>" with a saved player for each name.
+    private func launchWithOneLoggedMatch(names: (teamA: String, teamB: String)? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-UITest-ResetState"]
         app.launch()
         dismissOnboardingIfPresented(app)
 
         app.tabBars.buttons["Play"].tap()
+        if let names {
+            let singlesToggle = app.buttons["Singles"]
+            if singlesToggle.exists { singlesToggle.tap() }
+            let teamAField = app.textFields.matching(identifier: "Team A Player Name").firstMatch
+            scrollUntilVisible(teamAField, in: app)
+            teamAField.tap()
+            teamAField.typeText(names.teamA)
+            let teamBField = app.textFields.matching(identifier: "Team B Player Name").firstMatch
+            teamBField.tap()
+            teamBField.typeText(names.teamB)
+        }
         let quickLogButton = app.buttons["Log Final Score Instead"]
         scrollUntilVisible(quickLogButton, in: app)
         quickLogButton.tap()
@@ -25,7 +37,8 @@ final class DeleteMatchUITests: XCTestCase {
         app.buttons["Save"].tap()
 
         app.tabBars.buttons["History"].tap()
-        XCTAssertTrue(app.staticTexts["Team A vs Team B"].waitForExistence(timeout: 3))
+        let title = names.map { "\($0.teamA) vs \($0.teamB)" } ?? "Team A vs Team B"
+        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 3))
         return app
     }
 
@@ -83,5 +96,58 @@ final class DeleteMatchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No Matches Yet"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["Team A vs Team B"].exists)
         XCTAssertFalse(app.navigationBars["Match Detail"].exists)
+    }
+
+    /// Screens that stay alive under other tabs keep their loaded matches. After
+    /// a delete elsewhere they must not read the deleted match: Home, and a
+    /// player's screen that was already open, both still hold it here.
+    func testOtherScreensSurviveAMatchDeletedFromHistory() throws {
+        let app = launchWithOneLoggedMatch(names: ("Delon", "Katie"))
+
+        // Home loads its matches once, before this match existed; pull to
+        // refresh so it holds the match when it is deleted.
+        app.tabBars.buttons["Home"].tap()
+        let lastMatchHeader = app.staticTexts["Last Match"]
+        if !lastMatchHeader.waitForExistence(timeout: 2) {
+            app.swipeDown()
+        }
+        XCTAssertTrue(lastMatchHeader.waitForExistence(timeout: 3))
+
+        // Open Katie's screen first so it holds the match when it is deleted.
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["Manage Players"].tap()
+        let katieRow = app.staticTexts["PlayerRow.Katie"]
+        XCTAssertTrue(katieRow.waitForExistence(timeout: 3))
+        katieRow.tap()
+        XCTAssertTrue(app.navigationBars["Katie"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Delon vs Katie"].waitForExistence(timeout: 3))
+
+        app.tabBars.buttons["History"].tap()
+        let row = app.staticTexts["Delon vs Katie"]
+        row.swipeLeft()
+        let swipeDelete = app.buttons["Delete.Delon vs Katie"]
+        XCTAssertTrue(swipeDelete.waitForExistence(timeout: 2))
+        swipeDelete.tap()
+        let alert = app.alerts["Delete this match?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 2))
+        XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "This cannot be undone.")).firstMatch.exists)
+        alert.buttons["ConfirmDeleteMatch"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["No Matches Yet"].waitForExistence(timeout: 3))
+
+        // Home shows its empty state.
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.staticTexts["Play your first match to see it here."].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.state, .runningForeground)
+
+        // Katie's screen is still up, without the deleted match, and still works.
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Katie"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["Delon vs Katie"].exists)
+        app.navigationBars.buttons.firstMatch.tap()
+        let delonRow = app.staticTexts["PlayerRow.Delon"]
+        XCTAssertTrue(delonRow.waitForExistence(timeout: 3))
+        delonRow.tap()
+        XCTAssertTrue(app.navigationBars["Delon"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.state, .runningForeground)
     }
 }

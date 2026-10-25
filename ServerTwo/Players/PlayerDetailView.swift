@@ -187,6 +187,12 @@ struct PlayerDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { loadRecord() }
         .refreshAfterPlayersEdited(revision: $editRevision) { loadRecord() }
+        // `record`, `recentForm` and `chemistry` are plain numbers (safe to
+        // show until the reload on next appear); only the held match records
+        // can trap, so drop the deleted one now.
+        .onMatchDeleted { id in
+            matches = matches.removing(modelID: id)
+        }
         .refreshable { loadRecord() }
     }
 
@@ -217,7 +223,17 @@ struct PlayerDetailView: View {
     // Same scannable row as MatchHistoryListView's rows, computed from
     // this player's own perspective (not whatever "mePlayer" might be
     // set elsewhere) — this screen can be reached for any saved player.
+    /// Checks the id first: the row's label closure can be re-evaluated with a
+    /// deleted match after `matches` already dropped it (see
+    /// `MatchDeleted.hasBeenDeleted`).
+    @ViewBuilder
     private func matchRow(_ match: MatchRecord) -> some View {
+        if !MatchDeleted.hasBeenDeleted(match.persistentModelID) {
+            matchRowContent(match)
+        }
+    }
+
+    private func matchRowContent(_ match: MatchRecord) -> some View {
         let teamAName = (match.teamSides ?? []).first { $0.team == .teamA }?.displayName ?? "Team A"
         let teamBName = (match.teamSides ?? []).first { $0.team == .teamB }?.displayName ?? "Team B"
         let games = (match.games ?? []).sorted { $0.gameNumber < $1.gameNumber }

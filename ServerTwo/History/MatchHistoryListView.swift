@@ -115,12 +115,17 @@ struct MatchHistoryListView: View {
         }
         .task { loadMatches() }
         .refreshAfterPlayersEdited(revision: $editRevision) { loadMatches() }
+        // Match Detail can delete a match while this list is still on the
+        // stack holding that record; drop it before anything reads it.
+        .onMatchDeleted { id in matches = matches.removing(modelID: id) }
         .refreshable { loadMatches() }
         .deleteMatchAlert(pending: $pendingDeletion) { loadMatches() }
     }
 
     /// The row title's identifier, "<A> vs <B>".
     private func rowIdentifier(_ match: MatchRecord) -> String {
+        // Swipe actions are built lazily too; see `MatchDeleted.hasBeenDeleted`.
+        if MatchDeleted.hasBeenDeleted(match.persistentModelID) { return "Deleted match" }
         let sides = match.teamSides ?? []
         let teamA = sides.first { $0.team == .teamA }?.displayName ?? "Team A"
         let teamB = sides.first { $0.team == .teamB }?.displayName ?? "Team B"
@@ -158,7 +163,14 @@ struct MatchHistoryListView: View {
         .accessibilityValue(filterPlayerName ?? "All matches")
     }
 
+    @ViewBuilder
     private func matchRow(_ match: MatchRecord) -> some View {
+        if !MatchDeleted.hasBeenDeleted(match.persistentModelID) {
+            matchRowContent(match)
+        }
+    }
+
+    private func matchRowContent(_ match: MatchRecord) -> some View {
         let teamAName = (match.teamSides ?? []).first { $0.team == .teamA }?.displayName ?? "Team A"
         let teamBName = (match.teamSides ?? []).first { $0.team == .teamB }?.displayName ?? "Team B"
         let games = (match.games ?? []).sorted { $0.gameNumber < $1.gameNumber }

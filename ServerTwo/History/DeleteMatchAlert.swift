@@ -15,15 +15,8 @@ struct PendingMatchDeletion {
         let teamB = sides.first { $0.team == .teamB }?.displayName ?? "Team B"
         let date = match.completedAt.formatted(date: .long, time: .omitted)
         self.match = match
-        self.message = "\(teamA) vs \(teamB), \(date). This removes the scores and point-by-point log. Players and their other matches are not affected."
+        self.message = "\(teamA) vs \(teamB), \(date). This permanently deletes the scores and point-by-point log, removes the match from every player's record, and also deletes it on your other devices. This cannot be undone."
     }
-}
-
-extension Notification.Name {
-    /// Posted after a match is deleted. Home and a player's screen load their
-    /// matches once per view lifetime, so (like `matchPlayersEdited`) this makes
-    /// them reload on their next appearance; see `refreshAfterPlayersEdited`.
-    static let matchDeleted = Notification.Name("ServerTwo.matchDeleted")
 }
 
 /// A centered `.alert` (the app avoids `confirmationDialog` on iOS 27, where it
@@ -60,13 +53,16 @@ private struct DeleteMatchAlert: ViewModifier {
     }
 
     private func delete(_ request: PendingMatchDeletion) {
+        // Read before the delete: the id is the only thing that is safe to
+        // read from the record afterwards.
+        let deletedID = request.match.persistentModelID
         do {
             try MatchRepository(modelContext: modelContext).deleteMatch(request.match)
         } catch {
             showFailure = true
             return
         }
-        NotificationCenter.default.post(name: .matchDeleted, object: nil)
+        MatchDeleted.post(matchID: deletedID)
         onDeleted()
     }
 }

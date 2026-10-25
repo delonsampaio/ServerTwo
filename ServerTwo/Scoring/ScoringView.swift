@@ -421,6 +421,10 @@ struct ScoringView: View {
             // Doubles side-out cards show the two partners with their court side
             // (see `ScoreCardNameArea`). That block's Dynamic Type growth is
             // capped; every other match keeps today's uncapped single name.
+            // `reservesPartnerRows` is true for BOTH cards whenever either one
+            // shows partner rows, so both name areas get the same cap: with
+            // different caps their reserved heights would differ and the two
+            // score digits below would no longer line up.
             ScoreCardNameArea(name: name, positions: positions, reservesPartnerRows: reservesPartnerRows)
                 .dynamicTypeSize(reservesPartnerRows ? ...DynamicTypeSize.accessibility2 : ...DynamicTypeSize.accessibility5)
             // The digits scale with Dynamic Type but stop at 128 pt, and never

@@ -81,6 +81,9 @@ struct HomeView: View {
         .navigationTitle("Server Two")
         .task { loadMatches() }
         .refreshAfterPlayersEdited(revision: $editRevision) { loadMatches() }
+        // The Last Match card and the stats read `matches` directly, so
+        // dropping the deleted record here also updates both at once.
+        .onMatchDeleted { id in matches = matches.removing(modelID: id) }
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
         }
