@@ -3,6 +3,8 @@ import PickleballKit
 
 struct TimeoutControlsView: View {
     let state: GameState
+    let teamAName: String
+    let teamBName: String
     let onRequestTimeout: (Team) -> Void
 
     var body: some View {
@@ -19,7 +21,7 @@ struct TimeoutControlsView: View {
 
     private func timeoutButton(for team: Team) -> some View {
         let remaining = state.timeoutsRemaining(for: team)
-        let name = team == .teamA ? "Team A" : "Team B"
+        let name = team == .teamA ? teamAName : teamBName
         return Button {
             onRequestTimeout(team)
         } label: {
@@ -45,6 +47,8 @@ struct TimeoutControlsView: View {
             hasSideSwitched: false,
             lastPointWonWhileServing: true
         ),
+        teamAName: "Alice & Bob",
+        teamBName: "Team B",
         onRequestTimeout: { _ in }
     )
     .padding()

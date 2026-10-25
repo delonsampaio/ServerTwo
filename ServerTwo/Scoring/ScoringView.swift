@@ -321,6 +321,12 @@ struct ScoringView: View {
             }
             .padding(.horizontal)
             .frame(maxHeight: .infinity)
+            // Second server and side out change no score, so the score haptic
+            // below stays silent for them. Attached once here (not per card):
+            // both cards see the serve change and would each buzz.
+            .sensoryFeedback(.impact(weight: .light), trigger: AnnouncementSnapshot(match: match)) { old, new in
+                appSettings.hapticsEnabled && ServeChangeHaptic.shouldFire(old: old, new: new)
+            }
 
             // Hidden once the match is decided — there's no more play left to
             // pause, and showing them pushed the "Finish Match" button's
@@ -332,7 +338,11 @@ struct ScoringView: View {
             // buttons would just be clutter for a casual game that was
             // explicitly opted out of tracking them.
             if !match.isMatchOver, match.configuration.timeoutsPerTeam > 0 {
-                TimeoutControlsView(state: match.currentGame.state) { team in
+                TimeoutControlsView(
+                    state: match.currentGame.state,
+                    teamAName: activeMatchController.teamAName,
+                    teamBName: activeMatchController.teamBName
+                ) { team in
                     activeMatchController.requestTimeout(for: team)
                 }
                 .padding(.horizontal)
@@ -357,15 +367,24 @@ struct ScoringView: View {
         let name = team == .teamA ? activeMatchController.teamAName : activeMatchController.teamBName
         let score = match.currentGame.state.score(for: team)
         let isServing = match.currentGame.state.servingTeam == team
+        let serverNumber = match.currentGame.state.serverNumber
+        let scoringIsSideOut = match.configuration.scoringFormat == .sideOut
+        let isDoubles = match.configuration.playMode == .doubles
+        // A finished match has no server: the badge and spoken "serving" go, so
+        // the disabled cards stop looking live.
+        let badgeText = ServingBadge.text(
+            isServing: isServing, scoringIsSideOut: scoringIsSideOut, isDoubles: isDoubles,
+            serverNumber: serverNumber, isMatchOver: match.isMatchOver
+        )
         return VStack(spacing: 8) {
             // A fixed-height slot whether or not this team is serving
             // — if the receiving side just left it empty with nothing
             // reserving the space, its card's content would sit lower
             // than the serving side's, breaking the side-by-side
             // alignment the two cards are supposed to share.
-            ServingBadgeSlot(isServing: isServing)
+            ServingBadgeSlot(text: badgeText)
                 // Capped at the first accessibility size: the badge sits in a
-                // half-width card, where "SERVING" at the largest sizes would
+                // half-width card, where "SERVER 1" at the largest sizes would
                 // truncate.
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
 
@@ -396,7 +415,12 @@ struct ScoringView: View {
 
             Spacer()
 
-            Text("Tap to Score")
+            // Says what a tap does: in side-out scoring the receiving card
+            // cannot score, a tap there means 2nd server or side out.
+            Text(ScoreZoneCaption.text(
+                isServing: isServing, scoringIsSideOut: scoringIsSideOut, isDoubles: isDoubles,
+                serverNumber: serverNumber, isMatchOver: match.isMatchOver
+            ))
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -452,26 +476,32 @@ struct ScoringView: View {
             isShowingScoreCorrection = true
         }
         .accessibilityIdentifier("scoreZone.\(team.rawValue)")
-        .accessibilityLabel(AccessibilityText.scoreZoneLabel(name: name, score: score, isServing: isServing))
+        .accessibilityLabel(AccessibilityText.scoreZoneLabel(
+            name: name, score: score,
+            isServing: badgeText != nil,
+            serverNumber: badgeText == nil ? nil : ServingBadge.spokenServerNumber(
+                scoringIsSideOut: scoringIsSideOut, isDoubles: isDoubles, serverNumber: serverNumber
+            )
+        ))
         .accessibilityHint(AccessibilityText.scoreZoneHint)
     }
 
 }
 
-/// The fixed-height slot at the top of a score card: the "SERVING" badge when
-/// this team serves, otherwise empty space of the same height — if the
+/// The fixed-height slot at the top of a score card: the serving badge when
+/// there is text for one (nil: receiving team, or the match is over), otherwise empty space of the same height — if the
 /// receiving side left it empty with nothing reserving the space, its card's
 /// content would sit lower than the serving side's, breaking the side-by-side
 /// alignment the two cards are supposed to share. 28 pt at the default text
 /// size, scaling with the (capped) Dynamic Type size.
 private struct ServingBadgeSlot: View {
-    let isServing: Bool
+    let text: String?
     @ScaledMetric(relativeTo: .caption) private var slotHeight: CGFloat = 28
 
     var body: some View {
         Group {
-            if isServing {
-                Label("SERVING", systemImage: "circle.grid.cross.fill")
+            if let text {
+                Label(text, systemImage: "circle.grid.cross.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Color.accentColor)
                     .lineLimit(1)

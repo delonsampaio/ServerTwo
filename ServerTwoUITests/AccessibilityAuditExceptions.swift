@@ -133,7 +133,7 @@ enum AccessibilityAuditExceptions {
 
     private static let dynOnboardingReason = "reviewed: \"Done\" is the system toolbar button text, which has no API to scale it further; looked at at AX4: intact"
 
-    private static let dynScoringReason = "reviewed, by design: score digits are scaled up to a 128 pt maximum and shrink to fit rather than wrap; the \"SERVING\" badge is deliberately capped at accessibility1 so it does not truncate; \"Tap to Score\" is a caption2 hint that wraps to two lines at AX sizes; \"Cancel Match\" is system toolbar text. Looked at at AX4 with short names: nothing clipped (long names and AX5 are on the device-check list)"
+    private static let dynScoringReason = "reviewed, by design: score digits are scaled up to a 128 pt maximum and shrink to fit rather than wrap; the \"SERVER 2\" badge (\"SERVER 1\" / \"SERVING\" in other modes) is deliberately capped at accessibility1 so it does not truncate; \"Tap to Score\" and \"Tap for Side Out\" (\"Tap for 2nd Server\" with server 1) are caption2 hints that wrap to two lines at AX sizes; \"Cancel Match\" is system toolbar text. Looked at at AX4 with short names: nothing clipped (long names and AX5 are on the device-check list)"
 
     private static let dyn: [KnownFalsePositive] = [
         KnownFalsePositive(
@@ -153,11 +153,11 @@ enum AccessibilityAuditExceptions {
             descriptionContains: "Dynamic Type font sizes are partially unsupported", reason: dynOnboardingReason
         ),
         KnownFalsePositive(
-            screen: "Scoring", auditType: "dynamicType", elements: ["Cancel Match", "label:0", "label:SERVING", "label:Tap to Score"],
+            screen: "Scoring", auditType: "dynamicType", elements: ["Cancel Match", "label:0", "label:SERVER 2", "label:Tap for Side Out", "label:Tap to Score"],
             descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 6, reason: dynScoringReason
         ),
         KnownFalsePositive(
-            screen: "Scoring@AXXL", auditType: "dynamicType", elements: ["Cancel Match", "label:0", "label:SERVING", "label:Tap to Score"],
+            screen: "Scoring@AXXL", auditType: "dynamicType", elements: ["Cancel Match", "label:0", "label:SERVER 2", "label:Tap for Side Out", "label:Tap to Score"],
             descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 6, reason: dynScoringReason
         ),
     ]
@@ -200,11 +200,11 @@ enum AccessibilityAuditExceptions {
             descriptionContains: "Contrast failed", reason: c_accentReason
         ),
         KnownFalsePositive(
-            screen: "Scoring", auditType: "contrast", elements: ["Cancel Match", "label:SERVING", "label:Timeout (2)"],
+            screen: "Scoring", auditType: "contrast", elements: ["Cancel Match", "label:SERVER 2", "label:Timeout (2)"],
             descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_accentReason
         ),
         KnownFalsePositive(
-            screen: "Scoring@AXXL", auditType: "contrast", elements: ["Cancel Match", "label:SERVING", "label:Timeout (2)"],
+            screen: "Scoring@AXXL", auditType: "contrast", elements: ["Cancel Match", "label:SERVER 2", "label:Timeout (2)"],
             descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_accentReason
         ),
     ]
@@ -250,7 +250,7 @@ enum AccessibilityAuditExceptions {
             descriptionContains: "Contrast nearly passed", maxOccurrences: 5, reason: c_secondaryReason
         ),
         KnownFalsePositive(
-            screen: "Scoring", auditType: "contrast", elements: ["label:Tap to Score"],
+            screen: "Scoring", auditType: "contrast", elements: ["label:Tap for Side Out", "label:Tap to Score"],
             descriptionContains: "Contrast nearly passed", maxOccurrences: 2, reason: c_secondaryReason
         ),
         KnownFalsePositive(

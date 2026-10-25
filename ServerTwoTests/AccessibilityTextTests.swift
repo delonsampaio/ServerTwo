@@ -4,12 +4,28 @@ import XCTest
 @MainActor
 final class AccessibilityTextTests: XCTestCase {
     func testScoreZoneLabelStartsWithNameAndPoints() {
-        let idle = AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: false)
-        let serving = AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: true)
+        let idle = AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: false, serverNumber: nil)
+        let serving = AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: true, serverNumber: nil)
         XCTAssertEqual(idle, "Delon, 12 points")
         XCTAssertEqual(serving, "Delon, 12 points, serving")
         XCTAssertTrue(idle.hasPrefix("Delon, 12 points"))
         XCTAssertTrue(serving.hasPrefix("Delon, 12 points"))
+    }
+
+    func testScoreZoneLabelSaysTheServerNumberForTheServingTeamOnly() {
+        XCTAssertEqual(
+            AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: true, serverNumber: 1),
+            "Delon, 12 points, serving, server 1"
+        )
+        XCTAssertEqual(
+            AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: true, serverNumber: 2),
+            "Delon, 12 points, serving, server 2"
+        )
+        // A receiving team never mentions a server, even if a number is passed.
+        XCTAssertEqual(
+            AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: false, serverNumber: 2),
+            "Delon, 12 points"
+        )
     }
 
     func testScoreZoneLabelLeavesTheDigitsParseableAfterTheFirstComma() {
@@ -19,8 +35,9 @@ final class AccessibilityTextTests: XCTestCase {
             let digits = label[comma.upperBound...].prefix(while: \.isNumber)
             return Int(digits) ?? -1
         }
-        XCTAssertEqual(score(of: AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: false)), 12)
-        XCTAssertEqual(score(of: AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: true)), 12)
+        XCTAssertEqual(score(of: AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: false, serverNumber: nil)), 12)
+        XCTAssertEqual(score(of: AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: true, serverNumber: nil)), 12)
+        XCTAssertEqual(score(of: AccessibilityText.scoreZoneLabel(name: "Delon", score: 12, isServing: true, serverNumber: 2)), 12)
     }
 
     func testScoreZoneHint() {

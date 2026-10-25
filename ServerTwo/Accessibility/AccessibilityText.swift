@@ -3,12 +3,15 @@ import Foundation
 /// The VoiceOver wording that is built from data (rather than a fixed string
 /// in a view), kept pure so it can be unit-tested.
 enum AccessibilityText {
-    /// "<name>, <score> points", plus ", serving" for the serving team. The
-    /// text must keep starting "<name>, <N> points": UI tests match
-    /// "<N> points" and parse the digits after the first ", ".
-    static func scoreZoneLabel(name: String, score: Int, isServing: Bool) -> String {
+    /// "<name>, <score> points", plus ", serving" for the serving team and, in
+    /// doubles side-out scoring only, ", server 1" / ", server 2" (the caller
+    /// passes nil elsewhere). The text must keep starting "<name>, <N> points":
+    /// UI tests match "<N> points" and parse the digits after the first ", ".
+    static func scoreZoneLabel(name: String, score: Int, isServing: Bool, serverNumber: Int?) -> String {
         let base = "\(name), \(score) points"
-        return isServing ? base + ", serving" : base
+        guard isServing else { return base }
+        guard let serverNumber else { return base + ", serving" }
+        return base + ", serving, server \(serverNumber)"
     }
 
     static let scoreZoneHint =
