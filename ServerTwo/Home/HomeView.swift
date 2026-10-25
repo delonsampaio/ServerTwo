@@ -407,11 +407,14 @@ struct HomeView: View {
     }
 }
 
+// Debug only: the preview store is the debug fake, which Release builds do not contain.
+#if DEBUG
 #Preview {
     NavigationStack {
         HomeView(onNewMatch: {}, onRematch: { _ in }, onQuickStart: { _ in })
     }
     .environment(try! ActiveMatchController(modelContext: ModelContext(PersistenceContainer.makeInMemoryContainer())))
-    .environment(StoreManager(backend: StoreKitBackend()))
+    .environment(StoreManager.preview)
     .modelContainer(try! PersistenceContainer.makeInMemoryContainer())
 }
+#endif

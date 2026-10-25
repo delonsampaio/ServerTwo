@@ -205,7 +205,7 @@ final class StoreManagerStoreKitTests: XCTestCase {
         let result = await store.restorePurchases()
         try await session.setSimulatedError(nil, forAPI: .appStoreSync)
 
-        guard case .failed = result else { return XCTFail("expected .failed, got \(result)") }
+        guard case .failed? = result else { return XCTFail("expected .failed, got \(String(describing: result))") }
         XCTAssertFalse(store.hasProEntitlement)
     }
 }
@@ -221,30 +221,61 @@ final class MyAppStoreBackendTests: XCTestCase {
     }
 }
 
-/// A backend that returns a scripted purchase result, for the outcomes
-/// `SKTestSession` cannot produce (cancel, unverified).
+/// A backend with scripted answers, for the outcomes `SKTestSession` cannot
+/// produce (cancel, unverified, a slow stale read).
 @MainActor
 private final class ScriptedStoreBackend: StoreBackend {
-    var purchaseResult: BackendPurchaseResult
-    init(purchaseResult: BackendPurchaseResult) { self.purchaseResult = purchaseResult }
-    func loadProductDisplayPrice() async throws -> String { "$1.99" }
-    func purchase() async throws -> BackendPurchaseResult { purchaseResult }
-    func syncWithAppStore() async throws {}
-    func verifiedEntitlements() async -> [VerifiedEntitlement] { [] }
+    /// Popped per `purchase()` call; the last one repeats.
+    var purchaseResults: [BackendPurchaseResult]
+    /// Popped per `verifiedEntitlements()` call (each with its own delay); the
+    /// last one repeats.
+    var entitlementScript: [(delay: Duration, ownsPro: Bool)] = [(.zero, false)]
+    var syncError: (any Error)?
+    var syncDelay: Duration = .zero
+    private(set) var loadProductCalls = 0
+
+    init(purchaseResults: [BackendPurchaseResult] = [.purchased]) {
+        self.purchaseResults = purchaseResults
+    }
+
+    func loadProductDisplayPrice() async throws -> String {
+        loadProductCalls += 1
+        return "$1.99"
+    }
+
+    func purchase() async throws -> BackendPurchaseResult {
+        purchaseResults.count > 1 ? purchaseResults.removeFirst() : purchaseResults[0]
+    }
+
+    func syncWithAppStore() async throws {
+        try await Task.sleep(for: syncDelay)
+        if let syncError { throw syncError }
+    }
+
+    func verifiedEntitlements() async -> [VerifiedEntitlement] {
+        let step = entitlementScript.count > 1 ? entitlementScript.removeFirst() : entitlementScript[0]
+        try? await Task.sleep(for: step.delay)
+        guard step.ownsPro else { return [] }
+        return [VerifiedEntitlement(
+            transactionID: 1, productID: StoreManager.proProductID,
+            ownershipType: .purchased, revocationDate: nil
+        )]
+    }
+
     func runTransactionUpdates(afterFinishing: () async -> Void) async {}
 }
 
 @MainActor
 final class StoreManagerPurchaseOutcomeTests: XCTestCase {
     func testACancelledPurchaseReturnsToIdleWithoutAnError() async {
-        let store = StoreManager(backend: ScriptedStoreBackend(purchaseResult: .cancelled))
+        let store = StoreManager(backend: ScriptedStoreBackend(purchaseResults: [.cancelled]))
         await store.purchase()
         XCTAssertEqual(store.purchaseState, .idle)
         XCTAssertFalse(store.hasProEntitlement)
     }
 
     func testAnUnverifiedPurchaseDoesNotUnlockAndShowsAMessage() async {
-        let store = StoreManager(backend: ScriptedStoreBackend(purchaseResult: .unverified))
+        let store = StoreManager(backend: ScriptedStoreBackend(purchaseResults: [.unverified]))
         await store.purchase()
         guard case .failed = store.purchaseState else {
             return XCTFail("expected a failed state, got \(store.purchaseState)")
@@ -253,9 +284,117 @@ final class StoreManagerPurchaseOutcomeTests: XCTestCase {
     }
 
     func testPendingKeepsWaiting() async {
-        let store = StoreManager(backend: ScriptedStoreBackend(purchaseResult: .pending))
+        let store = StoreManager(backend: ScriptedStoreBackend(purchaseResults: [.pending]))
         await store.purchase()
         XCTAssertEqual(store.purchaseState, .pending)
         XCTAssertFalse(store.hasProEntitlement)
+    }
+
+    func testADeclinedAskToBuyDoesNotBlockAnotherAttemptWhichCanSucceed() async {
+        let backend = ScriptedStoreBackend(purchaseResults: [.pending, .purchased])
+        let store = StoreManager(backend: backend)
+        await store.purchase()
+        XCTAssertEqual(store.purchaseState, .pending)
+
+        // StoreKit sends nothing when a parent declines; the user tries again.
+        backend.entitlementScript = [(.zero, true)]
+        await store.purchase()
+        XCTAssertEqual(store.purchaseState, .idle)
+        XCTAssertTrue(store.hasProEntitlement)
+    }
+
+    func testResetPurchaseStateClearsPendingAndFailedButNotAPurchaseInProgress() async {
+        let store = StoreManager(backend: ScriptedStoreBackend(purchaseResults: [.pending]))
+        await store.purchase()
+        store.resetPurchaseState()
+        XCTAssertEqual(store.purchaseState, .idle)
+
+        let failing = StoreManager(backend: ScriptedStoreBackend(purchaseResults: [.unverified]))
+        await failing.purchase()
+        failing.resetPurchaseState()
+        XCTAssertEqual(failing.purchaseState, .idle)
+    }
+
+    func testAVerifiedPurchaseThatTheRefreshDoesNotShowYetIsReportedHonestly() async {
+        // Purchased, but the entitlement list is still empty.
+        let store = StoreManager(backend: ScriptedStoreBackend(purchaseResults: [.purchased]))
+        await store.purchase()
+        XCTAssertEqual(store.purchaseState, .completedNotYetUnlocked)
+        XCTAssertFalse(store.hasProEntitlement)
+    }
+
+    func testAnOlderSlowRefreshCannotOverwriteANewerResult() async {
+        let backend = ScriptedStoreBackend()
+        // First read: slow and stale (locked). Second read: fast and fresh (entitled).
+        backend.entitlementScript = [(.milliseconds(300), false), (.zero, true)]
+        var results: [Bool] = []
+        let store = StoreManager(backend: backend, onEntitlementChange: { results.append($0) })
+
+        let slow = Task { await store.refreshEntitlements() }
+        await Task.yield()
+        await store.refreshEntitlements()
+        await slow.value
+
+        XCTAssertTrue(store.hasProEntitlement, "the fresh result must win")
+        XCTAssertEqual(results, [true], "the stale result must be dropped, not applied afterwards")
+    }
+
+    func testARestoreWhoseSignInIsCancelledIsSilent() async {
+        let backend = ScriptedStoreBackend()
+        backend.syncError = StoreKitError.userCancelled
+        let store = StoreManager(backend: backend)
+        let result = await store.restorePurchases()
+        XCTAssertEqual(result, .cancelled)
+        XCTAssertNil(store.restoreResult, "nothing is shown for a cancelled sign-in")
+    }
+
+    func testAnotherRestoreWhileOneIsRunningDoesNothing() async {
+        let backend = ScriptedStoreBackend()
+        backend.syncDelay = .milliseconds(200)
+        let store = StoreManager(backend: backend)
+        let first = Task { await store.restorePurchases() }
+        await Task.yield()
+        let second = await store.restorePurchases()
+        XCTAssertNil(second)
+        let firstResult = await first.value
+        XCTAssertEqual(firstResult, .nothingToRestore)
+    }
+
+    func testStartIsIdempotent() async {
+        let backend = ScriptedStoreBackend()
+        let store = StoreManager(backend: backend)
+        await store.start()
+        await store.start()
+        XCTAssertEqual(backend.loadProductCalls, 1)
+        XCTAssertEqual(store.productState, .loaded(displayPrice: "$1.99"))
+    }
+
+    func testBackendErrorsHaveReadableMessages() {
+        XCTAssertNotNil(StoreBackendError.productNotFound.errorDescription)
+        XCTAssertNotNil(StoreBackendError.unknownPurchaseResult.errorDescription)
+    }
+}
+
+/// The wording differs by how the paywall was reached: only the gate may say
+/// the free match is used up.
+@MainActor
+final class PaywallCopyTests: XCTestCase {
+    func testTheGateSaysTheFreeMatchIsFinished() {
+        let copy = PaywallView.copy(for: .demoLimitReached, price: "$1.99")
+        XCTAssertEqual(copy.title, "You've Reached the Free Demo Limit")
+        XCTAssertTrue(copy.body.hasPrefix("You've finished your free match."))
+        XCTAssertTrue(copy.body.contains("$1.99"))
+    }
+
+    func testAnOptionalUpgradeUsesNeutralCopy() {
+        let copy = PaywallView.copy(for: .optionalUpgrade, price: "$1.99")
+        XCTAssertEqual(copy.title, "Unlock Server Two Pro")
+        XCTAssertFalse(copy.body.contains("finished your free match"))
+        XCTAssertEqual(copy.body, "One-time purchase of $1.99 for unlimited matches, with no subscription. Works for your whole family with Family Sharing.")
+    }
+
+    func testTheCopyHasNoPriceUntilItIsLoaded() {
+        XCTAssertFalse(PaywallView.copy(for: .optionalUpgrade, price: nil).body.contains("$"))
+        XCTAssertFalse(PaywallView.copy(for: .demoLimitReached, price: nil).body.contains("$"))
     }
 }

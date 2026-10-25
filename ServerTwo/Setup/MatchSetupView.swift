@@ -397,7 +397,7 @@ struct MatchSetupView: View {
             if let newReason { VoiceOverAnnouncement.post(newReason) }
         }
         .sheet(isPresented: $isShowingPaywall) {
-            PaywallView()
+            PaywallView(reason: .demoLimitReached)
         }
         // The capture list makes `body` itself read `quickLogState`, so
         // SwiftUI re-evaluates `body` (and re-captures this closure)

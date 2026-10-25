@@ -583,7 +583,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
         XCTAssertFalse(controller.proUnlocked)
-        XCTAssertEqual(ActiveMatchController.Keys.proEntitlementCache, "proEntitlementCache")
+        XCTAssertFalse(defaults.bool(forKey: "proEntitlementCache"), "the mock flag must not be copied into the cache")
     }
 
     func testStoreManagerEntitlementResultsUpdateTheControllerBothWays() async throws {

@@ -121,13 +121,16 @@ struct SettingsView: View {
                 Button {
                     isShowingPaywall = true
                 } label: {
-                    HStack {
-                        Image(systemName: "lock.open.fill")
-                            .foregroundStyle(Color.accentColor)
-                        // Accent TEXT uses `accentText`, as everywhere else.
-                        Text("Unlock Server Two Pro")
-                            .foregroundStyle(Color.accentText)
-                        Spacer()
+                    // Stacks the price under the title at accessibility sizes.
+                    AdaptiveStack(rowAlignment: .firstTextBaseline, columnAlignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "lock.open.fill")
+                                .foregroundStyle(Color.accentColor)
+                            // Accent TEXT uses `accentText`, as everywhere else.
+                            Text("Unlock Server Two Pro")
+                                .foregroundStyle(Color.accentText)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         if let price = storeManager.displayPrice {
                             Text(price)
                                 .font(.subheadline)
@@ -159,12 +162,15 @@ struct SettingsView: View {
     }
 }
 
+// Debug only: the preview store is the debug fake, which Release builds do not contain.
+#if DEBUG
 #Preview {
     NavigationStack {
         SettingsView(onRematch: { _ in })
     }
     .environment(AppSettings())
     .environment(try! ActiveMatchController(modelContext: ModelContext(PersistenceContainer.makeInMemoryContainer())))
-    .environment(StoreManager(backend: StoreKitBackend()))
+    .environment(StoreManager.preview)
     .modelContainer(try! PersistenceContainer.makeInMemoryContainer())
 }
+#endif

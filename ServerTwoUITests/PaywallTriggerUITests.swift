@@ -64,6 +64,7 @@ final class PaywallTriggerUITests: XCTestCase {
 
         let unlockButton = app.buttons["Paywall.UnlockPro"]
         XCTAssertTrue(unlockButton.waitForExistence(timeout: 2), "Starting a second match should show the paywall once the free demo match is used up")
+        XCTAssertEqual(app.staticTexts["Paywall.Title"].label, "You've Reached the Free Demo Limit", "the gate says the free match is used up")
         XCTAssertFalse(app.buttons["Flip Coin"].exists, "The paywall should block the match from ever staging, so the coin-flip screen should never appear")
         XCTAssertFalse(app.buttons["scoreZone.teamA"].exists, "The paywall should block the match from actually starting")
 

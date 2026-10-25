@@ -138,7 +138,7 @@ enum AccessibilityAuditExceptions {
 
     private static let dynScoringReason = "reviewed, by design: score digits are scaled up to a 128 pt maximum and shrink to fit rather than wrap; the \"SERVER 2\" badge (\"SERVER 1\" / \"SERVING\" in other modes) is deliberately capped at accessibility1 so it does not truncate; \"Tap to Score\" and \"Tap for Side Out\" (\"Tap for 2nd Server\" with server 1) are caption2 hints that wrap to two lines at AX sizes; \"Cancel Match\" is system toolbar text. Looked at at AX4 with short names: nothing clipped (long names and AX5 are on the device-check list)"
 
-    private static let dynSettingsReason = "static dynamicType heuristic on the unchanged Haptics row (a standard Toggle whose label uses the default text style, so it does scale). It first appeared when the Server Two Pro section was added above it, although that row's code did not change; the same row already carries the textClipped heuristic entry below. Reviewed on one dark-mode screenshot at the default size only, not proven at larger sizes"
+    private static let dynSettingsReason = "static dynamicType heuristic on the Haptics row, whose code did not change; it first appeared once the Server Two Pro section was added above it. Looked at in a dark-mode simulator screenshot at AX4 (UICTContentSizeCategoryAccessibilityXXL): the Haptics label (and Voice Announcer, same kind of row) is rendered at the large size, wraps and is not clipped, so the text does scale. The Settings textClipped entry for \"(no element)\" / label:Haptics (shared with the same row) is in `clipped` above. Reviewed at that size only, on one screenshot; not proven at AX5"
 
     private static let dyn: [KnownFalsePositive] = [
         KnownFalsePositive(

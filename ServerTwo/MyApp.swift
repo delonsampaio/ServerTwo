@@ -85,7 +85,10 @@ struct MyApp: App {
     static func makeStoreBackend(arguments: [String] = ProcessInfo.processInfo.arguments) -> any StoreBackend {
         #if DEBUG
         if arguments.contains(where: { $0.hasPrefix("-UITest-") }) {
-            return FakeStoreBackend()
+            let scenario = arguments.firstIndex(of: "-UITest-StoreScenario")
+                .flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
+                .flatMap(FakeStoreBackend.Scenario.init(rawValue:))
+            return FakeStoreBackend(scenario: scenario ?? .normal)
         }
         #endif
         return StoreKitBackend()

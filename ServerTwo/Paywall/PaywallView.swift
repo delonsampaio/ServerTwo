@@ -3,6 +3,35 @@ import SwiftData
 import PickleballKit
 
 struct PaywallView: View {
+    /// Why the paywall is on screen. Only the gate may say the free match is
+    /// used up: Home's banner and Settings also open it for a user who has not
+    /// played anything yet.
+    enum Reason {
+        case demoLimitReached
+        case optionalUpgrade
+    }
+
+    var reason: Reason = .optionalUpgrade
+
+    /// Title and body for a reason; the price comes from the App Store product
+    /// (localized, can change), never from a literal. A pure function so the
+    /// wording is unit-tested.
+    static func copy(for reason: Reason, price: String?) -> (title: String, body: String) {
+        let purchase = price.map { "a one-time purchase of \($0)" } ?? "a one-time purchase"
+        switch reason {
+        case .demoLimitReached:
+            return (
+                "You've Reached the Free Demo Limit",
+                "You've finished your free match. Unlock Server Two Pro with \(purchase) for unlimited matches, with no subscription. Works for your whole family with Family Sharing."
+            )
+        case .optionalUpgrade:
+            return (
+                "Unlock Server Two Pro",
+                "\(price.map { "One-time purchase of \($0)" } ?? "One-time purchase") for unlimited matches, with no subscription. Works for your whole family with Family Sharing."
+            )
+        }
+    }
+
     @Environment(ActiveMatchController.self) private var activeMatchController
     @Environment(StoreManager.self) private var storeManager
     @Environment(\.dismiss) private var dismiss
@@ -16,10 +45,12 @@ struct PaywallView: View {
                     Image(systemName: "lock.fill")
                         .font(.system(size: lockIconSize))
                         .foregroundStyle(.tint)
-                    Text("You've Reached the Free Demo Limit")
+                    Text(copy.title)
                         .font(.title2.bold())
                         .multilineTextAlignment(.center)
-                    Text(bodyText)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("Paywall.Title")
+                    Text(copy.body)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Color.secondaryText)
 
@@ -46,14 +77,16 @@ struct PaywallView: View {
             if unlocked { dismiss() }
         }
         // A stale restore message from Settings must not greet a new paywall.
-        .onAppear { storeManager.clearRestoreResult() }
+        .onAppear {
+            storeManager.clearRestoreResult()
+            // A declined Ask to Buy sends no event, so an old "waiting" or error
+            // message would otherwise greet the next visit.
+            storeManager.resetPurchaseState()
+        }
     }
 
-    /// The price always comes from the App Store product (it is localized and
-    /// can change), never from a literal.
-    private var bodyText: String {
-        let purchase = storeManager.displayPrice.map { "a one-time purchase of \($0)" } ?? "a one-time purchase"
-        return "You've finished your free match. Unlock Server Two Pro with \(purchase) for unlimited matches, with no subscription. Works for your whole family with Family Sharing."
+    private var copy: (title: String, body: String) {
+        Self.copy(for: reason, price: storeManager.displayPrice)
     }
 
     @ViewBuilder
@@ -90,17 +123,23 @@ struct PaywallView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                // Not offered again while a purchase runs, or while an Ask to
-                // Buy request waits (a second tap would only create another).
-                .disabled(storeManager.purchaseState == .purchasing || storeManager.purchaseState == .pending)
+                // Only blocked while a purchase call is running. NOT while an Ask
+                // to Buy request waits: StoreKit sends nothing when a parent
+                // declines, so a disabled button would strand the user.
+                .disabled(storeManager.purchaseState == .purchasing)
                 .accessibilityIdentifier("Paywall.UnlockPro")
 
                 switch storeManager.purchaseState {
                 case .pending:
-                    Text("Waiting for approval…")
+                    Text("Waiting for approval… If the request was declined, you can try again.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Color.secondaryText)
                         .accessibilityIdentifier("Paywall.Pending")
+                case .completedNotYetUnlocked:
+                    Text("Purchase completed. If Pro does not unlock, tap Restore Purchases.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.secondaryText)
+                        .accessibilityIdentifier("Paywall.CompletedNotUnlocked")
                 case .failed(let message):
                     Text(message)
                         .multilineTextAlignment(.center)
@@ -144,14 +183,17 @@ struct RestoreResultText: View {
             Text(message)
                 .font(.footnote)
                 .foregroundStyle(Color.errorRed)
-        case .restored, nil:
+        case .restored, .cancelled, nil:
             EmptyView()
         }
     }
 }
 
+// Debug only: the preview store is the debug fake, which Release builds do not contain.
+#if DEBUG
 #Preview {
     PaywallView()
         .environment(try! ActiveMatchController(modelContext: ModelContext(PersistenceContainer.makeInMemoryContainer())))
-        .environment(StoreManager(backend: StoreKitBackend()))
+        .environment(StoreManager.preview)
 }
+#endif

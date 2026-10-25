@@ -13,7 +13,9 @@ sometimes with the phone left in a bag.
 
 Monetization: one-time $1.99 "Pro Unlock" (StoreKit 2 non-consumable). The
 free version is feature-complete but caps every game at 5 points so it can
-never be finished; purchasing removes the cap permanently. There is exactly
+never be finished; purchasing removes the cap permanently. *(Superseded, see
+"As built (Phase 4)" below: the free version plays one full match; there is no
+points cap.)* There is exactly
 one gate, enforced once, in the shared engine — not scattered across
 features — so it can't be bypassed via the standalone Watch app and so the
 test matrix stays small.
@@ -40,7 +42,7 @@ The App Group entitlement flag for Watch/Widget (section 3.5) is not built yet.
 
 ## 2. Feature Set
 
-### V1 (free demo = full feature set, capped at 5 pts/game; $1.99 removes the cap)
+### V1 (free demo = full feature set, one free completed match *(originally: capped at 5 pts/game, superseded)*; $1.99 removes the limit)
 
 **Engine / rules**
 - Doubles and singles
@@ -55,7 +57,7 @@ The App Group entitlement flag for Watch/Widget (section 3.5) is not built yet.
 - Custom team/player names
 - Full undo via a state-history stack
 - Manual score correction for disputes
-- Demo point-cap enforcement hook (`proUnlocked` + `demoPointCap`)
+- Demo point-cap enforcement hook (`proUnlocked` + `demoPointCap`) *(superseded: the app passes a nil cap; the gate is `canStartNewMatch`)*
 
 **Persistence**
 - SwiftData local store; CloudKit sync for **completed matches only**
@@ -73,7 +75,7 @@ The App Group entitlement flag for Watch/Widget (section 3.5) is not built yet.
 - Match history / stats browser
 - Shareable match-recap image card (`ImageRenderer`) for social sharing
 - Settings: voice announcer, haptics, theme
-- Paywall screen (triggered at the demo cap) + Restore Purchases
+- Paywall screen (triggered when starting a second match; also reachable from Home and Settings) + Restore Purchases
 
 **Watch app**
 - Fully standalone: own engine instance + local store, works without the
@@ -209,7 +211,7 @@ later phases depend on Phase 1 being correct.
 - **Integration tests (Phase 2):** SwiftData repository tests against an
   in-memory `ModelContainer` — no real CloudKit calls in CI.
 - **UI tests (Phase 3):** XCUITest for the golden path (start match → score
-  → finish → appears in history) and the paywall trigger at the demo cap.
+  → finish → appears in history) and the paywall trigger when starting a second match *(originally: at the demo cap)*.
 - **StoreKit tests (Phase 4):** local StoreKit Configuration file +
   `StoreKitTest` framework to automate purchase/restore without hitting
   sandbox servers.

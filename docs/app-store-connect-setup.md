@@ -1,5 +1,10 @@
 # App Store Connect setup for the Server Two Pro purchase
 
+> **Check every menu name below.** This guide was written from memory, without
+> access to App Store Connect, so button, menu and screen names may differ from
+> what you see. Treat the steps as the intent and verify them against the
+> current App Store Connect and Xcode documentation.
+
 The app code is finished: it sells one non-consumable in-app purchase with the
 product ID `com.delonsampaio.ServerTwo.pro`. Nothing sells until you create
 that product in App Store Connect. These steps need your Apple Developer
@@ -19,11 +24,12 @@ account, so they have to be done by the owner.
 3. **Reference Name:** `Server Two Pro` (internal only).
 4. **Product ID:** `com.delonsampaio.ServerTwo.pro`. It must match exactly and
    cannot be changed or reused later.
-5. **Price:** choose the tier closest to **$1.99 USD** (Price Schedule, then
+5. **Price:** choose the price point that shows **$1.99** (Price Schedule, then
    Add Pricing). Other storefronts get an equivalent price automatically; the
    app shows whatever the App Store returns.
-6. **Family Sharing:** tick **Turn on Family Sharing**. **This cannot be turned
-   off once the product is live**, so decide now. The app's copy already
+6. **Family Sharing:** tick **Turn on Family Sharing**. As far as I know this
+   **cannot be turned off once enabled**, so decide now (verify the exact rule
+   in App Store Connect). The app's copy already
    promises Family Sharing, and its entitlement logic handles shared and
    revoked copies.
 7. **App Store Localization:** add at least English (U.S.):
@@ -56,18 +62,24 @@ The first in-app purchase must be reviewed together with an app version.
 
 ## 5. Test on a device
 
-1. Install a build signed with your team (Run from Xcode, or TestFlight).
-2. On the iPhone: **Settings, App Store, Sandbox Account** (scroll to the bottom
-   of the App Store settings; it appears after a sandbox sign-in was triggered
-   or on iOS builds with Developer Mode on) and sign in with the Sandbox tester.
-   Do **not** sign in with it under the normal Apple Account.
-3. In the app: finish the one free match, start another (or tap Settings,
-   Unlock Server Two Pro), and buy. The purchase dialog says **[Environment:
-   Sandbox]**. No money is charged.
-4. Delete and reinstall the app, then tap **Restore Purchases** to check restore.
-5. Manage or clear sandbox purchases in **Settings, App Store, Sandbox Account,
-   Manage** (and in App Store Connect, Sandbox, Test Accounts, the tester's
-   purchase history).
+A new product can take **hours** to show up for sandbox purchases after it is
+created. If the paywall shows "Couldn't load the price" at first, wait and retry.
+
+**Builds run from Xcode (development builds):**
+
+1. On the iPhone: **Settings, App Store, Sandbox Account** (the entry appears
+   once the device has run a development build that used StoreKit) and sign in
+   with the Sandbox tester. Do **not** sign in with it under the normal Apple
+   Account.
+2. In the app: finish the one free match, start another (or tap Settings, Unlock
+   Server Two Pro), and buy. The purchase sheet says **[Environment: Sandbox]**.
+   No money is charged.
+3. Delete and reinstall the app, then tap **Restore Purchases** to check restore.
+4. Manage sandbox purchases in **Settings, App Store, Sandbox Account, Manage**
+   and in App Store Connect under the tester's account.
+
+**TestFlight builds:** these use the sandbox automatically. No Sandbox Account
+sign-in is needed; purchases are free and marked as test purchases.
 
 ## 6. Testing without App Store Connect (Xcode)
 
@@ -82,8 +94,9 @@ Transactions** window (Transaction Manager) lets you:
 
 - see every transaction, **Refund** a purchase (the app should lock again),
   delete transactions, and reset the purchase state;
-- **Approve / Decline** Ask to Buy requests (turn on Enable Ask to Buy in the
-  same window's toolbar);
+- **Approve / Decline** Ask to Buy requests (the Enable Ask to Buy switch is
+  somewhere in the Transaction Manager window or the Xcode Editor / Debug menu;
+  I am not sure where in your Xcode version);
 - simulate errors, such as a failed product load or a failed purchase.
 
 ## 7. After release

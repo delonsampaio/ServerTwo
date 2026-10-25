@@ -23,8 +23,13 @@ final class StoreManager {
     enum PurchaseState: Equatable {
         case idle
         case purchasing
-        /// Ask to Buy: waiting for approval, which arrives via the updates listener.
+        /// Ask to Buy: waiting for approval, which arrives via the updates
+        /// listener. StoreKit sends nothing when a parent DECLINES, so this
+        /// state never blocks another attempt.
         case pending
+        /// StoreKit said the purchase succeeded but the entitlement refresh does
+        /// not show it yet; the user is pointed at Restore Purchases.
+        case completedNotYetUnlocked
         case failed(String)
     }
 
@@ -32,6 +37,8 @@ final class StoreManager {
         case restored
         case nothingToRestore
         case failed(String)
+        /// The user dismissed the App Store sign-in: neutral, nothing to show.
+        case cancelled
     }
 
     private(set) var productState: ProductState = .loading
@@ -40,6 +47,14 @@ final class StoreManager {
     /// The latest restore outcome, shown inline by the paywall and Settings.
     private(set) var restoreResult: RestoreResult?
     private(set) var hasProEntitlement = false
+
+    /// Refreshes can overlap (updates listener, launch, purchase, restore). Each
+    /// takes a ticket before it awaits and its result is applied only if no
+    /// newer refresh has already applied one, so a slow older read can never
+    /// overwrite a newer result.
+    @ObservationIgnored private var lastIssuedRefreshTicket = 0
+    @ObservationIgnored private var lastAppliedRefreshTicket = 0
+    @ObservationIgnored private var hasStarted = false
 
     private let backend: any StoreBackend
     private let onEntitlementChange: @MainActor (Bool) -> Void
@@ -66,11 +81,16 @@ final class StoreManager {
         updatesTask?.cancel()
     }
 
-    /// Launch work: price for the paywall, and the entitlement that may have
-    /// changed while the app was closed.
+    /// Launch work: the entitlement that may have changed while the app was
+    /// closed, and the price for the paywall. Idempotent (a `.task` can run once
+    /// per window), and the two run concurrently so the paywall does not wait
+    /// for the entitlement read before it can show the price.
     func start() async {
-        await refreshEntitlements()
-        await loadProduct()
+        guard !hasStarted else { return }
+        hasStarted = true
+        async let entitlements: Void = refreshEntitlements()
+        async let product: Void = loadProduct()
+        _ = await (entitlements, product)
     }
 
     // MARK: Entitlement
@@ -84,7 +104,11 @@ final class StoreManager {
     }
 
     func refreshEntitlements() async {
+        lastIssuedRefreshTicket += 1
+        let ticket = lastIssuedRefreshTicket
         let entitlements = await backend.verifiedEntitlements()
+        guard ticket > lastAppliedRefreshTicket else { return }
+        lastAppliedRefreshTicket = ticket
         // Set unconditionally: an empty list means locked, so a stale `true`
         // (for example after a refund) is never kept.
         let entitled = Self.isProEntitled(from: entitlements)
@@ -120,6 +144,9 @@ final class StoreManager {
             case .purchased:
                 purchaseState = .idle
                 await refreshEntitlements()
+                // Keep the state honest if StoreKit's own entitlement list does
+                // not show the purchase yet (instead of silently doing nothing).
+                if !hasProEntitlement { purchaseState = .completedNotYetUnlocked }
             case .pending:
                 purchaseState = .pending
             case .cancelled:
@@ -133,10 +160,21 @@ final class StoreManager {
         }
     }
 
+    /// Clears a stale pending / failed message when the paywall appears (a
+    /// declined Ask to Buy never produces an event that would clear it).
+    func resetPurchaseState() {
+        switch purchaseState {
+        case .pending, .failed, .completedNotYetUnlocked: purchaseState = .idle
+        case .idle, .purchasing: break
+        }
+    }
+
     // MARK: Restore
 
+    /// Returns nil when a restore is already running (this call does nothing).
     @discardableResult
-    func restorePurchases() async -> RestoreResult {
+    func restorePurchases() async -> RestoreResult? {
+        guard !isRestoring else { return nil }
         isRestoring = true
         defer { isRestoring = false }
         restoreResult = nil
@@ -145,10 +183,13 @@ final class StoreManager {
             try await backend.syncWithAppStore()
             await refreshEntitlements()
             result = hasProEntitlement ? .restored : .nothingToRestore
+        } catch StoreKitError.userCancelled {
+            // Dismissing the App Store sign-in is a choice, not an error.
+            result = .cancelled
         } catch {
             result = .failed("Couldn't restore purchases. Check your connection and try again.")
         }
-        restoreResult = result
+        restoreResult = result == .cancelled ? nil : result
         return result
     }
 

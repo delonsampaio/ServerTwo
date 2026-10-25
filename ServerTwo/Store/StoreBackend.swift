@@ -23,9 +23,18 @@ enum BackendPurchaseResult: Equatable {
     case unverified
 }
 
-enum StoreBackendError: Error, Equatable {
+enum StoreBackendError: LocalizedError, Equatable {
     case productNotFound
     case unknownPurchaseResult
+
+    var errorDescription: String? {
+        switch self {
+        case .productNotFound:
+            "Server Two Pro isn't available from the App Store right now. Please try again later."
+        case .unknownPurchaseResult:
+            "The App Store returned an unexpected response. Please try again."
+        }
+    }
 }
 
 /// The thin StoreKit surface `StoreManager` talks to. It exists so UI tests
