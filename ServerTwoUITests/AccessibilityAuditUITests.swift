@@ -372,7 +372,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         let startMatchButton = app.buttons["Start Match"]
         scrollUntilVisible(startMatchButton, in: app)
         startMatchButton.tap()
-        let unlockButton = app.buttons["Unlock Pro — $1.99"]
+        let unlockButton = app.buttons["Paywall.UnlockPro"]
         XCTAssertTrue(
             unlockButton.waitForExistence(timeout: 3),
             "Starting a second match should present the paywall"

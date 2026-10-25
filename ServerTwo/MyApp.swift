@@ -10,6 +10,7 @@ struct MyApp: App {
     @State private var activeMatchController: ActiveMatchController
     @State private var appSettings: AppSettings
     @State private var voiceAnnouncer: VoiceAnnouncer
+    @State private var storeManager: StoreManager
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -20,7 +21,14 @@ struct MyApp: App {
             fatalError("Failed to create persistent container: \(error)")
         }
         self.modelContainer = container
-        _activeMatchController = State(initialValue: ActiveMatchController(modelContext: ModelContext(container)))
+        let controller = ActiveMatchController(modelContext: ModelContext(container))
+        _activeMatchController = State(initialValue: controller)
+        // StoreManager is the source of truth for Pro; the controller (which
+        // has no StoreKit import) just receives each refreshed result.
+        _storeManager = State(initialValue: StoreManager(
+            backend: MyApp.makeStoreBackend(),
+            onEntitlementChange: { controller.proUnlocked = $0 }
+        ))
         let settings = AppSettings()
         _appSettings = State(initialValue: settings)
         _voiceAnnouncer = State(initialValue: VoiceAnnouncer(
@@ -35,6 +43,7 @@ struct MyApp: App {
                 .environment(activeMatchController)
                 .environment(appSettings)
                 .environment(voiceAnnouncer)
+                .environment(storeManager)
                 .onChange(of: appSettings.voiceAnnouncerEnabled) { _, enabled in
                     if !enabled { voiceAnnouncer.stop() }
                 }
@@ -53,6 +62,7 @@ struct MyApp: App {
                 }
                 .task {
                     applyTestOverridesIfNeeded()
+                    await storeManager.start()
                 }
         }
     }
@@ -66,6 +76,19 @@ struct MyApp: App {
         }
         #endif
         return SystemSpeechOutput.live()
+    }
+
+    /// UI tests must never reach the App Store: any `-UITest-` launch argument
+    /// (Debug builds only) swaps StoreKit for a fake with an instant price
+    /// whose purchase unlocks Pro. Real StoreKit paths are covered by
+    /// `SKTestSession` unit tests.
+    static func makeStoreBackend(arguments: [String] = ProcessInfo.processInfo.arguments) -> any StoreBackend {
+        #if DEBUG
+        if arguments.contains(where: { $0.hasPrefix("-UITest-") }) {
+            return FakeStoreBackend()
+        }
+        #endif
+        return StoreKitBackend()
     }
 
     /// Test-only seam: lets XCUITests force a clean slate, a locked

@@ -154,7 +154,7 @@ final class QuickLogUITests: XCTestCase {
         scrollUntilVisible(quickLogButton2, in: app)
         quickLogButton2.tap()
 
-        XCTAssertTrue(app.buttons["Unlock Pro — $1.99"].waitForExistence(timeout: 2), "Quick Log should hit the same demo-limit paywall Start Match does")
+        XCTAssertTrue(app.buttons["Paywall.UnlockPro"].waitForExistence(timeout: 2), "Quick Log should hit the same demo-limit paywall Start Match does")
         XCTAssertFalse(app.textFields["QuickLog.Game1.TeamAScore"].exists, "the paywall should block the sheet from ever opening")
     }
 }

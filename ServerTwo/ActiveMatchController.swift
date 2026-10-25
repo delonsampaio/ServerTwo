@@ -43,7 +43,10 @@ private enum MatchLifecycleState {
 final class ActiveMatchController {
     /// Not `private` only so the tests can assert on what is stored and cleared.
     enum Keys {
-        static let proUnlocked = "mockProUnlocked"
+        /// Last known Pro entitlement, a seed for the first frame only (see
+        /// `proUnlocked`). Not a purchase record: the old mock flag
+        /// (`mockProUnlocked`) is deliberately not migrated into it.
+        static let proEntitlementCache = "proEntitlementCache"
         static let activeTeamAName = "activeMatchTeamAName"
         static let activeTeamBName = "activeMatchTeamBName"
         /// `[String]` of `UUID.uuidString`, written next to the names so a
@@ -115,8 +118,13 @@ final class ActiveMatchController {
     private let repository: MatchRepository
     private let userDefaults: UserDefaults
 
+    /// Whether Pro is unlocked. `StoreManager` is the source of truth and pushes
+    /// every refreshed entitlement in here; the value persisted below only
+    /// seeds the first frame so a paying user never sees a locked flash while
+    /// StoreKit is read at launch. Losing Pro mid-match (a refund) never
+    /// interrupts the live match: this only gates starting the next one.
     var proUnlocked: Bool {
-        didSet { userDefaults.set(proUnlocked, forKey: Keys.proUnlocked) }
+        didSet { userDefaults.set(proUnlocked, forKey: Keys.proEntitlementCache) }
     }
 
     /// How many full matches a free user may complete before `canStartNewMatch`
@@ -189,7 +197,7 @@ final class ActiveMatchController {
     init(modelContext: ModelContext, userDefaults: UserDefaults = .standard) {
         self.repository = MatchRepository(modelContext: modelContext)
         self.userDefaults = userDefaults
-        self.proUnlocked = userDefaults.bool(forKey: Keys.proUnlocked)
+        self.proUnlocked = userDefaults.bool(forKey: Keys.proEntitlementCache)
         resumeIfNeeded()
     }
 
@@ -364,12 +372,6 @@ final class ActiveMatchController {
         let started = match.requestTimeout(for: team)
         if started { persistSnapshot() }
         return started
-    }
-
-    func unlockPro() {
-        proUnlocked = true
-        match?.unlockPro()
-        persistSnapshot()
     }
 
     @discardableResult

@@ -1,0 +1,33 @@
+{
+  "identifier" : "8F1C2A64",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : true,
+      "internalID" : "6746210001",
+      "localizations" : [
+        {
+          "description" : "Unlimited matches with a one-time purchase. No subscription.",
+          "displayName" : "Server Two Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.delonsampaio.ServerTwo.pro",
+      "referenceName" : "Server Two Pro",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

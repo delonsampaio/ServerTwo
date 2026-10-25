@@ -446,7 +446,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         try quickLogOneMatch(controller)
         XCTAssertFalse(controller.canStartNewMatch)
 
-        controller.unlockPro()
+        controller.proUnlocked = true
         XCTAssertTrue(controller.canStartNewMatch)
     }
 
@@ -493,7 +493,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertTrue(controller.canStartNewMatch)
     }
 
-    func testUnlockProLiftsTheDemoMatchLimitAndPersistsAcrossRelaunch() throws {
+    func testAnEntitledProUserLiftsTheDemoMatchLimitAndTheCacheSurvivesRelaunch() throws {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
@@ -505,8 +505,7 @@ final class ActiveMatchControllerTests: XCTestCase {
         _ = try controller.finishMatch()
         XCTAssertFalse(controller.canStartNewMatch)
 
-        controller.unlockPro()
-        XCTAssertTrue(controller.proUnlocked)
+        controller.proUnlocked = true
         XCTAssertTrue(controller.canStartNewMatch, "Unlocking Pro should lift the demo match limit immediately")
 
         // A fresh controller against the same store/defaults (a relaunch)
@@ -570,10 +569,49 @@ final class ActiveMatchControllerTests: XCTestCase {
         let container = try PersistenceContainer.makeInMemoryContainer()
         let defaults = UserDefaults(suiteName: suite)!
         let first = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        first.unlockPro()
+        first.proUnlocked = true
 
         let second = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
-        XCTAssertTrue(second.proUnlocked)
+        XCTAssertTrue(second.proUnlocked, "the cached entitlement seeds the first frame")
+        XCTAssertTrue(defaults.bool(forKey: "proEntitlementCache"))
+    }
+
+    func testTheOldMockUnlockFlagIsNotMigratedIntoTheEntitlementCache() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        // A mock was never a purchase, so a leftover mock unlock must not grant Pro.
+        defaults.set(true, forKey: "mockProUnlocked")
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        XCTAssertFalse(controller.proUnlocked)
+        XCTAssertEqual(ActiveMatchController.Keys.proEntitlementCache, "proEntitlementCache")
+    }
+
+    func testStoreManagerEntitlementResultsUpdateTheControllerBothWays() async throws {
+        let (controller, _) = try makeController()
+        let backend = FakeStoreBackend()
+        let store = StoreManager(backend: backend, onEntitlementChange: { controller.proUnlocked = $0 })
+
+        await store.purchase()
+        XCTAssertTrue(controller.proUnlocked)
+
+        // A refund: the next refresh returns no entitlement and must re-lock
+        // instead of keeping the stale `true`.
+        backend.ownsPro = false
+        await store.refreshEntitlements()
+        XCTAssertFalse(controller.proUnlocked)
+    }
+
+    func testLosingProMidMatchNeverInterruptsTheLiveMatch() throws {
+        let (controller, _) = try makeController()
+        controller.proUnlocked = true
+        start(controller, teamAName: "A", teamBName: "B")
+        controller.recordPoint(for: .teamA)
+
+        controller.proUnlocked = false
+        controller.recordPoint(for: .teamA)
+
+        XCTAssertNotNil(controller.match, "revocation only gates starting the NEXT match")
+        XCTAssertEqual(controller.match?.currentGame.state.teamAScore, 2)
     }
 
     func testGameCompletionDatesStaysCorrectlySizedAcrossUndoAndReplay() throws {

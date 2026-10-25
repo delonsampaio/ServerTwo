@@ -62,16 +62,18 @@ final class PaywallTriggerUITests: XCTestCase {
         scrollUntilVisible(startMatchButton2, in: app)
         startMatchButton2.tap()
 
-        let unlockButton = app.buttons["Unlock Pro — $1.99"]
+        let unlockButton = app.buttons["Paywall.UnlockPro"]
         XCTAssertTrue(unlockButton.waitForExistence(timeout: 2), "Starting a second match should show the paywall once the free demo match is used up")
         XCTAssertFalse(app.buttons["Flip Coin"].exists, "The paywall should block the match from ever staging, so the coin-flip screen should never appear")
         XCTAssertFalse(app.buttons["scoreZone.teamA"].exists, "The paywall should block the match from actually starting")
 
         unlockButton.tap()
 
-        // Unlocking dismisses the paywall sheet but doesn't auto-start the
-        // match — tapping "Start Match" again should now succeed and reach
-        // the coin-flip screen.
+        // Unlocking (the fake store grants it at once) dismisses the paywall
+        // sheet but doesn't auto-start the match — tapping "Start Match" again
+        // should now succeed and reach the coin-flip screen. The paywall closes
+        // when Pro turns on rather than inside the tap, so wait for it.
+        XCTAssertTrue(unlockButton.waitForNonExistence(timeout: 5), "The paywall should dismiss itself once Pro is unlocked")
         scrollUntilVisible(startMatchButton2, in: app)
         startMatchButton2.tap()
         let flipCoinButton2 = app.buttons["Flip Coin"]
@@ -107,6 +109,6 @@ final class PaywallTriggerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["scoreZone.teamA"].exists)
         XCTAssertTrue(startMatchButton2.exists)
         startMatchButton2.tap()
-        XCTAssertTrue(app.buttons["Unlock Pro — $1.99"].waitForExistence(timeout: 2), "The paywall should reappear on a retry")
+        XCTAssertTrue(app.buttons["Paywall.UnlockPro"].waitForExistence(timeout: 2), "The paywall should reappear on a retry")
     }
 }
