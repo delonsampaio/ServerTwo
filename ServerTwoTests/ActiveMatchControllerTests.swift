@@ -155,6 +155,78 @@ final class ActiveMatchControllerTests: XCTestCase {
         XCTAssertEqual(resumed.teamBName, "Net Ninjas")
     }
 
+    /// iOS can kill the app between games. The relaunched controller used to
+    /// restore the names but not who the players were, so finishing the
+    /// resumed match saved it with no linked saved players and silently
+    /// dropped it from W/L, streaks, chemistry and filters.
+    func testResumedMatchStillLinksTheSavedPlayersWhenFinished() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let repository = MatchRepository(modelContext: ModelContext(container))
+        let alice = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Alice"))
+        let bob = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Bob"))
+        let carol = try XCTUnwrap(try repository.upsertSavedPlayer(name: "Carol"))
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+
+        let first = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        start(first, teamAName: "Alice & Bob", teamBName: "Carol", teamAPlayers: [alice, bob], teamBPlayers: [carol])
+        first.recordPoint(for: .teamA)
+
+        // A fresh controller over the same store and defaults is a relaunch.
+        let resumed = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        XCTAssertNotNil(resumed.match)
+        for _ in 1...10 { resumed.recordPoint(for: .teamA) }
+        let record = try resumed.finishMatch()
+
+        let teamA = try XCTUnwrap(record.teamSides?.first { $0.team == .teamA })
+        let teamB = try XCTUnwrap(record.teamSides?.first { $0.team == .teamB })
+        XCTAssertEqual(Set(teamA.players?.map(\.id) ?? []), [alice.id, bob.id])
+        XCTAssertEqual(teamB.players?.map(\.id), [carol.id])
+    }
+
+    func testFinishAndCancelClearTheStoredPlayerIDs() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let alice = try XCTUnwrap(try MatchRepository(modelContext: ModelContext(container)).upsertSavedPlayer(name: "Alice"))
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let controller = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        typealias Keys = ActiveMatchController.Keys
+
+        start(controller, teamAName: "Alice", teamBName: "B", teamAPlayers: [alice])
+        XCTAssertEqual(defaults.stringArray(forKey: Keys.activeTeamAPlayerIDs), [alice.id.uuidString])
+        XCTAssertEqual(defaults.stringArray(forKey: Keys.activeTeamBPlayerIDs), [String]())
+        controller.cancelActiveMatch()
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamAPlayerIDs))
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamBPlayerIDs))
+
+        start(controller, teamAName: "Alice", teamBName: "B", teamAPlayers: [alice])
+        for _ in 1...11 { controller.recordPoint(for: .teamA) }
+        _ = try controller.finishMatch()
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamAPlayerIDs))
+        XCTAssertNil(defaults.object(forKey: Keys.activeTeamBPlayerIDs))
+    }
+
+    func testResumeToleratesADeletedPlayerAndAnInvalidStoredID() throws {
+        let container = try PersistenceContainer.makeInMemoryContainer()
+        let viewRepository = MatchRepository(modelContext: ModelContext(container))
+        let alice = try XCTUnwrap(try viewRepository.upsertSavedPlayer(name: "Alice"))
+        let bob = try XCTUnwrap(try viewRepository.upsertSavedPlayer(name: "Bob"))
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+
+        let first = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        start(first, teamAName: "Alice", teamBName: "Bob", teamAPlayers: [alice], teamBPlayers: [bob])
+        // Alice is deleted after the match began; a corrupt entry is stored too.
+        try viewRepository.deleteSavedPlayer(alice)
+        defaults.set(["not-a-uuid", alice.id.uuidString], forKey: ActiveMatchController.Keys.activeTeamAPlayerIDs)
+
+        let resumed = ActiveMatchController(modelContext: ModelContext(container), userDefaults: defaults)
+        for _ in 1...11 { resumed.recordPoint(for: .teamA) }
+        let record = try resumed.finishMatch()
+
+        let teamA = try XCTUnwrap(record.teamSides?.first { $0.team == .teamA })
+        let teamB = try XCTUnwrap(record.teamSides?.first { $0.team == .teamB })
+        XCTAssertEqual(teamA.players?.count ?? 0, 0)
+        XCTAssertEqual(teamB.players?.map(\.id), [bob.id])
+    }
+
     /// A staged-but-not-yet-flipped match is never persisted — only an
     /// active match's snapshot is. Accepted trade-off: a crash/relaunch
     /// during the coin-flip screen loses that staged setup, same as it

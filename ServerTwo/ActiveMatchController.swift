@@ -41,10 +41,15 @@ private enum MatchLifecycleState {
 @MainActor
 @Observable
 final class ActiveMatchController {
-    private enum Keys {
+    /// Not `private` only so the tests can assert on what is stored and cleared.
+    enum Keys {
         static let proUnlocked = "mockProUnlocked"
         static let activeTeamAName = "activeMatchTeamAName"
         static let activeTeamBName = "activeMatchTeamBName"
+        /// `[String]` of `UUID.uuidString`, written next to the names so a
+        /// resumed match can still be attributed to its saved players.
+        static let activeTeamAPlayerIDs = "activeMatchTeamAPlayerIDs"
+        static let activeTeamBPlayerIDs = "activeMatchTeamBPlayerIDs"
     }
 
     private var lifecycleState: MatchLifecycleState = .idle
@@ -131,18 +136,32 @@ final class ActiveMatchController {
         // A crash/relaunch during the coin-flip screen (staged, not yet
         // active) loses that staged setup — only an active match's snapshot
         // is ever persisted, same accepted trade-off as this feature's
-        // design. Player attribution is similarly not recoverable across a
-        // resume — matches `teamAPlayerIDs`/`teamBPlayerIDs`' pre-existing
-        // crash-resume limitation.
+        // design. The players ARE recovered (ids stored next to the names),
+        // otherwise a match resumed after iOS killed the app between games
+        // would be saved with no linked players and vanish from W/L, streaks,
+        // chemistry and filters.
         lifecycleState = .active(ActiveMatchInfo(
             match: resumed.match,
             startedAt: resumed.startedAt,
             teamAName: userDefaults.string(forKey: Keys.activeTeamAName) ?? "Team A",
             teamBName: userDefaults.string(forKey: Keys.activeTeamBName) ?? "Team B",
-            teamAPlayerIDs: [],
-            teamBPlayerIDs: []
+            teamAPlayerIDs: storedPlayerIDs(forKey: Keys.activeTeamAPlayerIDs),
+            teamBPlayerIDs: storedPlayerIDs(forKey: Keys.activeTeamBPlayerIDs)
         ))
         gameCompletionDates = Array(repeating: nil, count: resumed.match.completedGames.count)
+    }
+
+    /// Invalid strings are ignored. A player deleted since the match began is
+    /// fine: `fetchSavedPlayers(ids:)` skips ids it cannot find.
+    private func storedPlayerIDs(forKey key: String) -> [UUID] {
+        (userDefaults.stringArray(forKey: key) ?? []).compactMap(UUID.init(uuidString:))
+    }
+
+    private func clearStoredActiveMatchDetails() {
+        userDefaults.removeObject(forKey: Keys.activeTeamAName)
+        userDefaults.removeObject(forKey: Keys.activeTeamBName)
+        userDefaults.removeObject(forKey: Keys.activeTeamAPlayerIDs)
+        userDefaults.removeObject(forKey: Keys.activeTeamBPlayerIDs)
     }
 
     /// Captures everything Setup decided except who serves first —
@@ -169,6 +188,8 @@ final class ActiveMatchController {
         guard case .staged(let setup) = lifecycleState else { return }
         userDefaults.set(setup.resolvedTeamAName, forKey: Keys.activeTeamAName)
         userDefaults.set(setup.resolvedTeamBName, forKey: Keys.activeTeamBName)
+        userDefaults.set(setup.teamAPlayerIDs.map(\.uuidString), forKey: Keys.activeTeamAPlayerIDs)
+        userDefaults.set(setup.teamBPlayerIDs.map(\.uuidString), forKey: Keys.activeTeamBPlayerIDs)
 
         let match = PickleballMatch(
             configuration: setup.configuration,
@@ -238,8 +259,7 @@ final class ActiveMatchController {
             gameCompletionDates: gameCompletionDates
         )
         lifecycleState = .idle
-        userDefaults.removeObject(forKey: Keys.activeTeamAName)
-        userDefaults.removeObject(forKey: Keys.activeTeamBName)
+        clearStoredActiveMatchDetails()
         return record
     }
 
@@ -262,8 +282,7 @@ final class ActiveMatchController {
         )
         lifecycleState = .idle
         gameCompletionDates = []
-        userDefaults.removeObject(forKey: Keys.activeTeamAName)
-        userDefaults.removeObject(forKey: Keys.activeTeamBName)
+        clearStoredActiveMatchDetails()
         try? repository.clearInProgressSnapshot()
     }
 
@@ -273,6 +292,7 @@ final class ActiveMatchController {
     /// session left behind.
     func clearAnyInProgressMatchForTesting() {
         lifecycleState = .idle
+        clearStoredActiveMatchDetails()
         try? repository.clearInProgressSnapshot()
     }
 
