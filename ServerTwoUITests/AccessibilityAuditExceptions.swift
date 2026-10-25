@@ -11,18 +11,16 @@
 // fails, and so does an extra unattributed one.
 //
 // Each cap is the largest count actually observed for its (screen, audit
-// type, wording) in all recorded runs (strict runs 2 to 19 and the full-suite
-// runs). Only the two avatar screens (HomeWithMatchAndMe, ManagePlayersWithRows)
-// get +1 on their contrast entries, because the per-run avatar colour moves
-// rows between "failed" and "nearly passed". `AccessibilityAuditUITests` prints
-// the unused capacity of every audited screen (`A11Y-AUDIT-UNUSED|...`) so a
-// stale entry shows up in the log.
+// type, wording). `AccessibilityAuditUITests` prints the unused capacity of
+// every audited screen (`A11Y-AUDIT-UNUSED|...`) so a stale entry shows up in
+// the log.
 //
 // Two kinds of entries: (a) heuristic rows that were reviewed (looked at with
 // short fixture names at AX4; not proven, see each reason) or are system
-// behaviour, and (b) contrast items whose reason starts
-// "design decision pending": they need a new or darker colour that has not
-// been chosen yet. Nothing here is a whole-category or whole-screen wildcard.
+// behaviour, and (b) the contrast items that remain after the colours were
+// made accessible natively (named colours in `Assets.xcassets`, see
+// `AppColors.swift`): each says what it is and what was measured. Nothing here
+// is a whole-category or whole-screen wildcard.
 
 /// One audit issue that is understood and accepted.
 struct KnownFalsePositive {
@@ -37,8 +35,7 @@ struct KnownFalsePositive {
     let descriptionContains: String
     /// How many times this issue may be reported in one audit of the screen.
     let maxOccurrences: Int
-    /// Why this issue is accepted (or, for contrast items, "design decision
-    /// pending: ...").
+    /// Why this issue is accepted, and what was measured.
     let reason: String
 
     init(
@@ -65,14 +62,12 @@ enum AccessibilityAuditExceptions {
         behindsheet +
         hitArea +
         dyn +
-        c_accent +
-        c_mixed +
-        c_secondary +
-        c_howto +
-        c_homeme +
-        c_avatar +
-        c_sequence +
-        c_sheets
+        c_toolbar +
+        c_glass +
+        c_bordered +
+        c_pill +
+        c_tabbar +
+        c_players
 
     // MARK: Text clipped (static heuristic, reviewed with short names at AX4)
 
@@ -133,8 +128,6 @@ enum AccessibilityAuditExceptions {
 
     private static let dynHistoryReason = "reviewed: the History stats card number (\"1\") and its \"Matches\" caption; they scale visibly at AX4 in the History screenshot and nothing is clipped (looked at once in simulator screenshots with short fixture names (Alice, Bob, Team A, Team B) at the default size and at AX4 only; long names and AX5 are on the device-check list)"
 
-    private static let dynPlayersReason = "reviewed: Manage Players row text. After the Manage Players title fix, Alice, the \"Me\" badge and a long name (\"Bartholomew Featherstonehaugh\") were looked at at AX4: they scale and wrap, nothing is truncated (the long name breaks mid-word across 5 lines at AX4 because the row is narrow; wrapping is not truncation, judged acceptable, listed for the device checks)"
-
     private static let dynMatchDetailReason = "reviewed: score digits are scaled with a deliberate maximum of 52 pt so two digits never wrap (capped by design, so the audit sees them as only partly scaling), plus the system toolbar \"Rematch\" text which has no API to scale it; looked at at AX4 with short names: intact"
 
     private static let dynOnboardingReason = "reviewed: \"Done\" is the system toolbar button text, which has no API to scale it further; looked at at AX4: intact"
@@ -147,10 +140,6 @@ enum AccessibilityAuditExceptions {
         KnownFalsePositive(
             screen: "History", auditType: "dynamicType", elements: ["label:1", "label:Matches"],
             descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 2, reason: dynHistoryReason
-        ),
-        KnownFalsePositive(
-            screen: "ManagePlayersWithRows", auditType: "dynamicType", elements: ["Me.Alice", "PlayerRow.Alice", "PlayerRow.Bob"],
-            descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 3, reason: dynPlayersReason
         ),
         KnownFalsePositive(
             screen: "MatchDetail", auditType: "dynamicType", elements: ["Rematch", "label:0", "label:11"],
@@ -175,184 +164,133 @@ enum AccessibilityAuditExceptions {
         ),
     ]
 
-    // MARK: design decision pending: accent blue and system toolbar buttons
+    // MARK: Contrast: what the new colours do not clear in the audit
 
-    private static let c_accentReason = "design decision pending: accent blue #007AFF as text or white on accent 4.02:1 (needs 4.5:1) on buttons, badges and system toolbar buttons (Done, Not Now, Cancel Match, Cancel Coin Flip; no styling hook); unattributed rows are the accent-filled controls and red/orange tints of that screen"
+    private static let c_toolbarReason = "system toolbar button on Liquid Glass (no API to style the glass). The label is tinted with the text-tuned `accentText` (dark #85BEFF) or `errorRed` (dark #FF7A72); measured on a simulator screenshot against the rendered glass (#202020) the text is 7.2:1 (accent text) and 6.4:1 (Cancel Match), well over 4.5:1, yet the audit rates it failed: it cannot read the glass background. Not proven beyond that one dark-mode screenshot"
 
-    private static let c_accent: [KnownFalsePositive] = [
-        KnownFalsePositive(
-            screen: "CancelMatchPrompt", auditType: "contrast", elements: ["(no element)", "Confirm Cancel Match", "Prompt.KeepPlaying"],
-            descriptionContains: "Contrast failed", maxOccurrences: 2, reason: c_accentReason
-        ),
-        KnownFalsePositive(
-            screen: "CancelMatchPrompt@AXXL", auditType: "contrast", elements: ["(no element)", "Confirm Cancel Match"],
-            descriptionContains: "Contrast failed", reason: c_accentReason
-        ),
+    private static let c_toolbar: [KnownFalsePositive] = [
         KnownFalsePositive(
             screen: "CoinFlip", auditType: "contrast", elements: ["(no element)", "Cancel Coin Flip"],
-            descriptionContains: "Contrast failed", reason: c_accentReason
+            descriptionContains: "Contrast failed", reason: c_toolbarReason
         ),
         KnownFalsePositive(
-            screen: "Home", auditType: "contrast", elements: ["label:New Match"],
-            descriptionContains: "Contrast failed", reason: c_accentReason
+            screen: "MatchDetail", auditType: "contrast", elements: ["Rematch"],
+            descriptionContains: "Contrast failed", reason: c_toolbarReason
         ),
         KnownFalsePositive(
-            screen: "HomeWithMatch", auditType: "contrast", elements: ["Rematch", "label:New Match"],
-            descriptionContains: "Contrast failed", maxOccurrences: 2, reason: c_accentReason
-        ),
-        KnownFalsePositive(
-            screen: "MatchSetup", auditType: "contrast", elements: ["Start Match"],
-            descriptionContains: "Contrast failed", reason: c_accentReason
-        ),
-        KnownFalsePositive(
-            screen: "Onboarding", auditType: "contrast", elements: ["Done", "Get Started"],
-            descriptionContains: "Contrast failed", maxOccurrences: 2, reason: c_accentReason
+            screen: "Onboarding", auditType: "contrast", elements: ["Done"],
+            descriptionContains: "Contrast failed", reason: c_toolbarReason
         ),
         KnownFalsePositive(
             screen: "Paywall", auditType: "contrast", elements: ["(no element)", "Not Now"],
-            descriptionContains: "Contrast failed", reason: c_accentReason
+            descriptionContains: "Contrast failed", reason: c_toolbarReason
         ),
         KnownFalsePositive(
-            screen: "Scoring", auditType: "contrast", elements: ["Cancel Match", "label:SERVER 2", "label:Timeout (2)"],
-            descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_accentReason
+            screen: "Scoring", auditType: "contrast", elements: ["Cancel Match"],
+            descriptionContains: "Contrast failed", reason: c_toolbarReason
         ),
         KnownFalsePositive(
-            screen: "ScoringWithPartnerPositions", auditType: "contrast", elements: ["Cancel Match", "label:SERVER 2", "label:Timeout (2)"],
-            descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_accentReason
+            screen: "ScoringWithPartnerPositions", auditType: "contrast", elements: ["Cancel Match"],
+            descriptionContains: "Contrast failed", reason: c_toolbarReason
         ),
         KnownFalsePositive(
-            screen: "Scoring@AXXL", auditType: "contrast", elements: ["Cancel Match", "label:SERVER 2", "label:Timeout (2)"],
-            descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_accentReason
-        ),
-    ]
-
-    // MARK: design decision pending: accent blue and secondary captions
-
-    private static let c_mixedReason = "design decision pending: accent blue 4.02:1 (Flip Coin, Unlock buttons, pills) and `.secondary` captions roughly 3.4 to 4.4:1 (needs 4.5:1)"
-
-    private static let c_mixed: [KnownFalsePositive] = [
-        KnownFalsePositive(
-            screen: "CoinFlip", auditType: "contrast", elements: ["(no element)", "FirstServeResult", "Flip Coin", "Team A Won Spin", "Team B Won Spin"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 4, reason: c_mixedReason
-        ),
-        KnownFalsePositive(
-            screen: "HomeWithMatch", auditType: "contrast", elements: ["label:Unlock Server Two Pro — $1.99"],
-            descriptionContains: "Contrast nearly passed", reason: c_mixedReason
-        ),
-        KnownFalsePositive(
-            screen: "Paywall", auditType: "contrast", elements: ["(no element)", "Unlock Pro — $1.99", "label:Restore Purchases", "label:The free version lets you play 1 full match, start to finish. Unlock Server Two Pro for a one-time $1.99 to play unlimited matches, forever."],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 3, reason: c_mixedReason
+            screen: "Scoring@AXXL", auditType: "contrast", elements: ["Cancel Match"],
+            descriptionContains: "Contrast failed", reason: c_toolbarReason
         ),
     ]
 
-    // MARK: design decision pending: secondary captions
+    // MARK: Contrast: glass buttons in sheets
 
-    private static let c_secondaryReason = "design decision pending: `.secondary` / `.tertiary` caption text on grouped or material backgrounds, roughly 3.4 to 4.4:1 (needs 4.5:1); passing means `.primary` everywhere, a visible hierarchy change"
+    private static let c_glassReason = "Liquid Glass button inside a sheet: white label on the accent (dark #2D6BF9, white 4.58:1; measured 4.58:1 on the Flip Coin button of a dark screenshot, the same fill) or `errorRed` text on red-tinted glass. The same accent passes on Home's glass New Match button; the sheet material behind the glass is what the audit rates here. The rendered sheet button was not measured. A darker accent (#2563EB) was tried and the audit rated these worse"
 
-    private static let c_secondary: [KnownFalsePositive] = [
+    private static let c_glass: [KnownFalsePositive] = [
         KnownFalsePositive(
-            screen: "History", auditType: "contrast", elements: ["(no element)", "label:Matches", "label:<date>"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 3, reason: c_secondaryReason
+            screen: "CancelMatchPrompt", auditType: "contrast", elements: ["(no element)", "Prompt.KeepPlaying"],
+            descriptionContains: "Contrast nearly passed", reason: c_glassReason
         ),
         KnownFalsePositive(
-            screen: "Home", auditType: "contrast", elements: ["label:Play your first match to see it here."],
-            descriptionContains: "Contrast nearly passed", reason: c_secondaryReason
+            screen: "CancelMatchPrompt", auditType: "contrast", elements: ["(no element)", "Confirm Cancel Match"],
+            descriptionContains: "Contrast failed", reason: c_glassReason
         ),
         KnownFalsePositive(
-            screen: "MatchSetup", auditType: "contrast", elements: ["(no element)", "Log Final Score Instead", "label:Match Rules", "label:Mode", "label:Swap Partners", "label:Swap Teams", "label:Team A", "label:Team B"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 7, reason: c_secondaryReason
+            screen: "CancelMatchPrompt@AXXL", auditType: "contrast", elements: ["(no element)", "Confirm Cancel Match"],
+            descriptionContains: "Contrast failed", reason: c_glassReason
         ),
         KnownFalsePositive(
-            screen: "Onboarding", auditType: "contrast", elements: ["label:Doubles side-out games show which partner is on the left or right. Hold a score card to swap them if you started the other way round.", "label:Score singles and doubles matches point by point. Server Two keeps track of who's serving, which side everyone's on, and your stats over time.", "label:See your record with every partner and against every rival.", "label:Set this once so your personal win/loss record starts tracking automatically.", "label:Tap a card to score a point, or press and hold to fix a disputed score."],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 5, reason: c_secondaryReason
-        ),
-        KnownFalsePositive(
-            screen: "ScoringWithPartnerPositions", auditType: "contrast", elements: ["label:Tap for Side Out", "label:Tap to Score"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 2, reason: c_secondaryReason
-        ),
-        KnownFalsePositive(
-            screen: "Scoring", auditType: "contrast", elements: ["label:Tap for Side Out", "label:Tap to Score"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 2, reason: c_secondaryReason
-        ),
-        KnownFalsePositive(
-            screen: "Settings", auditType: "contrast", elements: ["(no element)", "label:1.0", "label:Appearance", "label:Audio & Haptics", "label:Help", "label:Players"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 5, reason: c_secondaryReason
+            screen: "Onboarding", auditType: "contrast", elements: ["Get Started"],
+            descriptionContains: "Contrast nearly passed", reason: c_glassReason
         ),
     ]
 
-    // MARK: design decision pending: How to Play text
+    // MARK: Contrast: bordered "Won Spin" buttons
 
-    private static let c_howtoReason = "design decision pending: How to Play body and heading text is `.secondary` on the grouped background, roughly 3.4 to 4.4:1 (the audit rates it failed or nearly passed)"
+    private static let c_borderedReason = "bordered button, `.primary` label on a blue wash (`accentText` tint): measured on a dark screenshot the label is white (#F7F7F8) on #273544, 11.7:1, yet the audit rates it failed (it appears to compare the label with the tint colour, not with the wash it is drawn on)"
 
-    private static let c_howto: [KnownFalsePositive] = [
+    private static let c_bordered: [KnownFalsePositive] = [
         KnownFalsePositive(
-            screen: "HowToPlay", auditType: "contrast", elements: ["label:A serve that clips the net but still lands in the correct box is live play, not a replay — that changed in 2021.", "label:After the serve, the receiving side must let the ball bounce before returning it — and the serving side must let that return bounce too. Only after both of those bounces can either side start volleying (hitting the ball out of the air). This is what stops a team from serving and immediately rushing the net to end the point.", "label:All lines are in — including the serve's sideline, centerline, and baseline. The one exception is the kitchen line, which is out on a serve.", "label:The Two-Bounce Rule"],
-            descriptionContains: "Contrast failed", maxOccurrences: 4, reason: c_howtoReason
-        ),
-        KnownFalsePositive(
-            screen: "HowToPlay", auditType: "contrast", elements: ["label:A quick reference for pickleball's core rules — serving, scoring, and the two rules that trip up most beginners."],
-            descriptionContains: "Contrast nearly passed", reason: c_howtoReason
+            screen: "CoinFlip", auditType: "contrast", elements: ["Team A Won Spin", "Team B Won Spin"],
+            descriptionContains: "Contrast failed", maxOccurrences: 2, reason: c_borderedReason
         ),
     ]
 
-    // MARK: design decision pending: Home with a Me player
+    // MARK: Contrast: Rematch pill on the Home Last Match card
 
-    private static let c_homemeReason = "design decision pending: accent blue 4.02:1 (New Match, Rematch, Unlock banner), white on green #34C759 2.22:1 and green or red text on a 20% tint (W badge, recent form, win streak), avatar palette (per-run colour, see below); wording and count vary per run"
+    private static let c_pillReason = "accent text on the grey pill fill (`PillButtonStyle`): measured on a dark screenshot `accentText` #85BEFF on the pill fill #3B3B3E is 5.74:1 (4.94:1 with the earlier #6CB0FF, also rated failed); the same pill style passes on Manage Players rows, only this one on the Last Match card is rated failed"
 
-    private static let c_homeme: [KnownFalsePositive] = [
+    private static let c_pill: [KnownFalsePositive] = [
         KnownFalsePositive(
-            screen: "HomeWithMatchAndMe", auditType: "contrast", elements: ["(no element)", "PhotoPicker.Alice", "PhotoPicker.Bob", "Rematch", "label:A", "label:B", "label:New Match", "label:W"],
-            descriptionContains: "Contrast failed", maxOccurrences: 6, reason: c_homemeReason
+            screen: "HomeWithMatch", auditType: "contrast", elements: ["Rematch"],
+            descriptionContains: "Contrast failed", reason: c_pillReason
         ),
         KnownFalsePositive(
-            screen: "HomeWithMatchAndMe", auditType: "contrast", elements: ["(no element)", "PhotoPicker.Alice", "PhotoPicker.Bob", "label:A", "label:B", "label:Unlock Server Two Pro — $1.99"],
-            descriptionContains: "Contrast nearly passed", maxOccurrences: 4, reason: c_homemeReason
-        ),
-    ]
-
-    // MARK: design decision pending: avatar palette, Me badge and pills
-
-    private static let c_avatarReason = "design decision pending: avatar initials are white on a per-player palette colour (teal 2.57, orange 2.20, mint 2.12, brown 3.50, pink 3.65, blue 4.02, purple 4.13:1), the Me badge is accent text on a light accent tint and the Rename / Set as Me pills are accent on grey; the colour differs per run, so wording and count vary"
-
-    private static let c_avatar: [KnownFalsePositive] = [
-        KnownFalsePositive(
-            screen: "ManagePlayersWithRows", auditType: "contrast", elements: ["(no element)", "Me.Alice", "PhotoPicker.Alice", "PhotoPicker.Bob", "label:A", "label:B"],
-            descriptionContains: "Contrast failed", maxOccurrences: 2, reason: c_avatarReason
-        ),
-        KnownFalsePositive(
-            screen: "ManagePlayersWithRows", auditType: "contrast", elements: ["(no element)", "PhotoPicker.Alice", "PhotoPicker.Bob", "label:A", "label:B"],
-            descriptionContains: "Contrast nearly passed", reason: c_avatarReason
+            screen: "HomeWithMatchAndMe", auditType: "contrast", elements: ["Rematch"],
+            descriptionContains: "Contrast failed", reason: c_pillReason
         ),
     ]
 
-    // MARK: design decision pending: Match Detail sequence numbers and loser digit
+    // MARK: Contrast: rows under the translucent tab bar, and unexplained text rows
 
-    private static let c_sequenceReason = "design decision pending: point sequence numbers are `.tertiary` captions on thin material (passing needs `.primary`, which flattens the row hierarchy), the losing team digit is `.secondary` by design, and the toolbar Rematch button is accent blue 4.02:1 (system toolbar)"
+    private static let c_tabbarReason = "reviewed, not proven: the row sits half behind the translucent tab bar in the audited (unscrolled) view; the audit reads the blurred bar as the background. Match Detail's \"11\" and \"11-0\" are the 11th point row; \"1\" was not identified, it may be a part of the same row"
 
-    private static let c_sequence: [KnownFalsePositive] = [
+    private static let c_howtoReason = "unexplained: these two secondary paragraphs are fully visible (not behind the tab bar) in the audited view, and measured on a dark screenshot `secondaryText` #AEAEB4 on the thin-material card (#1F1F1F) is 7.47:1 (the card's `.primary` text, 15.25:1, passes), yet the audit rates them failed. Not understood; kept so the screen is still audited"
+
+    private static let c_tabbar: [KnownFalsePositive] = [
         KnownFalsePositive(
-            screen: "MatchDetail", auditType: "contrast", elements: ["Rematch", "label:0", "label:1", "label:10", "label:11", "label:2", "label:3", "label:4", "label:5", "label:6", "label:7", "label:8", "label:9"],
-            descriptionContains: "Contrast failed", maxOccurrences: 13, reason: c_sequenceReason
-        ),
-        KnownFalsePositive(
-            screen: "MatchDetail", auditType: "contrast", elements: ["label:Team A scored", "label:11-0"],
+            screen: "HowToPlay", auditType: "contrast",
+            elements: [
+                "label:After the serve, the receiving side must let the ball bounce before returning it — and the serving side must let that return bounce too. Only after both of those bounces can either side start volleying (hitting the ball out of the air). This is what stops a team from serving and immediately rushing the net to end the point.",
+                "label:The Two-Bounce Rule",
+            ],
             descriptionContains: "Contrast failed", maxOccurrences: 2,
-            reason: "reviewed: the Edit Players button made the result card about 25 pt taller, so the 11th point row of the audit's 11-point fixture now sits half behind the translucent tab bar; the audit reads the blurred bar as the background. Not a colour problem (the same text passes in the other rows)"
+            reason: "reviewed, not proven: the card (heading and first paragraph) sits half behind the translucent tab bar in the audited (unscrolled) view and the audit reads the blurred bar as the background; both are `.primary` text"
+        ),
+        KnownFalsePositive(
+            screen: "HowToPlay", auditType: "contrast",
+            elements: [
+                "label:A serve that clips the net but still lands in the correct box is live play, not a replay — that changed in 2021.",
+                "label:All lines are in — including the serve's sideline, centerline, and baseline. The one exception is the kitchen line, which is out on a serve.",
+            ],
+            descriptionContains: "Contrast failed", maxOccurrences: 2, reason: c_howtoReason
+        ),
+        KnownFalsePositive(
+            screen: "MatchDetail", auditType: "contrast", elements: ["label:1", "label:11", "label:11-0"],
+            descriptionContains: "Contrast failed", maxOccurrences: 3, reason: c_tabbarReason
         ),
     ]
 
-    // MARK: design decision pending: Game Over and Finish Match sheets at AX4
+    // MARK: Contrast: Manage Players row
 
-    private static let c_sheetsReason = "design decision pending: `.secondary` text on the sheet card (team name captions, losing score digit, \"Teams switch sides\", \"First serve\", \"Next game starts\" lines) fails at accessibility size 4, and the primary button is accent blue 4.02:1; the audit attributes these rows to an element in some runs and not in others"
+    private static let c_playersReason = "reported on the Alice row text in some runs and not in others (the avatar colour is random per run). Measured on a dark screenshot: initials white on the avatar fill 5.5 to 6.9:1, Me badge 6.75:1, Rename / Set as Me pills 5.09:1. Which element it is was not identified"
 
-    private static let c_sheets: [KnownFalsePositive] = [
+    private static let c_players: [KnownFalsePositive] = [
         KnownFalsePositive(
-            screen: "FinishMatchSheet@AXXL", auditType: "contrast", elements: ["(no element)", "label:0", "label:Team A", "label:Team B"],
-            descriptionContains: "Contrast failed", maxOccurrences: 3, reason: c_sheetsReason
+            screen: "ManagePlayersWithRows", auditType: "contrast", elements: ["PlayerRow.Alice"],
+            descriptionContains: "Contrast failed", reason: c_playersReason
         ),
         KnownFalsePositive(
-            screen: "GameOverSheet@AXXL", auditType: "contrast", elements: ["(no element)", "label:0", "label:First serve: Team A.", "label:First serve: Team B.", "label:Next game starts at 0-0.", "label:Team A", "label:Team B", "label:Teams switch sides."],
-            descriptionContains: "Contrast failed", maxOccurrences: 6, reason: c_sheetsReason
+            screen: "ManagePlayersWithRows", auditType: "elementDetection", elements: ["(no element)"],
+            descriptionContains: "Potentially inaccessible text", maxOccurrences: 2,
+            reason: "the white initials (\"A\", \"B\") inside the two avatar buttons. The button is labelled \"Change photo for <name>\" and the initial is decorative, but the darker palette made the initials legible enough for the audit's text recognition, which now finds them (they were not detected at 2.1 to 4:1). Making the initial a separate accessibility element would make VoiceOver read a stray letter"
         ),
     ]
 }
