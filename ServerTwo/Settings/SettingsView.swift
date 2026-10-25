@@ -7,11 +7,16 @@ struct SettingsView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var appSettings
+    @Environment(ActiveMatchController.self) private var activeMatchController
+    @Environment(StoreManager.self) private var storeManager
     @State private var mePlayer: SavedPlayer?
+    @State private var isShowingPaywall = false
 
     var body: some View {
         @Bindable var appSettings = appSettings
         Form {
+            proSection
+
             // Its own section at the top — a core roster/identity feature,
             // not documentation, so it doesn't belong grouped under "Help"
             // alongside a tutorial. Showing the active "Me" player here
@@ -88,6 +93,64 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .task { loadMePlayer() }
+        .onAppear { storeManager.clearRestoreResult() }
+        .sheet(isPresented: $isShowingPaywall) {
+            PaywallView()
+        }
+    }
+
+    /// Always visible, so the purchase (and a restore on a new device) can be
+    /// reached without first running into the paywall.
+    @ViewBuilder
+    private var proSection: some View {
+        if activeMatchController.proUnlocked {
+            Section(header: Text("Server Two Pro").foregroundStyle(Color.secondaryText)) {
+                Label {
+                    Text("Server Two Pro: Unlocked")
+                } icon: {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(Color.accentColor)
+                }
+                .accessibilityIdentifier("Settings.ProUnlocked")
+            }
+        } else {
+            Section(
+                header: Text("Server Two Pro").foregroundStyle(Color.secondaryText),
+                footer: RestoreResultText(result: storeManager.restoreResult)
+            ) {
+                Button {
+                    isShowingPaywall = true
+                } label: {
+                    HStack {
+                        Image(systemName: "lock.open.fill")
+                            .foregroundStyle(Color.accentColor)
+                        // Accent TEXT uses `accentText`, as everywhere else.
+                        Text("Unlock Server Two Pro")
+                            .foregroundStyle(Color.accentText)
+                        Spacer()
+                        if let price = storeManager.displayPrice {
+                            Text(price)
+                                .font(.subheadline)
+                                .foregroundStyle(Color.secondaryText)
+                        }
+                    }
+                }
+                .accessibilityIdentifier("Settings.UnlockPro")
+
+                Button {
+                    Task { await storeManager.restorePurchases() }
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundStyle(Color.accentColor)
+                        Text("Restore Purchases")
+                            .foregroundStyle(Color.accentText)
+                    }
+                }
+                .disabled(storeManager.isRestoring)
+                .accessibilityIdentifier("Settings.Restore")
+            }
+        }
     }
 
     private func loadMePlayer() {
@@ -101,5 +164,7 @@ struct SettingsView: View {
         SettingsView(onRematch: { _ in })
     }
     .environment(AppSettings())
+    .environment(try! ActiveMatchController(modelContext: ModelContext(PersistenceContainer.makeInMemoryContainer())))
+    .environment(StoreManager(backend: StoreKitBackend()))
     .modelContainer(try! PersistenceContainer.makeInMemoryContainer())
 }

@@ -12,6 +12,7 @@ import PickleballKit
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(ActiveMatchController.self) private var activeMatchController
+    @Environment(StoreManager.self) private var storeManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     // Today's fixed sizes at the default text size; they scale with Dynamic Type.
     @ScaledMetric(relativeTo: .caption2) private var resultBadgeSize: CGFloat = 22
@@ -63,6 +64,11 @@ struct HomeView: View {
                             .foregroundStyle(Color.secondaryText)
                             .multilineTextAlignment(.center)
                             .padding(.top, 60)
+                        // A fresh install can reach the purchase in one tap,
+                        // before the first match exists.
+                        if !activeMatchController.proUnlocked {
+                            proUpsellBanner
+                        }
                     }
                 }
                 .padding()
@@ -374,7 +380,7 @@ struct HomeView: View {
         } label: {
             HStack {
                 Image(systemName: "lock.fill")
-                Text("Unlock Server Two Pro — $1.99")
+                Text(storeManager.displayPrice.map { "Unlock Server Two Pro — \($0)" } ?? "Unlock Server Two Pro")
                     .font(.headline)
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -406,5 +412,6 @@ struct HomeView: View {
         HomeView(onNewMatch: {}, onRematch: { _ in }, onQuickStart: { _ in })
     }
     .environment(try! ActiveMatchController(modelContext: ModelContext(PersistenceContainer.makeInMemoryContainer())))
+    .environment(StoreManager(backend: StoreKitBackend()))
     .modelContainer(try! PersistenceContainer.makeInMemoryContainer())
 }

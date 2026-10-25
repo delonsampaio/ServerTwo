@@ -138,7 +138,13 @@ enum AccessibilityAuditExceptions {
 
     private static let dynScoringReason = "reviewed, by design: score digits are scaled up to a 128 pt maximum and shrink to fit rather than wrap; the \"SERVER 2\" badge (\"SERVER 1\" / \"SERVING\" in other modes) is deliberately capped at accessibility1 so it does not truncate; \"Tap to Score\" and \"Tap for Side Out\" (\"Tap for 2nd Server\" with server 1) are caption2 hints that wrap to two lines at AX sizes; \"Cancel Match\" is system toolbar text. Looked at at AX4 with short names: nothing clipped (long names and AX5 are on the device-check list)"
 
+    private static let dynSettingsReason = "static dynamicType heuristic on the unchanged Haptics row (a standard Toggle whose label uses the default text style, so it does scale). It first appeared when the Server Two Pro section was added above it, although that row's code did not change; the same row already carries the textClipped heuristic entry below. Reviewed on one dark-mode screenshot at the default size only, not proven at larger sizes"
+
     private static let dyn: [KnownFalsePositive] = [
+        KnownFalsePositive(
+            screen: "Settings", auditType: "dynamicType", elements: ["label:Haptics"],
+            descriptionContains: "Dynamic Type font sizes are partially unsupported", reason: dynSettingsReason
+        ),
         KnownFalsePositive(
             screen: "History", auditType: "dynamicType", elements: ["label:1", "label:Matches"],
             descriptionContains: "Dynamic Type font sizes are partially unsupported", maxOccurrences: 2, reason: dynHistoryReason
