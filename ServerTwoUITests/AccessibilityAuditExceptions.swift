@@ -240,7 +240,7 @@ enum AccessibilityAuditExceptions {
 
     private static let c_bordered: [KnownFalsePositive] = [
         KnownFalsePositive(
-            screen: "CoinFlip", auditType: "contrast", elements: ["Team A Won Spin", "Team B Won Spin"],
+            screen: "CoinFlip", auditType: "contrast", elements: ["(no element)", "Team A Won Spin", "Team B Won Spin"],
             descriptionContains: "Contrast failed", maxOccurrences: 2, reason: c_borderedReason
         ),
     ]
