@@ -115,9 +115,11 @@ struct SettingsView: View {
     }
 
     /// Always present, so the purchase (and a restore on a new device) can be
-    /// reached without first running into the paywall, and a paying user always
-    /// keeps a restore path. Where it sits (top while locked, bottom once
-    /// unlocked) is decided by the caller.
+    /// reached without first running into the paywall. Once unlocked it is only
+    /// a status: there is nothing to restore, and if an entitlement is ever
+    /// revoked the app flips to locked and the Unlock + Restore rows come back
+    /// on top. Where it sits (top while locked, bottom once unlocked) is
+    /// decided by the caller.
     @ViewBuilder
     private var proSection: some View {
         Section(
@@ -154,20 +156,20 @@ struct SettingsView: View {
                     }
                 }
                 .accessibilityIdentifier("Settings.UnlockPro")
-            }
 
-            Button {
-                Task { await storeManager.restorePurchases() }
-            } label: {
-                HStack {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundStyle(Color.accentColor)
-                    Text("Restore Purchases")
-                        .foregroundStyle(Color.accentText)
+                Button {
+                    Task { await storeManager.restorePurchases() }
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundStyle(Color.accentColor)
+                        Text("Restore Purchases")
+                            .foregroundStyle(Color.accentText)
+                    }
                 }
+                .disabled(storeManager.isRestoring)
+                .accessibilityIdentifier("Settings.Restore")
             }
-            .disabled(storeManager.isRestoring)
-            .accessibilityIdentifier("Settings.Restore")
         }
     }
 

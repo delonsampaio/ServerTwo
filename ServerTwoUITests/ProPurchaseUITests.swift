@@ -49,7 +49,7 @@ final class ProPurchaseUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Server Two Pro: Unlocked"].exists)
     }
 
-    func testUnlockedUserKeepsARestorePathAtTheBottomOfSettings() throws {
+    func testUnlockedSettingsShowsOnlyTheStatusAtTheBottomWithNoRestoreRow() throws {
         let app = launch()
         app.tabBars.buttons["Settings"].tap()
         app.buttons["Settings.UnlockPro"].tap()
@@ -58,20 +58,12 @@ final class ProPurchaseUITests: XCTestCase {
         unlockButton.tap()
         XCTAssertTrue(unlockButton.waitForNonExistence(timeout: 5))
 
-        let restoreRow = app.buttons["Settings.Restore"]
-        scrollUntilVisible(restoreRow, in: app)
-        // The row exists as soon as it is lazily rendered, which can still be
-        // under the floating tab bar; scroll the rest of the way before tapping.
-        app.swipeUp()
-        XCTAssertTrue(restoreRow.isEnabled)
-        restoreRow.tap()
-        // Restoring an owned purchase succeeds silently (a success shows no
-        // message), so the observable outcome is: no "nothing found" error,
-        // the row is usable again once the restore ends, and Pro stays unlocked.
-        let enabledAgain = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: restoreRow)
-        XCTAssertEqual(XCTWaiter().wait(for: [enabledAgain], timeout: 3), .completed)
-        XCTAssertFalse(app.staticTexts[Self.nothingToRestore].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["Settings.ProUnlocked"].exists)
+        // Nothing to restore once unlocked; Unlock and Restore only return
+        // (on top) if the entitlement is ever revoked.
+        XCTAssertFalse(app.buttons["Settings.UnlockPro"].exists)
+        XCTAssertFalse(app.buttons["Settings.Restore"].exists)
+        scrollUntilVisible(app.descendants(matching: .any)["Settings.ProUnlocked"], in: app)
+        XCTAssertFalse(app.buttons["Settings.Restore"].exists, "the bottom section is only the status row")
     }
 
     func testRestoreWithNothingToRestoreShowsAMessageInSettingsAndOnThePaywall() throws {
