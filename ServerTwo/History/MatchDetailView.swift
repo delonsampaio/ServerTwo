@@ -103,14 +103,7 @@ struct MatchDetailView: View {
         guard let configuration = try? JSONDecoder().decode(GameConfiguration.self, from: match.configurationData) else {
             return nil
         }
-        let mode = configuration.playMode == .singles ? "Singles" : "Doubles"
-        let bestOf = "Best of \(match.matchFormat.rawValue)"
-        switch configuration.scoringFormat {
-        case .sideOut:
-            return "\(mode) • \(bestOf)"
-        case .rally:
-            return "\(mode) • \(bestOf) • Rally"
-        }
+        return configuration.summaryText(matchFormat: match.matchFormat)
     }
 
     private var matchMetadataText: String? {

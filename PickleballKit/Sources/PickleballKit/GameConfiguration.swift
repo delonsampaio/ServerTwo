@@ -27,6 +27,20 @@ public struct GameConfiguration: Codable, Sendable, Equatable {
         case timeoutsPerTeam
     }
 
+    /// "Doubles • Best of 3" / "Singles • Best of 1 • Rally": the one-line rules
+    /// summary shown on Match Detail and on the Live Activity. A pure function
+    /// here so both callers format it identically.
+    public func summaryText(matchFormat: MatchFormat) -> String {
+        let mode = playMode == .singles ? "Singles" : "Doubles"
+        let bestOf = "Best of \(matchFormat.rawValue)"
+        switch scoringFormat {
+        case .sideOut:
+            return "\(mode) • \(bestOf)"
+        case .rally:
+            return "\(mode) • \(bestOf) • Rally"
+        }
+    }
+
     /// Whether `teamA`/`teamB` represents a legal *completed* game's final
     /// score under this configuration's win condition — not merely "the
     /// win-by-2/winning-score thresholds are currently satisfied" (which

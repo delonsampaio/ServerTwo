@@ -117,6 +117,10 @@ final class ActiveMatchController {
 
     private let repository: MatchRepository
     private let userDefaults: UserDefaults
+    /// Mirrors the live match onto the Lock Screen / Dynamic Island. A `let`
+    /// (never observed by SwiftUI) and fire-and-forget: it can never fail or
+    /// delay scoring. The default is a no-op host; `MyApp` injects the real one.
+    private let liveActivity: LiveActivityController
 
     /// Whether Pro is unlocked. `StoreManager` is the source of truth and pushes
     /// every refreshed entitlement in here; the value persisted below only
@@ -194,16 +198,26 @@ final class ActiveMatchController {
         return record
     }
 
-    init(modelContext: ModelContext, userDefaults: UserDefaults = .standard) {
+    init(
+        modelContext: ModelContext,
+        userDefaults: UserDefaults = .standard,
+        liveActivity: LiveActivityController = LiveActivityController(host: NoOpLiveActivityHost())
+    ) {
         self.repository = MatchRepository(modelContext: modelContext)
         self.userDefaults = userDefaults
+        self.liveActivity = liveActivity
         self.proUnlocked = userDefaults.bool(forKey: Keys.proEntitlementCache)
         resumeIfNeeded()
     }
 
     func resumeIfNeeded() {
         guard case .idle = lifecycleState else { return }
-        guard let resumed = try? repository.loadInProgressMatch(proUnlocked: proUnlocked, demoPointCap: nil) else { return }
+        guard let resumed = try? repository.loadInProgressMatch(proUnlocked: proUnlocked, demoPointCap: nil) else {
+            // No match to resume: any Live Activity still showing is a stray
+            // from a force quit between finishing a match and ending it.
+            liveActivity.endAll()
+            return
+        }
         // A crash/relaunch during the coin-flip screen (staged, not yet
         // active) loses that staged setup — only an active match's snapshot
         // is ever persisted, same accepted trade-off as this feature's
@@ -211,16 +225,18 @@ final class ActiveMatchController {
         // otherwise a match resumed after iOS killed the app between games
         // would be saved with no linked players and vanish from W/L, streaks,
         // chemistry and filters.
-        lifecycleState = .active(ActiveMatchInfo(
+        let info = ActiveMatchInfo(
             match: resumed.match,
             startedAt: resumed.startedAt,
             teamAName: userDefaults.string(forKey: Keys.activeTeamAName) ?? "Team A",
             teamBName: userDefaults.string(forKey: Keys.activeTeamBName) ?? "Team B",
             teamAPlayerIDs: storedPlayerIDs(forKey: Keys.activeTeamAPlayerIDs),
             teamBPlayerIDs: storedPlayerIDs(forKey: Keys.activeTeamBPlayerIDs)
-        ))
+        )
+        lifecycleState = .active(info)
         gameCompletionDates = Array(repeating: nil, count: resumed.match.completedGames.count)
         restoreStartingSideOverrides()
+        liveActivity.resume(attributes: liveActivityAttributes(for: info), state: .init(match: info.match))
     }
 
     /// Invalid strings are ignored. A player deleted since the match began is
@@ -336,34 +352,39 @@ final class ActiveMatchController {
             proUnlocked: proUnlocked,
             demoPointCap: nil
         )
-        lifecycleState = .active(ActiveMatchInfo(
+        let info = ActiveMatchInfo(
             match: match,
             startedAt: Date(),
             teamAName: setup.resolvedTeamAName,
             teamBName: setup.resolvedTeamBName,
             teamAPlayerIDs: setup.teamAPlayerIDs,
             teamBPlayerIDs: setup.teamBPlayerIDs
-        ))
+        )
+        lifecycleState = .active(info)
         gameCompletionDates = []
         persistSnapshot()
+        liveActivity.begin(attributes: liveActivityAttributes(for: info), state: .init(match: match))
     }
 
     func recordPoint(for team: Team) {
         match?.recordPoint(for: team)
         syncGameCompletionDates()
         persistSnapshot()
+        pushLiveActivityUpdate()
     }
 
     func undo() {
         match?.undo()
         syncGameCompletionDates()
         persistSnapshot()
+        pushLiveActivityUpdate()
     }
 
     func correctScores(teamA: Int, teamB: Int) {
         match?.correctScores(teamA: teamA, teamB: teamB)
         syncGameCompletionDates()
         persistSnapshot()
+        pushLiveActivityUpdate()
     }
 
     @discardableResult
@@ -392,6 +413,13 @@ final class ActiveMatchController {
             gameCompletionDates: gameCompletionDates
         )
         recordCompletedMatchSaved(historyCountBeforeSave: historyCountBeforeSave)
+        // Only after the save succeeded (it throws for a match that is not over,
+        // so this is always a finished match): the final score lingers briefly,
+        // since the system default would keep it on the Lock Screen for hours.
+        liveActivity.end(
+            finalState: .init(match: info.match),
+            dismissal: .afterDelay(LiveActivityController.finishedDismissalDelay)
+        )
         lifecycleState = .idle
         clearStoredActiveMatchDetails()
         return record
@@ -418,6 +446,7 @@ final class ActiveMatchController {
         gameCompletionDates = []
         clearStoredActiveMatchDetails()
         try? repository.clearInProgressSnapshot()
+        liveActivity.end(finalState: nil, dismissal: .immediate)
     }
 
     /// Test-only: discards any live/resumed match or staged-but-unflipped
@@ -426,6 +455,7 @@ final class ActiveMatchController {
     /// session left behind.
     func clearAnyInProgressMatchForTesting() {
         lifecycleState = .idle
+        liveActivity.end(finalState: nil, dismissal: .immediate)
         clearStoredActiveMatchDetails()
         try? repository.clearInProgressSnapshot()
     }
@@ -457,6 +487,17 @@ final class ActiveMatchController {
         } else if gameCompletionDates.count < count {
             gameCompletionDates.append(contentsOf: Array(repeating: Date(), count: count - gameCompletionDates.count))
         }
+    }
+
+    private func liveActivityAttributes(for info: ActiveMatchInfo) -> PickleballActivityAttributes {
+        PickleballActivityAttributes(match: info.match, teamAName: info.teamAName, teamBName: info.teamBName)
+    }
+
+    /// Same trigger points as `persistSnapshot()`; the Live Activity controller
+    /// skips the push when nothing it shows changed (e.g. a timeout).
+    private func pushLiveActivityUpdate() {
+        guard case .active(let info) = lifecycleState else { return }
+        liveActivity.update(.init(match: info.match))
     }
 
     private func persistSnapshot() {

@@ -7,6 +7,7 @@ struct MyApp: App {
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     private let modelContainer: ModelContainer
+    private let liveActivity: LiveActivityController
     @State private var activeMatchController: ActiveMatchController
     @State private var appSettings: AppSettings
     @State private var voiceAnnouncer: VoiceAnnouncer
@@ -21,7 +22,9 @@ struct MyApp: App {
             fatalError("Failed to create persistent container: \(error)")
         }
         self.modelContainer = container
-        let controller = ActiveMatchController(modelContext: ModelContext(container))
+        let liveActivity = LiveActivityController(host: MyApp.makeLiveActivityHost())
+        self.liveActivity = liveActivity
+        let controller = ActiveMatchController(modelContext: ModelContext(container), liveActivity: liveActivity)
         _activeMatchController = State(initialValue: controller)
         // StoreManager is the source of truth for Pro; the controller (which
         // has no StoreKit import) just receives each refreshed result.
@@ -49,6 +52,7 @@ struct MyApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active { voiceAnnouncer.stop() }
+                    if phase == .active { liveActivity.retryIfNeeded() }
                 }
                 .modelContainer(modelContainer)
                 .preferredColorScheme(appSettings.theme.colorScheme)
@@ -62,6 +66,7 @@ struct MyApp: App {
                 }
                 .task {
                     applyTestOverridesIfNeeded()
+                    startDemoLiveActivityIfRequested()
                     await storeManager.start()
                 }
         }
@@ -76,6 +81,32 @@ struct MyApp: App {
         }
         #endif
         return SystemSpeechOutput.live()
+    }
+
+    /// UI tests must never touch ActivityKit: any `-UITest-` launch argument
+    /// (Debug builds only) swaps the real Live Activity host for a no-op.
+    static func makeLiveActivityHost(arguments: [String] = ProcessInfo.processInfo.arguments) -> any LiveActivityHosting {
+        #if DEBUG
+        if arguments.contains(where: { $0.hasPrefix("-UITest-") }) {
+            return NoOpLiveActivityHost()
+        }
+        #endif
+        #if canImport(ActivityKit)
+        return ActivityKitLiveActivityHost()
+        #else
+        // visionOS (also listed in this target's platforms) has no ActivityKit.
+        return NoOpLiveActivityHost()
+        #endif
+    }
+
+    /// Debug-only: `-Debug-DemoLiveActivity` shows a sample Live Activity
+    /// without playing a match, to check the Lock Screen / Dynamic Island
+    /// layouts. Compiled out of Release builds.
+    private func startDemoLiveActivityIfRequested() {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-Debug-DemoLiveActivity") else { return }
+        liveActivity.begin(attributes: .debugDemo, state: .debugDemoMidGame)
+        #endif
     }
 
     /// UI tests must never reach the App Store: any `-UITest-` launch argument
