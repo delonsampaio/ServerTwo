@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		15A00000000000000000000D /* ServerTwoLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 15A000000000000000000001 /* ServerTwoLiveActivity.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3EB3FC499D0DB78AB6D3BA17 /* PickleballKit in Frameworks */ = {isa = PBXBuildFile; productRef = 969E0BF3056A04B055A486A9 /* PickleballKit */; };
 		E89E98593F8A445170DC27C8 /* PickleballKit in Frameworks */ = {isa = PBXBuildFile; productRef = A6DB44C3210F757D3BF85B00 /* PickleballKit */; };
 /* End PBXBuildFile section */
@@ -26,13 +27,43 @@
 			remoteGlobalIDString = 000000000000000100000000;
 			remoteInfo = ServerTwo;
 		};
+		15A00000000000000000000F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 15A000000000000000000004;
+			remoteInfo = ServerTwoLiveActivity;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		15A00000000000000000000C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				15A00000000000000000000D /* ServerTwoLiveActivity.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* ServerTwo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ServerTwo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		14039D42307739FF007414B8 /* ServerTwoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ServerTwoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		14039D4F30773A61007414B8 /* ServerTwoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ServerTwoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		15A000000000000000000001 /* ServerTwoLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ServerTwoLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		15A00000000000000000000B /* Exceptions for "ServerTwoLiveActivity" folder in "ServerTwoLiveActivity" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 15A000000000000000000004 /* ServerTwoLiveActivity */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* ServerTwo */ = {
@@ -48,6 +79,19 @@
 		14039D5030773A61007414B8 /* ServerTwoUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = ServerTwoUITests;
+			sourceTree = "<group>";
+		};
+		15A000000000000000000002 /* ServerTwoLiveActivity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				15A00000000000000000000B /* Exceptions for "ServerTwoLiveActivity" folder in "ServerTwoLiveActivity" target */,
+			);
+			path = ServerTwoLiveActivity;
+			sourceTree = "<group>";
+		};
+		15A000000000000000000003 /* ServerTwoLiveActivityShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ServerTwoLiveActivityShared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -70,6 +114,11 @@
 			files = (
 			);
 		};
+		15A000000000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -79,6 +128,8 @@
 				000000000000000000000010 /* ServerTwo */,
 				14039D43307739FF007414B8 /* ServerTwoTests */,
 				14039D5030773A61007414B8 /* ServerTwoUITests */,
+				15A000000000000000000002 /* ServerTwoLiveActivity */,
+				15A000000000000000000003 /* ServerTwoLiveActivityShared */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -89,6 +140,7 @@
 				000000000000000000000120 /* ServerTwo.app */,
 				14039D42307739FF007414B8 /* ServerTwoTests.xctest */,
 				14039D4F30773A61007414B8 /* ServerTwoUITests.xctest */,
+				15A000000000000000000001 /* ServerTwoLiveActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -103,11 +155,16 @@
 				000000000000000120000000 /* Sources */,
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
+				15A00000000000000000000C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+				15A00000000000000000000E /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* ServerTwo */,
+				15A000000000000000000003 /* ServerTwoLiveActivityShared */,
 			);
 			name = ServerTwo;
 			packageProductDependencies = (
@@ -162,6 +219,25 @@
 			productReference = 14039D4F30773A61007414B8 /* ServerTwoUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		15A000000000000000000004 /* ServerTwoLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15A000000000000000000005 /* Build configuration list for PBXNativeTarget "ServerTwoLiveActivity" */;
+			buildPhases = (
+				15A000000000000000000008 /* Sources */,
+				15A000000000000000000009 /* Frameworks */,
+				15A00000000000000000000A /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				15A000000000000000000002 /* ServerTwoLiveActivity */,
+				15A000000000000000000003 /* ServerTwoLiveActivityShared */,
+			);
+			name = ServerTwoLiveActivity;
+			productName = ServerTwoLiveActivity;
+			productReference = 15A000000000000000000001 /* ServerTwoLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -182,6 +258,9 @@
 					14039D4E30773A61007414B8 = {
 						CreatedOnToolsVersion = 27.0;
 						TestTargetID = 000000000000000100000000;
+					};
+					15A000000000000000000004 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -205,6 +284,7 @@
 				000000000000000100000000 /* ServerTwo */,
 				14039D41307739FF007414B8 /* ServerTwoTests */,
 				14039D4E30773A61007414B8 /* ServerTwoUITests */,
+				15A000000000000000000004 /* ServerTwoLiveActivity */,
 			);
 		};
 /* End PBXProject section */
@@ -221,6 +301,11 @@
 			);
 		};
 		14039D4D30773A61007414B8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		15A00000000000000000000A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -243,6 +328,11 @@
 			files = (
 			);
 		};
+		15A000000000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -255,6 +345,12 @@
 			isa = PBXTargetDependency;
 			target = 000000000000000100000000 /* ServerTwo */;
 			targetProxy = 14039D5330773A61007414B8 /* PBXContainerItemProxy */;
+		};
+		15A00000000000000000000E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 15A000000000000000000004 /* ServerTwoLiveActivity */;
+			targetProxy = 15A00000000000000000000F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -405,6 +501,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Server Two: Pickleball Tracker";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports-games";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -448,6 +545,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Server Two: Pickleball Tracker";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports-games";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -565,6 +663,70 @@
 			};
 			name = Release;
 		};
+		15A000000000000000000006 /* Debug configuration for PBXNativeTarget "ServerTwoLiveActivity" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4CD86DZ6WP;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ServerTwoLiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ServerTwoLiveActivity;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.delonsampaio.ServerTwo.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		15A000000000000000000007 /* Release configuration for PBXNativeTarget "ServerTwoLiveActivity" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4CD86DZ6WP;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ServerTwoLiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ServerTwoLiveActivity;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.delonsampaio.ServerTwo.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -597,6 +759,14 @@
 			buildConfigurations = (
 				14039D5630773A61007414B8 /* Debug configuration for PBXNativeTarget "ServerTwoUITests" */,
 				14039D5730773A61007414B8 /* Release configuration for PBXNativeTarget "ServerTwoUITests" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		15A000000000000000000005 /* Build configuration list for PBXNativeTarget "ServerTwoLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15A000000000000000000006 /* Debug configuration for PBXNativeTarget "ServerTwoLiveActivity" */,
+				15A000000000000000000007 /* Release configuration for PBXNativeTarget "ServerTwoLiveActivity" */,
 			);
 			defaultConfigurationName = Release;
 		};
