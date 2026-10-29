@@ -19,7 +19,7 @@ struct CoinFlipView: View {
     let setup: PendingMatchSetup
 
     // The coin (120 pt, with 48 pt / 44 pt glyphs) scales with Dynamic Type up
-    // to 1.4x.
+    // to 1.4x. A 2-3 character label shrinks to fit (see `coin`).
     @ScaledMetric(relativeTo: .largeTitle) private var coinScale: CGFloat = 1
     private let coinScaleCap: CGFloat = 1.4
     /// Never below 1: `@ScaledMetric` also scales down below the default size.
@@ -188,6 +188,13 @@ struct CoinFlipView: View {
                 Text(letter(for: displayedTeam))
                     .font(.system(size: 48 * coinFactor, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
+                    // A one-letter label is far narrower than the coin, so this
+                    // changes nothing for it; the 2-3 character labels used when
+                    // the names share an initial shrink instead of touching the
+                    // rim. The padding keeps them inside the inner ring.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .padding(.horizontal, 16 * coinFactor)
             } else {
                 Image(systemName: "figure.pickleball")
                     .font(.system(size: 44 * coinFactor, weight: .bold))
@@ -202,9 +209,11 @@ struct CoinFlipView: View {
         }
     }
 
+    /// The coin's text for `team`. Computed from both names together so the two
+    /// outcomes never show the same label (see `CoinLabels`).
     private func letter(for team: Team) -> String {
-        let name = team == .teamA ? setup.resolvedTeamAName : setup.resolvedTeamBName
-        return String(name.prefix(1)).uppercased()
+        let labels = CoinLabels.labels(teamA: setup.resolvedTeamAName, teamB: setup.resolvedTeamBName)
+        return team == .teamA ? labels.a : labels.b
     }
 
     private func flip() {
