@@ -35,8 +35,43 @@ final class ProPurchaseUITests: XCTestCase {
         unlockButton.tap()
 
         XCTAssertTrue(unlockButton.waitForNonExistence(timeout: 5), "The paywall should dismiss itself once Pro is unlocked")
-        XCTAssertTrue(app.staticTexts["Server Two Pro: Unlocked"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["Settings.UnlockPro"].exists)
+
+        // Unlocked, the Pro section is only a status, so it no longer takes
+        // the top of Settings: the first real setting is on screen at once.
+        let managePlayers = app.buttons["Manage Players"]
+        XCTAssertTrue(managePlayers.waitForExistence(timeout: 3))
+        XCTAssertTrue(managePlayers.isHittable, "Manage Players is the first row once Pro is unlocked, no scrolling needed")
+
+        // It moved to the bottom of a lazily rendered Form, so scroll to it.
+        let unlockedRow = app.descendants(matching: .any)["Settings.ProUnlocked"]
+        scrollUntilVisible(unlockedRow, in: app)
+        XCTAssertTrue(app.staticTexts["Server Two Pro: Unlocked"].exists)
+    }
+
+    func testUnlockedUserKeepsARestorePathAtTheBottomOfSettings() throws {
+        let app = launch()
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["Settings.UnlockPro"].tap()
+        let unlockButton = app.buttons["Paywall.UnlockPro"]
+        XCTAssertTrue(unlockButton.waitForExistence(timeout: 3))
+        unlockButton.tap()
+        XCTAssertTrue(unlockButton.waitForNonExistence(timeout: 5))
+
+        let restoreRow = app.buttons["Settings.Restore"]
+        scrollUntilVisible(restoreRow, in: app)
+        // The row exists as soon as it is lazily rendered, which can still be
+        // under the floating tab bar; scroll the rest of the way before tapping.
+        app.swipeUp()
+        XCTAssertTrue(restoreRow.isEnabled)
+        restoreRow.tap()
+        // Restoring an owned purchase succeeds silently (a success shows no
+        // message), so the observable outcome is: no "nothing found" error,
+        // the row is usable again once the restore ends, and Pro stays unlocked.
+        let enabledAgain = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: restoreRow)
+        XCTAssertEqual(XCTWaiter().wait(for: [enabledAgain], timeout: 3), .completed)
+        XCTAssertFalse(app.staticTexts[Self.nothingToRestore].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["Settings.ProUnlocked"].exists)
     }
 
     func testRestoreWithNothingToRestoreShowsAMessageInSettingsAndOnThePaywall() throws {

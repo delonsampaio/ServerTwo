@@ -15,7 +15,13 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var appSettings = appSettings
         Form {
-            proSection
+            // While locked the purchase stays the first thing in Settings, one
+            // tap from a new user or App Review. Once unlocked it is only a
+            // status, so it moves below the real settings (see the end of
+            // this Form) instead of taking the top of the list.
+            if !activeMatchController.proUnlocked {
+                proSection
+            }
 
             // Its own section at the top — a core roster/identity feature,
             // not documentation, so it doesn't belong grouped under "Help"
@@ -90,6 +96,15 @@ struct SettingsView: View {
                         .foregroundStyle(Color.secondaryText)
                 }
             }
+
+            // Exactly one of these two placements is ever active, and both
+            // render the same section, so a change of entitlement while
+            // Settings is open just moves it instead of duplicating it.
+            // `proUnlocked` is seeded from a cache at launch, so a paying
+            // user never sees it appear on top and then jump.
+            if activeMatchController.proUnlocked {
+                proSection
+            }
         }
         .navigationTitle("Settings")
         .task { loadMePlayer() }
@@ -99,12 +114,17 @@ struct SettingsView: View {
         }
     }
 
-    /// Always visible, so the purchase (and a restore on a new device) can be
-    /// reached without first running into the paywall.
+    /// Always present, so the purchase (and a restore on a new device) can be
+    /// reached without first running into the paywall, and a paying user always
+    /// keeps a restore path. Where it sits (top while locked, bottom once
+    /// unlocked) is decided by the caller.
     @ViewBuilder
     private var proSection: some View {
-        if activeMatchController.proUnlocked {
-            Section(header: Text("Server Two Pro").foregroundStyle(Color.secondaryText)) {
+        Section(
+            header: Text("Server Two Pro").foregroundStyle(Color.secondaryText),
+            footer: RestoreResultText(result: storeManager.restoreResult)
+        ) {
+            if activeMatchController.proUnlocked {
                 Label {
                     Text("Server Two Pro: Unlocked")
                 } icon: {
@@ -112,12 +132,7 @@ struct SettingsView: View {
                         .foregroundStyle(Color.accentColor)
                 }
                 .accessibilityIdentifier("Settings.ProUnlocked")
-            }
-        } else {
-            Section(
-                header: Text("Server Two Pro").foregroundStyle(Color.secondaryText),
-                footer: RestoreResultText(result: storeManager.restoreResult)
-            ) {
+            } else {
                 Button {
                     isShowingPaywall = true
                 } label: {
@@ -139,20 +154,20 @@ struct SettingsView: View {
                     }
                 }
                 .accessibilityIdentifier("Settings.UnlockPro")
-
-                Button {
-                    Task { await storeManager.restorePurchases() }
-                } label: {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundStyle(Color.accentColor)
-                        Text("Restore Purchases")
-                            .foregroundStyle(Color.accentText)
-                    }
-                }
-                .disabled(storeManager.isRestoring)
-                .accessibilityIdentifier("Settings.Restore")
             }
+
+            Button {
+                Task { await storeManager.restorePurchases() }
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundStyle(Color.accentColor)
+                    Text("Restore Purchases")
+                        .foregroundStyle(Color.accentText)
+                }
+            }
+            .disabled(storeManager.isRestoring)
+            .accessibilityIdentifier("Settings.Restore")
         }
     }
 
