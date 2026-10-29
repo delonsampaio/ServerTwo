@@ -105,3 +105,12 @@ Transactions** window (Transaction Manager) lets you:
   time it reads its entitlements (at launch and whenever a transaction update
   arrives). A match in progress is never interrupted.
 - App Store Connect, **Analytics** and **Sales and Trends** show purchases.
+
+## 8. Release note: the Live Activity extension
+
+The app embeds a Live Activity extension (`ServerTwoLiveActivity`) with its own
+`MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`. Bump BOTH targets together
+(app and extension) for every release, or App Store validation fails on the
+mismatch. Its bundle id, `com.delonsampaio.ServerTwo.LiveActivity`, needs its
+own App ID and provisioning profile; Automatic signing creates them on the
+first signed build or archive.

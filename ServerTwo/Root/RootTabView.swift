@@ -59,6 +59,11 @@ struct RootTabView: View {
             .tabItem { Label("Settings", systemImage: "gear") }
             .tag(AppTab.settings)
         }
+        // The Live Activity's tap target (`servertwo://play`): always land on
+        // the live scoreboard, not on whichever tab the app was last left on.
+        .onOpenURL { url in
+            if url.scheme == "servertwo", url.host == "play" { selectedTab = .play }
+        }
     }
 
     @ViewBuilder
