@@ -20,4 +20,16 @@ final class AppSettingsTests: XCTestCase {
     func testHapticsStillDefaultToOn() {
         XCTAssertTrue(AppSettings(userDefaults: freshDefaults()).hapticsEnabled)
     }
+
+    func testTheLiveActivityDefaultsToOn() {
+        XCTAssertTrue(AppSettings(userDefaults: freshDefaults()).liveActivityEnabled)
+    }
+
+    func testTheLiveActivitySettingIsRemembered() {
+        let defaults = freshDefaults()
+        AppSettings(userDefaults: defaults).liveActivityEnabled = false
+        XCTAssertFalse(AppSettings(userDefaults: defaults).liveActivityEnabled)
+        AppSettings(userDefaults: defaults).liveActivityEnabled = true
+        XCTAssertTrue(AppSettings(userDefaults: defaults).liveActivityEnabled)
+    }
 }

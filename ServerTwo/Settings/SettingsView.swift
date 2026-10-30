@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var mePlayer: SavedPlayer?
     @State private var isShowingPaywall = false
 
+    private static let liveActivityCaption = "Shows the live score on the Lock Screen and in the Dynamic Island while a match is running. Turn off to keep scoring private to the app. iOS may also limit Live Activities in Settings > Server Two."
+
     var body: some View {
         @Bindable var appSettings = appSettings
         Form {
@@ -58,6 +60,27 @@ struct SettingsView: View {
                     Toggle("Haptics", isOn: $appSettings.hapticsEnabled)
                 } icon: {
                     Image(systemName: "water.waves")
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+
+            // Its own section (not a row of the one above) so its explanation
+            // is a real section footer: a footer in the shared section would
+            // read as being about Voice Announcer and Haptics too, and a
+            // caption squeezed under the switch inside the row sat flush
+            // against it. Footers wrap at any text size.
+            Section(
+                footer: Text(Self.liveActivityCaption)
+                    .foregroundStyle(Color.secondaryText)
+                    // Spoken once, as the switch's hint.
+                    .accessibilityHidden(true)
+            ) {
+                Label {
+                    Toggle("Live Activity", isOn: $appSettings.liveActivityEnabled)
+                        .accessibilityHint(Self.liveActivityCaption)
+                        .accessibilityIdentifier("Settings.LiveActivityToggle")
+                } icon: {
+                    Image(systemName: "platter.filled.top.iphone")
                         .foregroundStyle(Color.accentColor)
                 }
             }

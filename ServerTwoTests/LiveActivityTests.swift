@@ -324,6 +324,147 @@ final class LiveActivityControllerTests: XCTestCase {
         XCTAssertTrue(host.events.isEmpty)
     }
 
+    // MARK: - The in-app Live Activity switch
+
+    /// The user's Settings switch as the controller sees it (a closure over
+    /// this box stands in for `AppSettings.liveActivityEnabled`).
+    private final class SettingSwitch {
+        var isOn = true
+    }
+
+    private func makeController(switch setting: SettingSwitch) -> (LiveActivityController, RecordingLiveActivityHost) {
+        let host = RecordingLiveActivityHost()
+        return (LiveActivityController(host: host, isEnabled: { setting.isOn }), host)
+    }
+
+    func testSwitchedOffBeginResumeAndUpdateDoNothing() async {
+        let setting = SettingSwitch()
+        setting.isOn = false
+        let (controller, host) = makeController(switch: setting)
+        controller.begin(attributes: attributes, state: state())
+        controller.update(state(a: 1))
+        controller.resume(attributes: attributes, state: state(a: 2))
+        controller.retryIfNeeded()
+        controller.update(state(a: 3))
+        await controller.waitUntilIdle()
+        XCTAssertTrue(host.events.isEmpty)
+    }
+
+    func testSwitchingOnMidMatchStartsExactlyOneActivityWithTheCurrentState() async {
+        let setting = SettingSwitch()
+        setting.isOn = false
+        let (controller, host) = makeController(switch: setting)
+        controller.begin(attributes: attributes, state: state())
+        controller.update(state(a: 4, b: 2, serving: "teamB", server: 2))
+        setting.isOn = true
+        controller.enablementChanged()
+        await controller.waitUntilIdle()
+        XCTAssertEqual(host.events, [.request(attributes, state(a: 4, b: 2, serving: "teamB", server: 2))])
+        // And it is a live activity from then on: later points reach it.
+        controller.update(state(a: 5, b: 2, serving: "teamB", server: 2))
+        await controller.waitUntilIdle()
+        XCTAssertEqual(host.updates.count, 1)
+    }
+
+    func testSwitchingOffMidMatchEndsTheActivityImmediatelyAndLaterUpdatesAreSkipped() async {
+        let setting = SettingSwitch()
+        let (controller, host) = makeController(switch: setting)
+        controller.begin(attributes: attributes, state: state())
+        await controller.waitUntilIdle()
+        setting.isOn = false
+        controller.enablementChanged()
+        controller.update(state(a: 1))
+        await controller.waitUntilIdle()
+        XCTAssertEqual(host.ends, [.end(handle: 0, nil, .immediate)])
+        XCTAssertTrue(host.updates.isEmpty)
+        XCTAssertTrue(host.running.isEmpty)
+    }
+
+    func testOffOnOffEndsWithNoActivityLeft() async {
+        let setting = SettingSwitch()
+        let (controller, host) = makeController(switch: setting)
+        controller.begin(attributes: attributes, state: state())
+        await controller.waitUntilIdle()
+        // Three quick toggles with nothing awaited in between.
+        setting.isOn = false
+        controller.enablementChanged()
+        setting.isOn = true
+        controller.enablementChanged()
+        setting.isOn = false
+        controller.enablementChanged()
+        await controller.waitUntilIdle()
+        XCTAssertTrue(host.running.isEmpty)
+        XCTAssertEqual(host.requests.count, 1, "the in-between ON never got to start a second activity")
+        XCTAssertEqual(host.ends.count, 1)
+    }
+
+    func testOnOffOnLeavesExactlyOneActivityRunning() async {
+        let setting = SettingSwitch()
+        let (controller, host) = makeController(switch: setting)
+        controller.begin(attributes: attributes, state: state())
+        await controller.waitUntilIdle()
+        setting.isOn = false
+        controller.enablementChanged()
+        setting.isOn = true
+        controller.enablementChanged()
+        await controller.waitUntilIdle()
+        XCTAssertEqual(host.running.count, 1)
+        XCTAssertEqual(host.requests.count, 2)
+    }
+
+    func testSwitchingOnWhileAnActivityIsAlreadyRunningDoesNotDuplicateIt() async {
+        let setting = SettingSwitch()
+        let (controller, host) = makeController(switch: setting)
+        controller.begin(attributes: attributes, state: state())
+        await controller.waitUntilIdle()
+        controller.enablementChanged()   // already on: nothing to do
+        controller.enablementChanged()
+        await controller.waitUntilIdle()
+        XCTAssertEqual(host.requests.count, 1)
+        XCTAssertTrue(host.ends.isEmpty)
+    }
+
+    func testSwitchingOnAdoptsAnUntrackedRunningActivityOfTheSameMatch() async {
+        let setting = SettingSwitch()
+        setting.isOn = false
+        let (controller, host) = makeController(switch: setting)
+        controller.begin(attributes: attributes, state: state(a: 3))
+        let survivor = host.makeHandle(attributes: attributes)
+        host.running = [survivor]
+        setting.isOn = true
+        controller.enablementChanged()
+        await controller.waitUntilIdle()
+        XCTAssertTrue(host.requests.isEmpty, "never a second activity next to the one that exists")
+        XCTAssertEqual(host.updates, [.update(handle: survivor.id, state(a: 3))])
+    }
+
+    func testSwitchingOnWithNoMatchRunningStartsNothing() async {
+        let setting = SettingSwitch()
+        setting.isOn = false
+        let (controller, host) = makeController(switch: setting)
+        setting.isOn = true
+        controller.enablementChanged()
+        controller.begin(attributes: attributes, state: state())
+        controller.end(finalState: nil, dismissal: .immediate)
+        controller.enablementChanged()   // the match is over: do not bring it back
+        await controller.waitUntilIdle()
+        XCTAssertEqual(host.requests.count, 1, "only the begin; the match was over for the second toggle")
+        XCTAssertEqual(host.running.count, 0)
+    }
+
+    func testSwitchedOffNeverRetriesAFailedStart() async {
+        let setting = SettingSwitch()
+        let (controller, host) = makeController(switch: setting)
+        host.failRequests = true
+        controller.begin(attributes: attributes, state: state())
+        await controller.waitUntilIdle()
+        setting.isOn = false
+        controller.update(state(a: 1))
+        controller.retryIfNeeded()
+        await controller.waitUntilIdle()
+        XCTAssertEqual(host.requests.count, 1, "the one retry is not spent while the switch is off")
+    }
+
     func testARequestFailureNeverThrowsAndRetriesExactlyOnce() async {
         let (controller, host) = makeController()
         host.failRequests = true

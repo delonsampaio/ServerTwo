@@ -26,6 +26,9 @@ final class LiveActivityController {
 
     private let host: any LiveActivityHosting
     private let now: () -> Date
+    /// The user's "Live Activity" switch in Settings. A closure (not a copied
+    /// value) so every decision sees the current setting, like the announcer's.
+    private let isEnabled: @MainActor () -> Bool
     private var handle: (any LiveActivityHandle)?
     /// Whether a match is currently being mirrored. Stays true when the first
     /// request failed or Live Activities were off, so one later attempt is
@@ -42,15 +45,20 @@ final class LiveActivityController {
     private var lastState: State?
     private var tail: Task<Void, Never>?
 
-    init(host: any LiveActivityHosting, now: @escaping () -> Date = Date.init) {
+    init(
+        host: any LiveActivityHosting,
+        now: @escaping () -> Date = Date.init,
+        isEnabled: @escaping @MainActor () -> Bool = { true }
+    ) {
         self.host = host
         self.now = now
+        self.isEnabled = isEnabled
     }
 
     /// A new match became active: end any leftover activity, then start one.
     func begin(attributes: PickleballActivityAttributes, state: State) {
         startDriving(attributes: attributes, state: state)
-        guard host.areActivitiesEnabled else { return }
+        guard canStartActivities else { return }
         enqueue { [self] in
             // A leftover from a force quit would otherwise sit next to the new one.
             await endEveryRunningActivity()
@@ -63,20 +71,38 @@ final class LiveActivityController {
     /// rather than stacking a second; replace anything else.
     func resume(attributes: PickleballActivityAttributes, state: State) {
         startDriving(attributes: attributes, state: state)
-        guard host.areActivitiesEnabled else { return }
+        guard canStartActivities else { return }
         enqueue { [self] in
-            let running = host.runningActivities
-            // Static attributes are fixed for an activity's life, so a survivor
-            // with different names is another match's and must not be reused.
-            if let index = running.firstIndex(where: { $0.attributes == attributes }) {
-                handle = running[index]
-                await running[index].update(state, staleDate: staleDate())
-                for (other, activity) in running.enumerated() where other != index {
-                    await activity.end(nil, dismissal: .immediate)
-                }
-            } else {
-                await endEveryRunningActivity()
-                handle = startActivity(attributes: attributes, state: state)
+            await attachToMatchingActivityOrStart(attributes: attributes, state: state)
+        }
+    }
+
+    /// The user flipped the Settings switch. Off ends the running activity at
+    /// once (the live score must leave the Lock Screen now, not after the match);
+    /// on starts one for the match in progress with its current state. Only
+    /// the match bookkeeping is touched, never scoring. Both directions go
+    /// through the serial chain, so quick off-on-off toggles are applied in
+    /// order and settle on the last one.
+    func enablementChanged() {
+        guard isDriving else { return }
+        if isEnabled() {
+            guard canStartActivities else { return }
+            enqueue { [self] in
+                // Judged again when it runs: after an on that a later off has
+                // already cancelled out, nothing flashes up only to be ended.
+                // `handle` is checked here, not above, because an off queued
+                // just before this on has not run yet; once it has, the handle
+                // is gone and this starts afresh, and if an activity still
+                // exists it is kept rather than duplicated.
+                guard isDriving, handle == nil, canStartActivities,
+                      let attributes, let state = lastState else { return }
+                await attachToMatchingActivityOrStart(attributes: attributes, state: state)
+            }
+        } else {
+            enqueue { [self] in
+                let ending = handle
+                handle = nil
+                await ending?.end(nil, dismissal: .immediate)
             }
         }
     }
@@ -86,7 +112,10 @@ final class LiveActivityController {
     /// is also the one chance to try starting it again.
     func update(_ state: State) {
         guard isDriving, state != lastState else { return }
+        // Remembered even while the switch is off, so turning it on mid-match
+        // starts the activity with the score as it is then.
         lastState = state
+        guard isEnabled() else { return }
         enqueue { [self] in
             if let handle {
                 await handle.update(state, staleDate: staleDate())
@@ -99,7 +128,7 @@ final class LiveActivityController {
     /// Called when the app becomes active: the same single retry as `update`,
     /// for a match whose activity never started.
     func retryIfNeeded() {
-        guard isDriving, handle == nil, retriesLeft > 0, let state = lastState else { return }
+        guard isDriving, handle == nil, retriesLeft > 0, isEnabled(), let state = lastState else { return }
         enqueue { [self] in
             if handle == nil { retryStart(with: state) }
         }
@@ -135,6 +164,30 @@ final class LiveActivityController {
         await tail?.value
     }
 
+    /// Both the system's permission and the user's own switch must allow it.
+    /// (`end`/`endAll` deliberately ignore the switch: cleaning up is always fine.)
+    private var canStartActivities: Bool {
+        host.areActivitiesEnabled && isEnabled()
+    }
+
+    /// Runs inside the serial chain. Static attributes are fixed for an
+    /// activity's life, so a survivor with different names is another match's
+    /// and must not be reused; a matching one is attached to (not duplicated)
+    /// and brought up to date.
+    private func attachToMatchingActivityOrStart(attributes: PickleballActivityAttributes, state: State) async {
+        let running = host.runningActivities
+        if let index = running.firstIndex(where: { $0.attributes == attributes }) {
+            handle = running[index]
+            await running[index].update(state, staleDate: staleDate())
+            for (other, activity) in running.enumerated() where other != index {
+                await activity.end(nil, dismissal: .immediate)
+            }
+        } else {
+            await endEveryRunningActivity()
+            handle = startActivity(attributes: attributes, state: state)
+        }
+    }
+
     private func startDriving(attributes: PickleballActivityAttributes, state: State) {
         isDriving = true
         self.attributes = attributes
@@ -145,7 +198,7 @@ final class LiveActivityController {
     /// Runs inside the serial chain. A swipe-dismissed activity still has a
     /// handle, so it never lands here: only "never started" does.
     private func retryStart(with state: State) {
-        guard isDriving, handle == nil, retriesLeft > 0, let attributes, host.areActivitiesEnabled else { return }
+        guard isDriving, handle == nil, retriesLeft > 0, let attributes, canStartActivities else { return }
         retriesLeft -= 1
         handle = startActivity(attributes: attributes, state: state)
     }

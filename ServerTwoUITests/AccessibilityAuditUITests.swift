@@ -317,6 +317,25 @@ final class AccessibilityAuditUITests: XCTestCase {
         XCTAssertTrue(managePlayers.waitForExistence(timeout: 3))
         try audit(app, screen: "Settings", anchor: managePlayers)
 
+        // The Live Activity switch is there, is on by default, and flips both
+        // ways (put back afterwards so the rest of the run is unaffected).
+        let liveActivitySwitch = app.switches["Settings.LiveActivityToggle"]
+        scrollUntilVisible(liveActivitySwitch, in: app)
+        XCTAssertEqual(liveActivitySwitch.label, "Live Activity")
+        XCTAssertEqual(liveActivitySwitch.value as? String, "1", "on by default")
+        // Tapped at the right edge, where the switch is, in case the element
+        // spans the whole row; the value settles after the animation.
+        func tapSwitch(expecting value: String) {
+            liveActivitySwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            let settled = expectation(
+                for: NSPredicate(format: "value == %@", value), evaluatedWith: liveActivitySwitch
+            )
+            wait(for: [settled], timeout: 3)
+        }
+        tapSwitch(expecting: "0")
+        tapSwitch(expecting: "1")
+        app.swipeDown()
+
         managePlayers.tap()
         XCTAssertTrue(app.navigationBars["Manage Players"].waitForExistence(timeout: 3))
         try audit(app, screen: "ManagePlayers", anchor: app.navigationBars["Manage Players"])

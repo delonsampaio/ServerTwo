@@ -33,6 +33,7 @@ final class AppSettings {
     private enum Keys {
         static let voiceAnnouncerEnabled = "voiceAnnouncerEnabled"
         static let hapticsEnabled = "hapticsEnabled"
+        static let liveActivityEnabled = "liveActivityEnabled"
         static let theme = "theme"
     }
 
@@ -44,6 +45,10 @@ final class AppSettings {
 
     var hapticsEnabled: Bool {
         didSet { userDefaults.set(hapticsEnabled, forKey: Keys.hapticsEnabled) }
+    }
+
+    var liveActivityEnabled: Bool {
+        didSet { userDefaults.set(liveActivityEnabled, forKey: Keys.liveActivityEnabled) }
     }
 
     var theme: ColorSchemePreference {
@@ -59,6 +64,11 @@ final class AppSettings {
         self.hapticsEnabled = userDefaults.object(forKey: Keys.hapticsEnabled) == nil
             ? true
             : userDefaults.bool(forKey: Keys.hapticsEnabled)
+        // On for everyone, including existing users who never saw the switch:
+        // the Live Activity was already on before there was a setting.
+        self.liveActivityEnabled = userDefaults.object(forKey: Keys.liveActivityEnabled) == nil
+            ? true
+            : userDefaults.bool(forKey: Keys.liveActivityEnabled)
         self.theme = ColorSchemePreference(rawValue: userDefaults.string(forKey: Keys.theme) ?? "") ?? .system
     }
 }

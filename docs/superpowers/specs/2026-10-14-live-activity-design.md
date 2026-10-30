@@ -255,6 +255,8 @@ Where this section and the text above differ, this section is what the code does
 
 **ActivityKit guards.** The app target also lists visionOS, which has no ActivityKit. `PickleballActivityAttributes` is a plain value type; only its `ActivityAttributes` conformance and `ActivityKitLiveActivityHost` are inside `#if canImport(ActivityKit)`, and `MyApp.makeLiveActivityHost` falls back to the no-op host there.
 
+**Settings switch.** Settings > Audio & Haptics has a "Live Activity" switch (`AppSettings.liveActivityEnabled`, on by default, UI id `Settings.LiveActivityToggle`). `LiveActivityController` takes an `isEnabled` closure (set up in `MyApp` like the announcer's); while off, `begin`/`resume`/`update`/retry start nothing and send nothing (the current state is still remembered). Flipping it calls `enablementChanged()` from `.onChange`: off ends the running activity with the `.immediate` policy, on starts (or attaches to) one for the match in progress with its current state, never a duplicate. Both go through the serial chain, so quick toggles settle on the last one. Scoring is unaffected, and it is separate from the system's own switch (`areActivitiesEnabled`), which still applies.
+
 **Debug seam.** `-Debug-DemoLiveActivity` (Debug builds only) starts a sample activity at launch.
 
 ### Not verified / device checklist

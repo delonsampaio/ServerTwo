@@ -22,7 +22,11 @@ struct MyApp: App {
             fatalError("Failed to create persistent container: \(error)")
         }
         self.modelContainer = container
-        let liveActivity = LiveActivityController(host: MyApp.makeLiveActivityHost())
+        let settings = AppSettings()
+        let liveActivity = LiveActivityController(
+            host: MyApp.makeLiveActivityHost(),
+            isEnabled: { settings.liveActivityEnabled }
+        )
         self.liveActivity = liveActivity
         let controller = ActiveMatchController(modelContext: ModelContext(container), liveActivity: liveActivity)
         _activeMatchController = State(initialValue: controller)
@@ -32,7 +36,6 @@ struct MyApp: App {
             backend: MyApp.makeStoreBackend(),
             onEntitlementChange: { controller.proUnlocked = $0 }
         ))
-        let settings = AppSettings()
         _appSettings = State(initialValue: settings)
         _voiceAnnouncer = State(initialValue: VoiceAnnouncer(
             output: MyApp.makeSpeechOutput(),
@@ -49,6 +52,9 @@ struct MyApp: App {
                 .environment(storeManager)
                 .onChange(of: appSettings.voiceAnnouncerEnabled) { _, enabled in
                     if !enabled { voiceAnnouncer.stop() }
+                }
+                .onChange(of: appSettings.liveActivityEnabled) {
+                    liveActivity.enablementChanged()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active { voiceAnnouncer.stop() }
