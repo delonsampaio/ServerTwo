@@ -100,23 +100,23 @@ private enum TeamMark {
 
 /// A Lock Screen Live Activity may be at most 160 pt tall, and anything past it
 /// is clipped, so this layout is built from two rows only and sized by metrics
-/// (default text size, worst case = doubles side-out, Best of 3, SERVER n,
-/// games tally, long names):
+/// (default text size, doubles side-out, Best of 3, SERVER n, games tally):
 ///
 ///     padding top/bottom      10 + 10 = 20
 ///     summary row (caption)   16  (12 pt font, 16 pt line); the games tally is
 ///                             inline in this row, never a row of its own
 ///     row spacing              4
 ///     name (subheadline)      20  (one line, shrinks instead of wrapping)
-///     score (42 pt rounded)  ~50  (the serving label sits NEXT to the score,
-///                             on the same row, so it adds no height)
-///     total                  ~110 pt
+///     score (54 pt rounded)  ~48  (line box trimmed to 0.88x the font size)
+///     serving line (caption2) 13  (reserved in BOTH columns, so the two
+///                             scores are level and the height never changes)
+///     total                  ~118 pt   (rendered: 118 at 380 pt wide)
 ///
 /// The type size is capped at xxxLarge for the whole view (the largest sizes
-/// would scale caption, name and the 42 pt score by ~1.2 to ~1.6): at the cap
-/// the same sum is about 20 + 20 + 4 + 25 + 58 = ~127 pt, still under the limit,
-/// and `minimumScaleFactor` takes over for long text. These are font-metric
-/// estimates, not a render; check them on a device.
+/// would scale every row by up to ~1.25): at the cap the same rows render
+/// about 147 pt tall, under the 160 pt limit, and `minimumScaleFactor` takes
+/// over for long text instead of adding lines. The numbers come from an
+/// `ImageRenderer` pass of this layout, not a device; check them on a device.
 private struct LockScreenScoreboard: View {
     let attributes: PickleballActivityAttributes
     let state: PickleballActivityAttributes.ContentState
@@ -156,7 +156,7 @@ private struct LockScreenScoreboard: View {
                         .lineLimit(1)
                 }
             }
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
                 LockScreenTeam(
                     name: attributes.teamAName,
                     score: state.teamAScore,
@@ -171,6 +171,16 @@ private struct LockScreenScoreboard: View {
                     isServing: !state.isTeamAServing && !state.isMatchOver,
                     servingText: servingText(state)
                 )
+            }
+            // The divider is a background, not a child: as a child its flexible
+            // height would let the row grow to whatever the system proposes, and
+            // as a background it simply takes the height the two columns need.
+            // Both columns are `minWidth: 0, maxWidth: .infinity`, so they split
+            // the width equally and the divider sits exactly between them.
+            .background {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.15))
+                    .frame(width: 1)
             }
         }
         .padding(.horizontal, 16)
@@ -187,11 +197,10 @@ private struct LockScreenTeam: View {
     let score: Int
     let gamesWon: Int?
     let isServing: Bool
-    /// "SERVER 2" / "SERVING". Both columns lay out the same text, hidden on the
-    /// receiving side, so the two scores stay level without an empty row.
+    /// "SERVER 2" / "SERVING".
     let servingText: String
 
-    @ScaledMetric(relativeTo: .largeTitle) private var scoreSize: CGFloat = 42
+    @ScaledMetric(relativeTo: .largeTitle) private var scoreSize: CGFloat = 54
 
     var body: some View {
         VStack(spacing: 0) {
@@ -200,23 +209,36 @@ private struct LockScreenTeam: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            HStack(spacing: 6) {
-                Text("\(score)")
-                    .font(.system(size: scoreSize, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(isServing ? Color.accentText : Color.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Label(servingText, systemImage: "circle.fill")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(Color.accentText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .opacity(isServing ? 1 : 0)
-                    .accessibilityHidden(true)
-            }
+            Text("\(score)")
+                .font(.system(size: scoreSize, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(isServing ? Color.accentText : Color.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                // A rounded font's line box is about 1.2x its size, mostly empty
+                // space above and below the digits (the digits are ~0.72x the
+                // size tall). Trimming the box to 0.88x the font size (the glyphs
+                // overflow it symmetrically, so they stay put visually) is what
+                // buys the height for a larger score.
+                .frame(height: scoreSize * 0.88)
+            // The serving cue is its own line under the score, not a sibling of
+            // the score in an HStack: a sibling that is only hidden (opacity 0)
+            // on the receiving side still takes width, which pushed the score
+            // off-centre by half its width, and a trailing overlay has no room
+            // beside a two-digit score in a half-width column. Both columns
+            // lay out the same text, so the line is reserved at the same height
+            // on both sides (the scores stay level and nothing jumps when the
+            // serve changes); it is just invisible on the receiving side.
+            Label(servingText, systemImage: "circle.fill")
+                .font(.caption2.weight(.bold))
+                .imageScale(.small)
+                .foregroundStyle(Color.accentText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .opacity(isServing ? 1 : 0)
+                .accessibilityHidden(true)
         }
-        .frame(maxWidth: .infinity)
+        .frame(minWidth: 0, maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(PickleballLiveActivity.accessibilityLabel(name: name, score: score))
         .accessibilityValue(accessibilityValue)
@@ -334,10 +356,10 @@ private extension PickleballActivityAttributes {
         teamAName: "Alex & Sam", teamBName: "Jo & Pat",
         matchFormatSummary: "Doubles • Best of 3", showsGamesWon: true
     )
-    /// Longest realistic content: doubles side-out Best of 5 with long names.
+    /// Longest realistic content: doubles side-out Best of 3 with long names.
     static let previewWorstCase = PickleballActivityAttributes(
         teamAName: "Alexandra & Montgomery", teamBName: "Bartholomew & Wilhelmina",
-        matchFormatSummary: "Doubles • Best of 5", showsGamesWon: true
+        matchFormatSummary: "Doubles • Best of 3", showsGamesWon: true
     )
     static let previewSingles = PickleballActivityAttributes(
         teamAName: "Alex", teamBName: "Jo",
@@ -355,12 +377,25 @@ private extension PickleballActivityAttributes.ContentState {
         servingTeamRawValue: "teamB", serverNumber: 1, isMatchOver: false
     )
     static let worstCase = Self(
-        teamAScore: 12, teamBScore: 10, teamAGamesWon: 2, teamBGamesWon: 1,
+        teamAScore: 12, teamBScore: 10, teamAGamesWon: 1, teamBGamesWon: 1,
         servingTeamRawValue: "teamA", serverNumber: 2, isMatchOver: false
     )
     static let singlesRally = Self(
         teamAScore: 3, teamBScore: 4, teamAGamesWon: 0, teamBGamesWon: 0,
         servingTeamRawValue: "teamB", serverNumber: nil, isMatchOver: false
+    )
+    /// Worst-case content with the other team serving.
+    static let worstCaseTeamB = Self(
+        teamAScore: 8, teamBScore: 11, teamAGamesWon: 1, teamBGamesWon: 1,
+        servingTeamRawValue: "teamB", serverNumber: 1, isMatchOver: false
+    )
+    static let singlesTeamA = Self(
+        teamAScore: 6, teamBScore: 2, teamAGamesWon: 0, teamBGamesWon: 0,
+        servingTeamRawValue: "teamA", serverNumber: nil, isMatchOver: false
+    )
+    static let singlesOver = Self(
+        teamAScore: 11, teamBScore: 7, teamAGamesWon: 0, teamBGamesWon: 0,
+        servingTeamRawValue: "teamA", serverNumber: nil, isMatchOver: true
     )
     static let matchOver = Self(
         teamAScore: 11, teamBScore: 8, teamAGamesWon: 2, teamBGamesWon: 0,
@@ -380,12 +415,16 @@ private extension PickleballActivityAttributes.ContentState {
     PickleballLiveActivity()
 } contentStates: {
     PickleballActivityAttributes.ContentState.worstCase
+    PickleballActivityAttributes.ContentState.worstCaseTeamB
+    PickleballActivityAttributes.ContentState.matchOver
 }
 
 #Preview("Lock Screen singles", as: .content, using: PickleballActivityAttributes.previewSingles) {
     PickleballLiveActivity()
 } contentStates: {
     PickleballActivityAttributes.ContentState.singlesRally
+    PickleballActivityAttributes.ContentState.singlesTeamA
+    PickleballActivityAttributes.ContentState.singlesOver
 }
 
 #Preview("Island expanded", as: .dynamicIsland(.expanded), using: PickleballActivityAttributes.previewDoubles) {
