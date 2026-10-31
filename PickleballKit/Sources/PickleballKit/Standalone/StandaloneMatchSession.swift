@@ -82,6 +82,12 @@ public final class StandaloneMatchSession {
     /// longer be undone, so it is the moment it may be sent to the iPhone.
     public var onFinishedMatchDismissed: (@MainActor () -> Void)?
 
+    /// Follows the match's lifecycle for anything that must not be part of
+    /// scoring (the Watch's workout): see `MatchLifecycleEvent`. Called after
+    /// the state change, on the main actor; it must be quick, scoring waits
+    /// for it.
+    public var onLifecycleEvent: (@MainActor (MatchLifecycleEvent) -> Void)?
+
     /// The id of the finished match that is still on the match-over screen,
     /// where Undo can delete it. It must not be sent to the iPhone yet, or an
     /// undo after the send would leave the phone with a match that never
@@ -240,6 +246,7 @@ public final class StandaloneMatchSession {
         sideSwitchTracker = SideSwitchPromptTracker()
         sideSwitchTracker.seed(completedGameFlags: [], currentGameFlag: false)
         persistSnapshot()
+        onLifecycleEvent?(.started)
     }
 
     /// Restores a match interrupted by a relaunch or crash. Returns whether
@@ -308,6 +315,7 @@ public final class StandaloneMatchSession {
         updateSideSwitchNotice()
         afterUpdate(outcome)
         if match.isMatchOver {
+            onLifecycleEvent?(.decided)
             // Saved the moment it ends, not on "Done": the Watch app can be
             // suspended or killed on the match-over screen, and a snapshot of a
             // decided match is discarded on relaunch anyway, so none is written
@@ -323,6 +331,7 @@ public final class StandaloneMatchSession {
     public func undo() {
         guard let match, canUndo else { return }
         let hadNotice = sideSwitchNotice != nil
+        let wasMatchOver = match.isMatchOver
         sideSwitchNotice = nil
         isGameOver = false
         if savedRecord != nil { unsaveFinishedMatch() }
@@ -338,6 +347,7 @@ public final class StandaloneMatchSession {
             updateSideSwitchNotice()
         }
         persistSnapshot()
+        if wasMatchOver, !match.isMatchOver { onLifecycleEvent?(.reopened) }
     }
 
     /// Leaves the Game Over screen for the next game (already created by the
@@ -364,9 +374,10 @@ public final class StandaloneMatchSession {
     /// The match-over screen's "Done": make sure the match is saved, then
     /// return to idle.
     public func dismissFinishedMatch() throws {
-        _ = try saveIfNeeded()
+        let record = try saveIfNeeded()
         retrySnapshotClearIfNeeded()
         reset()
+        onLifecycleEvent?(.finished(matchID: record.id))
         onFinishedMatchDismissed?()
     }
 
@@ -377,15 +388,17 @@ public final class StandaloneMatchSession {
         // queued with nobody to send it until the next launch. The screens
         // never offer this (End Match is on the scoring screen only), so this
         // makes the unreachable case safe instead of silent.
-        if savedRecord != nil {
+        if let saved = savedRecord {
             retrySnapshotClearIfNeeded()
             reset()
+            onLifecycleEvent?(.finished(matchID: saved.id))
             onFinishedMatchDismissed?()
             return
         }
         try? repository.clearInProgressSnapshot()
         removeStaleRecord()
         reset()
+        onLifecycleEvent?(.abandoned)
     }
 
     // MARK: Private

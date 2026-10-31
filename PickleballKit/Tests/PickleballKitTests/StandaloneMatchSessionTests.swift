@@ -759,4 +759,111 @@ final class StandaloneMatchSessionTests: XCTestCase {
         XCTAssertTrue(relaunched.resumeIfNeeded())
         XCTAssertEqual(relaunched.score(for: .teamA), 3)
     }
+
+    // MARK: Lifecycle events (the Watch workout follows these)
+
+    private func recordEvents(_ session: StandaloneMatchSession) -> EventLog {
+        let log = EventLog()
+        session.onLifecycleEvent = { log.events.append($0) }
+        return log
+    }
+
+    private final class EventLog {
+        var events: [MatchLifecycleEvent] = []
+    }
+
+    func testStartEmitsStartedOnceAndNothingElse() {
+        let session = makeSession()
+        let log = recordEvents(session)
+        session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfOne, firstServingTeam: .teamA)
+        session.recordPoint(for: .teamA)
+        XCTAssertEqual(log.events, [.started])
+    }
+
+    func testOnlyTheMatchDecidingPointEmitsDecided() {
+        let session = makeSession()
+        let log = recordEvents(session)
+        session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfThree, firstServingTeam: .teamA)
+        playOutGame(session, winner: .teamA)  // game over, match goes on
+        XCTAssertEqual(log.events, [.started])
+        session.startNextGame()
+        playOutGame(session, winner: .teamA)  // decides the match
+        XCTAssertEqual(log.events, [.started, .decided])
+    }
+
+    func testUndoOfTheDecidingPointEmitsReopenedAndOtherUndosDoNot() {
+        let session = makeSession()
+        let log = recordEvents(session)
+        finishMatch(session)
+        session.undo()  // takes the deciding point back
+        session.undo()  // an ordinary undo in a live match
+        XCTAssertEqual(log.events, [.started, .decided, .reopened])
+    }
+
+    func testReplayingAfterReopenedEmitsDecidedAgain() {
+        let session = makeSession()
+        let log = recordEvents(session)
+        finishMatch(session)
+        session.undo()
+        session.recordPoint(for: .teamA)
+        XCTAssertEqual(log.events, [.started, .decided, .reopened, .decided])
+    }
+
+    func testDoneEmitsFinishedWithTheSavedMatchID() throws {
+        let session = makeSession()
+        let log = recordEvents(session)
+        finishMatch(session)
+        let id = try XCTUnwrap(session.undoableSavedMatchID)
+        try session.dismissFinishedMatch()
+        XCTAssertEqual(log.events, [.started, .decided, .finished(matchID: id)])
+    }
+
+    func testDoneThatRetriesAFailedSaveEmitsFinishedWithTheNewRecordsID() throws {
+        let session = makeSession()
+        let log = recordEvents(session)
+        session.saveFailureForTesting = HookFailure()
+        finishMatch(session)  // the automatic save throws
+        session.saveFailureForTesting = nil
+        try session.dismissFinishedMatch()
+        let id = try XCTUnwrap(try repository.fetchMatchHistory().first?.id)
+        XCTAssertEqual(log.events, [.started, .decided, .finished(matchID: id)])
+    }
+
+    func testNoFinishedWhenTheSaveThrows() {
+        let session = makeSession()
+        let log = recordEvents(session)
+        session.saveFailureForTesting = HookFailure()
+        finishMatch(session)
+        XCTAssertThrowsError(try session.dismissFinishedMatch())
+        XCTAssertEqual(log.events, [.started, .decided])
+        XCTAssertTrue(session.isActive, "the match is still on the match-over screen")
+    }
+
+    func testAbandoningAnUnsavedMatchEmitsAbandoned() {
+        let session = makeSession()
+        let log = recordEvents(session)
+        session.start(configuration: GameConfiguration(), format: .bestOfThree, firstServingTeam: .teamA)
+        session.recordPoint(for: .teamA)
+        session.abandon()
+        XCTAssertEqual(log.events, [.started, .abandoned])
+    }
+
+    func testAbandoningAnAlreadySavedMatchEmitsFinishedNotAbandoned() throws {
+        let session = makeSession()
+        let log = recordEvents(session)
+        finishMatch(session)
+        let id = try XCTUnwrap(session.undoableSavedMatchID)
+        session.abandon()
+        XCTAssertEqual(log.events, [.started, .decided, .finished(matchID: id)])
+    }
+
+    func testResumingAMatchEmitsNothing() {
+        let first = makeSession()
+        first.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        tap(first, .teamA, times: 3)
+        let relaunched = makeSession()
+        let log = recordEvents(relaunched)
+        XCTAssertTrue(relaunched.resumeIfNeeded())
+        XCTAssertEqual(log.events, [])
+    }
 }
