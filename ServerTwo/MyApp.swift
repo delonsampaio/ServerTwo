@@ -8,6 +8,10 @@ struct MyApp: App {
 
     private let modelContainer: ModelContainer
     private let liveActivity: LiveActivityController
+    #if canImport(WatchConnectivity)
+    /// Strongly held for the app's lifetime: it is the WCSession delegate.
+    private let watchSync: PhoneWatchSync
+    #endif
     @State private var activeMatchController: ActiveMatchController
     @State private var appSettings: AppSettings
     @State private var voiceAnnouncer: VoiceAnnouncer
@@ -30,6 +34,22 @@ struct MyApp: App {
         self.liveActivity = liveActivity
         let controller = ActiveMatchController(modelContext: ModelContext(container), liveActivity: liveActivity)
         _activeMatchController = State(initialValue: controller)
+        #if canImport(WatchConnectivity)
+        // Created and activated here, before any view exists, so a match the
+        // Watch delivered while the app was closed is not dropped. Imports go
+        // through the main context (the one SwiftUI reads), and a successful
+        // import feeds the demo counter like a match played here.
+        let receiver = WatchMatchReceiver(
+            repository: MatchRepository(modelContext: container.mainContext),
+            didImport: { controller.recordCompletedMatchSaved(historyCountBeforeSave: $0) }
+        )
+        let watchSync = PhoneWatchSync { incoming, acknowledger in
+            guard receiver.receive(incoming, acknowledger: acknowledger) == .imported else { return }
+            NotificationCenter.default.post(name: .matchSyncedFromWatch, object: nil)
+        }
+        watchSync.activate()
+        self.watchSync = watchSync
+        #endif
         // StoreManager is the source of truth for Pro; the controller (which
         // has no StoreKit import) just receives each refreshed result.
         _storeManager = State(initialValue: StoreManager(

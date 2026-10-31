@@ -12,6 +12,28 @@ extension Notification.Name {
     /// `onMatchDeleted`, then reload on their next appearance like
     /// `matchPlayersEdited`.
     static let matchDeleted = Notification.Name("ServerTwo.matchDeleted")
+    /// Posted after a match finished on the Watch was imported. Unlike the two
+    /// above, screens reload IMMEDIATELY: nothing they show is being edited, and
+    /// a new match should appear while the user is looking at History.
+    static let matchSyncedFromWatch = Notification.Name("ServerTwo.matchSyncedFromWatch")
+}
+
+/// When a screen refreshes for each notification, as a pure decision so it is
+/// unit tested without a view.
+enum ScreenRefreshTiming: Equatable {
+    /// Mark stale; reload at the next `onAppear` (a pushed Match Detail or the
+    /// edit sheet that caused the change may still be on screen).
+    case onNextAppear
+    /// Reload right away.
+    case immediately
+
+    static func timing(for name: Notification.Name) -> ScreenRefreshTiming? {
+        switch name {
+        case .matchPlayersEdited, .matchDeleted: .onNextAppear
+        case .matchSyncedFromWatch: .immediately
+        default: nil
+        }
+    }
 }
 
 /// The payload of `.matchDeleted`. It is the deleted match's id and nothing
@@ -75,8 +97,17 @@ private struct RefreshAfterPlayersEdited: ViewModifier {
             .onReceive(
                 NotificationCenter.default.publisher(for: .matchPlayersEdited)
                     .merge(with: NotificationCenter.default.publisher(for: .matchDeleted))
-            ) { _ in
-                isStale = true
+                    .merge(with: NotificationCenter.default.publisher(for: .matchSyncedFromWatch))
+            ) { notification in
+                switch ScreenRefreshTiming.timing(for: notification.name) {
+                case .immediately:
+                    reload()
+                    revision += 1
+                case .onNextAppear:
+                    isStale = true
+                case nil:
+                    break
+                }
             }
             .onAppear {
                 guard isStale else { return }

@@ -164,7 +164,7 @@ final class ActiveMatchController {
     /// is read before the save so the counter catches up with matches that
     /// predate it, and a delete followed by a new match keeps counting up
     /// rather than restarting from the (smaller) history.
-    private func recordCompletedMatchSaved(historyCountBeforeSave: Int) {
+    func recordCompletedMatchSaved(historyCountBeforeSave: Int) {
         let stored = userDefaults.integer(forKey: Keys.lifetimeCompletedMatchCount)
         userDefaults.set(max(stored, historyCountBeforeSave) + 1, forKey: Keys.lifetimeCompletedMatchCount)
     }
