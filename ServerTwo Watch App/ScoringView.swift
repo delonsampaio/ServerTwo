@@ -125,26 +125,37 @@ private struct ScoreZone: View {
         } label: {
             HStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 1) {
+                    // Players' names can be long ("Mike & Sarah"): one line,
+                    // shrunk a little, then cut off at the end. VoiceOver reads
+                    // the whole name from the zone's label.
                     Text(session.teamName(for: team))
                         .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .truncationMode(.tail)
                     // The serving badge says who is up, in words, so the cue is
                     // never colour alone; the receiving zone says what a tap
                     // does, because it is not a point.
                     Text(session.servingCaption(for: team) ?? session.tapCaption(for: team))
                         .font(.caption2.weight(isServing ? .bold : .regular))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                     if showsGames {
                         Text("Games \(session.gamesWon(for: team))")
                             .font(.caption2)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
                     }
                 }
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
                 Spacer(minLength: 0)
+                // The score keeps its room: a long name gives way to it, never
+                // the other way round.
                 Text("\(session.score(for: team))")
                     .font(.system(size: 52, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
+                    .layoutPriority(1)
             }
             .foregroundStyle(.white)
             // A zone is a fixed-height surface (two share the screen with

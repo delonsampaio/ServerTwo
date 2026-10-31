@@ -8,11 +8,14 @@ import PickleballKit
 ///
 ///     -Debug-WatchDemoMatch                         doubles best of 3, game 2, Team A serving
 ///     -Debug-WatchDemoMatch -Debug-WatchDemoState <scoringB|gameOver|matchOver|sideSwitch|coinFlip|home|homeBlocked>
+///     ... -Debug-WatchDemoPlayers                   also a saved-player list and a chosen doubles selection
 struct WatchDemo {
     let state: String
+    let withPlayers: Bool
 
     init?(arguments: [String]) {
         guard arguments.contains("-Debug-WatchDemoMatch") else { return nil }
+        withPlayers = arguments.contains("-Debug-WatchDemoPlayers")
         if let index = arguments.firstIndex(of: "-Debug-WatchDemoState"), arguments.indices.contains(index + 1) {
             state = arguments[index + 1]
         } else {
@@ -33,6 +36,33 @@ struct WatchDemo {
         return access
     }
 
+    private static let demoList = [
+        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Delon", isMe: true),
+        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, name: "Mike"),
+        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, name: "Sarah"),
+        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!, name: "Priya"),
+        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!, name: "Tom"),
+    ]
+
+    /// Delon and Sarah against Priya and Tom, all from `demoList`.
+    private static var demoSelection: WatchPlayerSelection {
+        func entry(_ index: Int) -> SyncedPlayerRef {
+            SyncedPlayerRef(savedPlayerID: demoList[index].id, name: demoList[index].name)
+        }
+        return WatchPlayerSelection(teamA: [entry(0), entry(2)], teamB: [entry(3), entry(4)])
+    }
+
+    /// With `-Debug-WatchDemoPlayers`: a few saved players and a selection, in
+    /// the demo defaults suite (never the real cache). Otherwise nothing.
+    @MainActor
+    func seedPlayers(directory: WatchPlayerDirectory, suiteName: String) -> LastUsedPlayers {
+        guard withPlayers, let defaults = UserDefaults(suiteName: suiteName) else { return LastUsedPlayers() }
+        directory.apply(PhoneStateContext(proUnlocked: false, completedMatchCount: 0, players: Self.demoList))
+        var last = LastUsedPlayers(userDefaults: defaults)
+        last.selection = Self.demoSelection
+        return last
+    }
+
     @MainActor
     func apply(to session: StandaloneMatchSession) -> WatchFlow {
         var flow = WatchFlow()
@@ -45,7 +75,8 @@ struct WatchDemo {
         session.start(
             configuration: GameConfiguration(playMode: .doubles, scoringFormat: .sideOut),
             format: bestOfThree ? .bestOfThree : .bestOfOne,
-            firstServingTeam: .teamA
+            firstServingTeam: .teamA,
+            players: withPlayers ? Self.demoSelection.matchPlayers(for: .doubles) : .empty
         )
         switch state {
         case "gameOver":
@@ -108,10 +139,16 @@ enum WatchAutoSync {
     @MainActor
     static func playAndFinishIfRequested(on session: StandaloneMatchSession, arguments: [String]) {
         guard arguments.contains("-Debug-WatchAutoSyncMatch"), !session.isActive else { return }
+        // `-Debug-WatchAutoSyncPlayers` adds two typed names (no saved player
+        // ids), so the phone's import creates and links them.
+        let players = arguments.contains("-Debug-WatchAutoSyncPlayers")
+            ? WatchMatchPlayers(teamA: [SyncedPlayerRef(name: "Alex")], teamB: [SyncedPlayerRef(name: "Sam")])
+            : .empty
         session.start(
             configuration: GameConfiguration(playMode: .singles, scoringFormat: .sideOut),
             format: .bestOfOne,
-            firstServingTeam: .teamA
+            firstServingTeam: .teamA,
+            players: players
         )
         var taps = 0
         while !session.isMatchOver, taps < 100 {

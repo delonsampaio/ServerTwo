@@ -14,6 +14,9 @@ struct ServerTwoWatchApp: App {
     /// exist from launch so a queued acknowledgement is not dropped.
     private let syncCoordinator: WatchSyncCoordinator
     private let access: WatchAccess
+    /// The players the phone told this Watch about, and the last selection.
+    private let directory: WatchPlayerDirectory
+    private let initialPlayers: LastUsedPlayers
     /// Held for the app's lifetime: it follows the session's lifecycle events.
     private let workout: WorkoutController
 
@@ -22,6 +25,7 @@ struct ServerTwoWatchApp: App {
         let container = Self.makeContainer()
         let repository = MatchRepository(modelContext: ModelContext(container))
         var pendingSync = PendingSyncStore()
+        var playersStore = WatchPlayersStore()
 
         #if DEBUG
         // Screenshot/demo launches must not touch the real store or the real
@@ -33,6 +37,7 @@ struct ServerTwoWatchApp: App {
             // pending ids, a cached phone state) would change what Home shows.
             UserDefaults(suiteName: "WatchDemo")?.removePersistentDomain(forName: "WatchDemo")
             pendingSync = PendingSyncStore(suiteName: "WatchDemo")
+            playersStore = WatchPlayersStore(suiteName: "WatchDemo")
         }
         // Standard defaults in the real app; a throwaway suite for demos.
         let counterSuite: String? = demo != nil ? "WatchDemo" : nil
@@ -44,13 +49,13 @@ struct ServerTwoWatchApp: App {
         if demo != nil, let memory = try? PersistenceContainer.makeInMemoryContainer() {
             syncRepository = MatchRepository(modelContext: ModelContext(memory))
             session = StandaloneMatchSession(
-                repository: syncRepository, pendingSync: pendingSync,
+                repository: syncRepository, pendingSync: pendingSync, playersStore: playersStore,
                 lifetimeCounter: WatchLifetimeCounter(suiteName: counterSuite)
             )
             flow = demo?.apply(to: session) ?? WatchFlow()
         } else {
             session = StandaloneMatchSession(
-                repository: repository, pendingSync: pendingSync,
+                repository: repository, pendingSync: pendingSync, playersStore: playersStore,
                 lifetimeCounter: WatchLifetimeCounter(suiteName: counterSuite)
             )
             session.resumeIfNeeded()
@@ -102,7 +107,23 @@ struct ServerTwoWatchApp: App {
             counter: WatchLifetimeCounter(), cache: WatchEntitlementCache(), entitlements: WatchStoreKitEntitlements()
         )
         #endif
-        coordinator.onPhoneState = { access.apply($0) }
+        // The player picker's list: the phone's, cached so it works offline.
+        let directory: WatchPlayerDirectory
+        var lastPlayers = LastUsedPlayers()
+        #if DEBUG
+        if let demo {
+            directory = WatchPlayerDirectory(suiteName: "WatchDemo")
+            lastPlayers = demo.seedPlayers(directory: directory, suiteName: "WatchDemo")
+        } else {
+            directory = WatchPlayerDirectory()
+        }
+        #else
+        directory = WatchPlayerDirectory()
+        #endif
+        coordinator.onPhoneState = {
+            access.apply($0)
+            directory.apply($0)
+        }
         coordinator.start()
         #if DEBUG
         WatchAutoSync.playAndFinishIfRequested(on: session, arguments: ProcessInfo.processInfo.arguments)
@@ -112,13 +133,18 @@ struct ServerTwoWatchApp: App {
         self.initialFlow = flow
         self.syncCoordinator = coordinator
         self.access = access
+        self.directory = directory
+        self.initialPlayers = lastPlayers
         self.workout = workout
         _session = State(initialValue: session)
     }
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView(session: session, access: access, workout: workout, initialFlow: initialFlow)
+            WatchRootView(
+                session: session, access: access, workout: workout,
+                directory: directory, initialPlayers: initialPlayers, initialFlow: initialFlow
+            )
         }
     }
 

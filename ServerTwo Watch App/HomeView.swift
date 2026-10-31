@@ -3,9 +3,12 @@ import PickleballKit
 
 struct HomeView: View {
     @Binding var rules: LastUsedRules
+    @Binding var players: LastUsedPlayers
+    let directory: WatchPlayerDirectory
     let access: WatchAccess
     let onStart: () -> Void
     @State private var showingRules = false
+    @State private var showingPlayers = false
 
     var body: some View {
         ScrollView {
@@ -39,6 +42,8 @@ struct HomeView: View {
                         .accessibilityIdentifier("DemoUsed")
                 }
 
+                playersRow
+
                 Button("Rules") { showingRules = true }
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("Rules")
@@ -48,6 +53,33 @@ struct HomeView: View {
         .sheet(isPresented: $showingRules) {
             RulesSheet(rules: $rules)
         }
+        .sheet(isPresented: $showingPlayers) {
+            PlayersSheet(lastPlayers: $players, playMode: rules.configuration.playMode, directory: directory)
+        }
+    }
+
+    /// "Players" and, under it, who is chosen for the next match (nothing when
+    /// nobody is). Optional: Start Match works without it.
+    private var playersRow: some View {
+        let summary = players.selection.summary(for: rules.configuration.playMode)
+        return Button { showingPlayers = true } label: {
+            VStack(spacing: 2) {
+                Text("Players")
+                if let summary {
+                    Text(summary)
+                        .font(.caption2)
+                        .foregroundStyle(Color.secondaryText)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(summary.map { "Players, \($0)" } ?? "Players")
+        .accessibilityHint("Choose who plays the next match")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("Players")
     }
 }
 

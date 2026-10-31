@@ -4,6 +4,9 @@ import PickleballKit
 /// Decides who serves first: flip the kit's coin, or enter the result of a
 /// spin the players already did (same two routes as the phone, minimal).
 struct CoinFlipView: View {
+    /// What the sides are called: the chosen players, or "Team A" / "Team B".
+    let teamAName: String
+    let teamBName: String
     let onCancel: () -> Void
     let onBegin: (Team) -> Void
 
@@ -16,6 +19,7 @@ struct CoinFlipView: View {
                     Text("\(name(first)) serves first")
                         .font(.headline)
                         .multilineTextAlignment(.center)
+                        .lineLimit(3)
                         .accessibilityIdentifier("FirstServeResult")
                     Button { onBegin(first) } label: {
                         Text("Begin Match").frame(maxWidth: .infinity, minHeight: 44)
@@ -36,11 +40,17 @@ struct CoinFlipView: View {
                         .foregroundStyle(Color.secondaryText)
                         .multilineTextAlignment(.center)
                     Button { firstServer = .teamA } label: {
-                        Text("Team A Won Spin").frame(maxWidth: .infinity, minHeight: 44)
+                        Text("\(teamAName) Won Spin")
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .accessibilityIdentifier("Team A Won Spin")
                     Button { firstServer = .teamB } label: {
-                        Text("Team B Won Spin").frame(maxWidth: .infinity, minHeight: 44)
+                        Text("\(teamBName) Won Spin")
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .accessibilityIdentifier("Team B Won Spin")
                 }
@@ -55,6 +65,6 @@ struct CoinFlipView: View {
     }
 
     private func name(_ team: Team) -> String {
-        team == .teamA ? StandaloneMatchSession.teamAName : StandaloneMatchSession.teamBName
+        team == .teamA ? teamAName : teamBName
     }
 }
