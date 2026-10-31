@@ -28,4 +28,39 @@
 
 ## As built (A)
 
-_Filled in once the target and screens are built; see the sections below._
+### What was built
+
+- **`PickleballKit`:** `StandaloneMatchSession`, `LastUsedRules`, `PendingSyncStore`, `PersistenceContainer.makeLocalOnlyContainer(isStoredInMemoryOnly:)`, and the shared `MatchFormat.isLastGame(index:)`, `SideSwitchDirection`, `SideSwitchPromptTracker` (public). 43 new tests (252 in the package, 209 before), all `swift test`, written test first; the kit also builds for watchOS Simulator. The iOS app lost `MatchFormat+LastGame.swift` and `SideSwitchPromptTracker.swift` and uses the kit versions (`ScoringPrompt.SideSwitchDirection` is now a typealias of the kit type, so its call sites and tests are unchanged).
+- **`ServerTwo Watch App` target**, folder `ServerTwo Watch App/`: `ServerTwoWatchApp` (container, session, resume at launch), `WatchRootView` (screen chosen from the session state), `HomeView` + `RulesSheet`, `CoinFlipView`, `ScoringView` (zones, Undo, End match, side-switch notice), `GameOverView`, `MatchOverView`, `WatchHaptics`, and a DEBUG-only `WatchDemo` (`-Debug-WatchDemoMatch [-Debug-WatchDemoState scoringB|gameOver|matchOver|sideSwitch|coinFlip]`, in-memory store, throwaway defaults suite) used for the simulator screenshots.
+- **Colours:** the watch catalog holds the app's `AccentColor`, `AccentText` and `SecondaryText` with only their DARK values as the single appearance. watchOS has no light appearance and picks the catalog's default entry, which rendered the light-mode secondary grey (#5C5C61) on black; no new colour values were introduced. The app icon slot is empty but valid.
+- **Dynamic type:** the zone text is capped at xLarge (a zone is a fixed-height surface) and scales down to half size rather than clipping; the system chrome (title, Undo) follows the user's size; VoiceOver reads full labels ("Team A, 7 points, serving, server 2").
+
+### How the target was added
+
+The `xcodeproj` gem cannot write file-system-synchronized projects (objectVersion 90), so `project.pbxproj` was edited by hand, following the Live Activity extension commit. The change is 158 added lines and no removed lines:
+
+- a native target `ServerTwo Watch App` (`com.apple.product-type.application`, `SDKROOT = watchos`, `SUPPORTED_PLATFORMS = "watchos watchsimulator"`, `TARGETED_DEVICE_FAMILY = 4`, `WATCHOS_DEPLOYMENT_TARGET = 10.0` to match the package's `.watchOS(.v10)`, `SKIP_INSTALL = YES`), bundle id `com.delonsampaio.ServerTwo.watchkitapp`, generated Info.plist with `WKApplication`, `WKCompanionAppBundleIdentifier = com.delonsampaio.ServerTwo` and `WKRunsIndependentlyOfCompanionApp`, same team, automatic signing and Swift 6 settings as the app;
+- its own synchronized root group, a Frameworks phase with a second `PickleballKit` package product dependency and build file (the pattern the app and the tests use);
+- an "Embed Watch Content" copy phase on the iOS app (`dstSubfolderSpec = 16`, `dstPath = $(CONTENTS_FOLDER_PATH)/Watch`), a target dependency, and `platformFilter = ios` on both so the app's macOS and visionOS destinations do not try to embed it.
+
+The tests' targets and the Live Activity target are untouched. No HealthKit or other entitlement or usage string was added.
+
+### Verified
+
+`plutil -lint` on the project, `xcodebuild -list`, Debug and Release builds of the Watch scheme (watchOS Simulator, fresh compile of every file, no project-source warnings), Debug and Release builds of the iOS scheme (app, Live Activity extension and the embedded `Watch/ServerTwo Watch App.app` in the bundle), the package for watchOS Simulator, a focused iOS test run (`ServerTwoTests` plus `ScoringPromptsUITests`, 371 tests, all passing) to prove the shared-code move did not change the phone, and the screens on the watchOS 27 simulator (40 mm SE 3 and 46 mm Series 12) through the demo launch argument.
+
+### Not verified (nothing was run on a real Watch)
+
+Tapping, haptic feel, battery and Always-On behaviour, Digital Crown, a relaunch after a real termination, and installing the embedded app through the paired phone. The simulator cannot synthesise taps on a watch, so the flow was exercised through the session's unit tests and the demo screenshots, not by tapping the screens.
+
+### Device checklist for the owner
+
+1. Install on a real Watch (through the phone and directly from Xcode) and confirm it launches standalone with the phone off or away.
+2. Start Match, Rules sheet changes persist across launches, coin flip both routes.
+3. Score a doubles side-out game: serving zone solid, "SERVER 1/2" badge correct, tapping the receiving zone gives second server then side out, and the haptics for point, second server or side out, game over and match over feel distinct.
+4. Tap-zone reach with a sweaty finger and the smallest watch you can find; Undo reachable but not accidental.
+5. Best of 3: game-over screen, next server alternates, "Switch sides" appears at 6 only in game 3 (or the only game of a single-game match).
+6. Wrist down, wait, wake: the match is still there (and force-quit mid-game, relaunch: resumes at the same score). Note whether the app stays foreground between points (without a workout session watchOS may return to the watch face; sub-project C fixes this).
+7. Finish a match, then open it with a debugger or logs: one saved record, one pending-sync id.
+8. Large text and VoiceOver on the scoring screen.
+9. Whether Digital Crown scoring is wanted, and how.
