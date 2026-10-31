@@ -24,6 +24,11 @@ enum WatchHaptics {
         WKInterfaceDevice.current().play(.click)
     }
 
+    /// Done on the match-over screen: a plain tap confirmation, not an undo.
+    static func playDone() {
+        WKInterfaceDevice.current().play(.click)
+    }
+
     static func playNotice() {
         WKInterfaceDevice.current().play(.notification)
     }

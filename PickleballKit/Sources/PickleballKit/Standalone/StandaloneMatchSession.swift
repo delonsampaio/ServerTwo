@@ -54,7 +54,7 @@ public final class StandaloneMatchSession {
     public private(set) var sideSwitchNotice: SideSwitchDirection?
 
     private let repository: MatchRepository
-    private var pendingSync: PendingSyncStore
+    private let pendingSync: PendingSyncStore
     private let now: () -> Date
 
     private var startedAt = Date()
@@ -63,6 +63,16 @@ public final class StandaloneMatchSession {
     private var gameCompletionDates: [Date?] = []
     private var sideSwitchTracker = SideSwitchPromptTracker()
     private var savedRecord: MatchRecord?
+    /// A saved record whose deletion failed when the deciding point was undone.
+    /// Kept (and kept in the pending queue) until a delete succeeds, which is
+    /// retried at the next save, so a failure can never leave an orphan plus a
+    /// second record for the same match.
+    private var staleRecord: MatchRecord?
+
+    /// Test seams. `deleteMatchRecord` defaults to the repository's delete;
+    /// `saveFailureForTesting` makes the next save(s) throw.
+    var deleteMatchRecord: (MatchRecord) throws -> Void
+    var saveFailureForTesting: Error?
 
     public init(
         repository: MatchRepository,
@@ -72,6 +82,7 @@ public final class StandaloneMatchSession {
         self.repository = repository
         self.pendingSync = pendingSync
         self.now = now
+        self.deleteMatchRecord = { try repository.deleteMatch($0) }
     }
 
     // MARK: Derived state for the UI
@@ -167,6 +178,12 @@ public final class StandaloneMatchSession {
                 parts.append("server \(serverNumber.rawValue)")
             }
         }
+        // Games won only where the format has games, mirroring the visible
+        // "Games N" line.
+        if let match, match.matchFormat != .bestOfOne {
+            let won = gamesWon(for: team)
+            parts.append(won == 0 ? "no games won" : "\(won) \(won == 1 ? "game" : "games") won")
+        }
         return parts.joined(separator: ", ")
     }
 
@@ -221,8 +238,11 @@ public final class StandaloneMatchSession {
         return true
     }
 
+    /// `afterUpdate` runs once the visible state has changed and BEFORE the
+    /// slower snapshot write (JSON encode, fetch, delete, insert, save), so the
+    /// caller can fire the haptic without waiting for the disk.
     @discardableResult
-    public func recordPoint(for team: Team) -> PointOutcome {
+    public func recordPoint(for team: Team, afterUpdate: (PointOutcome) -> Void = { _ in }) -> PointOutcome {
         guard let match, !match.isMatchOver, !isGameOver, sideSwitchNotice == nil else { return .ignored }
         let before = match.currentGame.state
         let gamesBefore = match.completedGames.count
@@ -248,12 +268,16 @@ public final class StandaloneMatchSession {
         }
 
         updateSideSwitchNotice()
-        persistSnapshot()
+        afterUpdate(outcome)
         if match.isMatchOver {
             // Saved the moment it ends, not on "Done": the Watch app can be
             // suspended or killed on the match-over screen, and a snapshot of a
-            // decided match is discarded on relaunch, which would lose it.
+            // decided match is discarded on relaunch anyway, so none is written
+            // for it. If this save fails the previous snapshot (one point
+            // short) is still there to resume from, and Done retries the save.
             _ = try? saveIfNeeded()
+        } else {
+            persistSnapshot()
         }
         return outcome
     }
@@ -309,6 +333,7 @@ public final class StandaloneMatchSession {
     /// Abandons without saving anything and drops the snapshot.
     public func abandon() {
         try? repository.clearInProgressSnapshot()
+        removeStaleRecord()
         reset()
     }
 
@@ -325,6 +350,14 @@ public final class StandaloneMatchSession {
     private func saveIfNeeded() throws -> MatchRecord {
         if let savedRecord { return savedRecord }
         guard let match else { throw MatchRepositoryError.matchNotOver }
+        if let saveFailureForTesting { throw saveFailureForTesting }
+        // Replace, never duplicate: a record whose delete failed earlier goes
+        // first; if it still cannot be deleted the save fails (Done retries).
+        if let stale = staleRecord {
+            try deleteMatchRecord(stale)
+            pendingSync.confirmSynced(stale.id)
+            staleRecord = nil
+        }
         let record = try repository.saveCompletedMatch(
             match,
             teamAName: Self.teamAName,
@@ -343,10 +376,24 @@ public final class StandaloneMatchSession {
     /// would later be saved again with its real result.
     private func unsaveFinishedMatch() {
         guard let record = savedRecord else { return }
-        let id = record.id
-        try? repository.deleteMatch(record)
-        pendingSync.confirmSynced(id)
         savedRecord = nil
+        do {
+            try deleteMatchRecord(record)
+            pendingSync.confirmSynced(record.id)
+        } catch {
+            // Keep it (and its pending id) for the retry at the next save.
+            staleRecord = record
+        }
+    }
+
+    /// Best effort when abandoning: a leftover stale record is removed if the
+    /// store lets us; otherwise it stays queued rather than being forgotten.
+    private func removeStaleRecord() {
+        guard let stale = staleRecord else { return }
+        if (try? deleteMatchRecord(stale)) != nil {
+            pendingSync.confirmSynced(stale.id)
+            staleRecord = nil
+        }
     }
 
     private func updateSideSwitchNotice() {

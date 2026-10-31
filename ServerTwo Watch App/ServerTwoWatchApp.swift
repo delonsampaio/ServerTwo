@@ -5,11 +5,14 @@ import PickleballKit
 @main
 struct ServerTwoWatchApp: App {
     @State private var session: StandaloneMatchSession
+    /// Held for the app's lifetime: the repository's context belongs to it.
+    /// Nothing in the views uses SwiftData directly, so there is no
+    /// `.modelContainer` modifier.
     private let modelContainer: ModelContainer
-    private let initialStage: WatchRootView.Stage
+    private let initialFlow: WatchFlow
 
     init() {
-        var stage = WatchRootView.Stage.home
+        var flow = WatchFlow()
         let container = Self.makeContainer()
         let repository = MatchRepository(modelContext: ModelContext(container))
         var pendingSync = PendingSyncStore()
@@ -20,7 +23,7 @@ struct ServerTwoWatchApp: App {
         // defaults suite.
         let demo = WatchDemo(arguments: ProcessInfo.processInfo.arguments)
         if demo != nil {
-            pendingSync = PendingSyncStore(userDefaults: UserDefaults(suiteName: "WatchDemo") ?? .standard)
+            pendingSync = PendingSyncStore(suiteName: "WatchDemo")
         }
         #endif
 
@@ -30,7 +33,7 @@ struct ServerTwoWatchApp: App {
             session = StandaloneMatchSession(
                 repository: MatchRepository(modelContext: ModelContext(memory)), pendingSync: pendingSync
             )
-            stage = demo?.apply(to: session) ?? .home
+            flow = demo?.apply(to: session) ?? WatchFlow()
         } else {
             session = StandaloneMatchSession(repository: repository, pendingSync: pendingSync)
             session.resumeIfNeeded()
@@ -42,15 +45,14 @@ struct ServerTwoWatchApp: App {
         #endif
 
         self.modelContainer = container
-        self.initialStage = stage
+        self.initialFlow = flow
         _session = State(initialValue: session)
     }
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView(session: session, initialStage: initialStage)
+            WatchRootView(session: session, initialFlow: initialFlow)
         }
-        .modelContainer(modelContainer)
     }
 
     /// The Watch store is local-only (no iCloud entitlement). If the on-disk

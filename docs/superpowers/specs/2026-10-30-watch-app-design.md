@@ -30,8 +30,8 @@
 
 ### What was built
 
-- **`PickleballKit`:** `StandaloneMatchSession`, `LastUsedRules`, `PendingSyncStore`, `PersistenceContainer.makeLocalOnlyContainer(isStoredInMemoryOnly:)`, and the shared `MatchFormat.isLastGame(index:)`, `SideSwitchDirection`, `SideSwitchPromptTracker` (public). 43 new tests (252 in the package, 209 before), all `swift test`, written test first; the kit also builds for watchOS Simulator. The iOS app lost `MatchFormat+LastGame.swift` and `SideSwitchPromptTracker.swift` and uses the kit versions (`ScoringPrompt.SideSwitchDirection` is now a typealias of the kit type, so its call sites and tests are unchanged).
-- **`ServerTwo Watch App` target**, folder `ServerTwo Watch App/`: `ServerTwoWatchApp` (container, session, resume at launch), `WatchRootView` (screen chosen from the session state), `HomeView` + `RulesSheet`, `CoinFlipView`, `ScoringView` (zones, Undo, End match, side-switch notice), `GameOverView`, `MatchOverView`, `WatchHaptics`, and a DEBUG-only `WatchDemo` (`-Debug-WatchDemoMatch [-Debug-WatchDemoState scoringB|gameOver|matchOver|sideSwitch|coinFlip]`, in-memory store, throwaway defaults suite) used for the simulator screenshots.
+- **`PickleballKit`:** `StandaloneMatchSession`, `LastUsedRules`, `PendingSyncStore`, `PersistenceContainer.makeLocalOnlyContainer(isStoredInMemoryOnly:)`, and the shared `MatchFormat.isLastGame(index:)`, `SideSwitchDirection`, `SideSwitchPromptTracker` (public). 57 new tests (268 in the package, 211 before), all `swift test`. Counted with `grep -c "func test"` per new file: 32 session, 6 side-switch, 5 pending-sync, 3 rules, 9 watch-flow, plus 2 added to `PersistenceContainerTests`; the earlier "209 baseline" was a miscount, the package had 211 test functions before this work. Tests were written before the code they cover except `tapCaption` (added with the screens, test alongside) and a few session tests added in the review-fix round after the first implementation; the first round went RED (compile errors) then GREEN. The kit also builds for watchOS Simulator. The iOS app lost `MatchFormat+LastGame.swift` and `SideSwitchPromptTracker.swift` and uses the kit versions (`ScoringPrompt.SideSwitchDirection` is now a typealias of the kit type, so its call sites and tests are unchanged).
+- **`ServerTwo Watch App` target**, folder `ServerTwo Watch App/`: `ServerTwoWatchApp` (container, session, resume at launch), `WatchRootView` (screen chosen by the kit's tested `WatchFlow` from the session state; after Done or End Match the flow shows Home, verified by `WatchFlowTests`, not by tapping a watch), `HomeView` + `RulesSheet`, `CoinFlipView`, `ScoringView` (zones, Undo, End match, side-switch notice), `GameOverView`, `MatchOverView`, `WatchHaptics`, and a DEBUG-only `WatchDemo` (`-Debug-WatchDemoMatch [-Debug-WatchDemoState scoringB|gameOver|matchOver|sideSwitch|coinFlip]`, in-memory store, throwaway defaults suite) used for the simulator screenshots.
 - **Colours:** the watch catalog holds the app's `AccentColor`, `AccentText` and `SecondaryText` with only their DARK values as the single appearance. watchOS has no light appearance and picks the catalog's default entry, which rendered the light-mode secondary grey (#5C5C61) on black; no new colour values were introduced. The app icon slot is empty but valid.
 - **Dynamic type:** the zone text is capped at xLarge (a zone is a fixed-height surface) and scales down to half size rather than clipping; the system chrome (title, Undo) follows the user's size; VoiceOver reads full labels ("Team A, 7 points, serving, server 2").
 
@@ -44,6 +44,17 @@ The `xcodeproj` gem cannot write file-system-synchronized projects (objectVersio
 - an "Embed Watch Content" copy phase on the iOS app (`dstSubfolderSpec = 16`, `dstPath = $(CONTENTS_FOLDER_PATH)/Watch`), a target dependency, and `platformFilter = ios` on both so the app's macOS and visionOS destinations do not try to embed it.
 
 The tests' targets and the Live Activity target are untouched. No HealthKit or other entitlement or usage string was added.
+
+### Failure paths and kill-safety
+
+- **Final save fails:** the match is saved the moment it ends. No snapshot is written for a decided match (relaunch discards those anyway), so if that save fails the snapshot from one point earlier is still on disk and a relaunch resumes there; while the app stays alive, Done retries the save and alerts "Couldn't save the match" if it fails again.
+- **Undo of the deciding point:** the saved record is deleted and its pending-sync id removed. If the delete fails the record and id are kept as a stale record, and the next save (replaying the deciding point, or Done) deletes it first and then saves, so there is never an orphan plus a second record. If the app is killed before that retry, the stale record stays in the local store and the pending queue; the phone dedupes by match UUID in B, but a duplicate of a replayed match would still reach history, so B should treat it as a known limitation until it can reconcile.
+- **Tap latency:** the haptic runs in a callback before the snapshot write (JSON encode, fetch, delete, insert, save) on every point; the write is still synchronous on the main actor. Measure on a device (checklist).
+- **`PendingSyncStore`** is `Sendable` and locks every read-modify-write (process-wide lock), because B's WatchConnectivity delegate is a second user; it holds the defaults suite name, not a `UserDefaults` object, since that class is not `Sendable`.
+
+### Pre-release
+
+- **Add iOS and watchOS app icons.** The watch `AppIcon` slot is empty: valid for the build, but an App Store upload will most likely reject it, and the iOS app has no icon either.
 
 ### Verified
 
@@ -64,3 +75,7 @@ Tapping, haptic feel, battery and Always-On behaviour, Digital Crown, a relaunch
 7. Finish a match, then open it with a debugger or logs: one saved record, one pending-sync id.
 8. Large text and VoiceOver on the scoring screen.
 9. Whether Digital Crown scoring is wanted, and how.
+10. Tap latency over a long game (a full best of 5): the haptic should be immediate on every point even late in the match, when the snapshot write is largest.
+11. Legibility of the zones on a 40 mm watch, especially the "Tap for 2nd Server" line, in sun and at the largest text size.
+12. Done after a finished match lands on Home (not the coin flip), and End Match returns to Home.
+13. Archive the iOS app (with the embedded Watch app), Validate, and upload to TestFlight; fix whatever validation says (icons first).

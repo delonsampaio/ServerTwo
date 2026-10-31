@@ -4,14 +4,14 @@ import SwiftData
 
 @MainActor
 final class StandaloneMatchSessionTests: XCTestCase {
-    private var defaults: UserDefaults!
+    private var suite = ""
     private var context: ModelContext!
     private var repository: MatchRepository!
     private var clock = Date(timeIntervalSince1970: 1_000)
 
     override func setUp() async throws {
         let suite = "StandaloneMatchSessionTests-\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suite)!
+        self.suite = suite
         addTeardownBlock { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         context = ModelContext(try PersistenceContainer.makeInMemoryContainer())
         repository = MatchRepository(modelContext: context)
@@ -20,7 +20,7 @@ final class StandaloneMatchSessionTests: XCTestCase {
     private func makeSession() -> StandaloneMatchSession {
         StandaloneMatchSession(
             repository: repository,
-            pendingSync: PendingSyncStore(userDefaults: defaults),
+            pendingSync: PendingSyncStore(suiteName: suite),
             now: { [unowned self] in
                 self.clock.addTimeInterval(60)
                 return self.clock
@@ -113,6 +113,17 @@ final class StandaloneMatchSessionTests: XCTestCase {
         let singles = makeSession()
         singles.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfOne, firstServingTeam: .teamA)
         XCTAssertEqual(singles.tapCaption(for: .teamB), "Tap for Side Out")
+    }
+
+    func testSpokenSummaryIncludesGamesWonOnlyWhenTheFormatHasGames() {
+        let session = makeSession()
+        session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfThree, firstServingTeam: .teamA)
+        XCTAssertEqual(session.spokenSummary(for: .teamA), "Team A, 0 points, serving, no games won")
+        XCTAssertEqual(session.spokenSummary(for: .teamB), "Team B, 0 points, no games won")
+        playOutGame(session, winner: .teamA)
+        session.startNextGame()
+        XCTAssertEqual(session.spokenSummary(for: .teamA), "Team A, 0 points, 1 game won")
+        XCTAssertEqual(session.spokenSummary(for: .teamB), "Team B, 0 points, serving, no games won")
     }
 
     func testFullGameToElevenEndsTheMatchInABestOfOne() {
@@ -336,7 +347,7 @@ final class StandaloneMatchSessionTests: XCTestCase {
         XCTAssertTrue(games.allSatisfy { $0.completedAt != nil }, "completion dates are captured live")
         let names = Set((record.teamSides ?? []).map(\.displayName))
         XCTAssertEqual(names, ["Team A", "Team B"])
-        XCTAssertEqual(PendingSyncStore(userDefaults: defaults).pendingMatchIDs, [record.id])
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs, [record.id])
         // The snapshot is gone: a relaunch must not resurrect the finished match.
         XCTAssertNil(try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil))
     }
@@ -349,7 +360,7 @@ final class StandaloneMatchSessionTests: XCTestCase {
         let second = try session.finish()
         XCTAssertEqual(first.id, second.id)
         XCTAssertEqual(try repository.fetchMatchHistory().count, 1)
-        XCTAssertEqual(PendingSyncStore(userDefaults: defaults).pendingMatchIDs.count, 1)
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs.count, 1)
     }
 
     func testMatchIsSavedTheMomentItEndsSoLeavingTheMatchOverScreenLosesNothing() throws {
@@ -357,7 +368,7 @@ final class StandaloneMatchSessionTests: XCTestCase {
         session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfOne, firstServingTeam: .teamA)
         tap(session, .teamA, times: 11)
         XCTAssertEqual(try repository.fetchMatchHistory().count, 1)
-        XCTAssertEqual(PendingSyncStore(userDefaults: defaults).pendingMatchIDs.count, 1)
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs.count, 1)
     }
 
     func testUndoingTheMatchWinningPointUnsavesTheMatch() throws {
@@ -368,7 +379,7 @@ final class StandaloneMatchSessionTests: XCTestCase {
         XCTAssertFalse(session.isMatchOver)
         XCTAssertEqual(session.score(for: .teamA), 10)
         XCTAssertEqual(try repository.fetchMatchHistory().count, 0)
-        XCTAssertEqual(PendingSyncStore(userDefaults: defaults).pendingMatchIDs, [])
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs, [])
         // And the match is live again after a relaunch.
         let relaunched = makeSession()
         XCTAssertTrue(relaunched.resumeIfNeeded())
@@ -398,7 +409,7 @@ final class StandaloneMatchSessionTests: XCTestCase {
         XCTAssertFalse(session.isActive)
         XCTAssertEqual(try repository.fetchMatchHistory().count, 0)
         XCTAssertNil(try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil))
-        XCTAssertEqual(PendingSyncStore(userDefaults: defaults).pendingMatchIDs, [])
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs, [])
         XCTAssertFalse(makeSession().resumeIfNeeded())
     }
 
@@ -412,5 +423,101 @@ final class StandaloneMatchSessionTests: XCTestCase {
         XCTAssertTrue(relaunched.resumeIfNeeded())
         XCTAssertEqual(relaunched.servingTeam, .teamB)
         XCTAssertEqual(relaunched.score(for: .teamA), 0)
+    }
+
+    // MARK: Initial service alternation, undo after save
+
+    func testReceivingTeamWinningGameOneStillGivesTheOpponentOfTheFirstServerTheNextServe() {
+        let session = makeSession()
+        session.start(configuration: GameConfiguration(), format: .bestOfThree, firstServingTeam: .teamA)
+        playOutGame(session, winner: .teamB)           // B wins game 1 although A served first
+        XCTAssertEqual(session.lastCompletedGame?.winner, .teamB)
+        XCTAssertEqual(session.lastCompletedGame?.nextServingTeam, .teamB, "opponent of A, not 'loser serves'")
+        session.startNextGame()
+        XCTAssertEqual(session.servingTeam, .teamB)
+
+        playOutGame(session, winner: .teamA)           // A wins game 2 (B served first): 1-1
+        XCTAssertEqual(session.lastCompletedGame?.winner, .teamA)
+        session.startNextGame()
+        XCTAssertEqual(session.servingTeam, .teamA, "game 3 starts with game 1's first server")
+    }
+
+    func testUndoingTheDecidingPointOfABestOfThreeRemovesTheRecordAndReplaySavesExactlyOne() throws {
+        let session = makeSession()
+        session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfThree, firstServingTeam: .teamA)
+        playOutGame(session, winner: .teamA)
+        session.startNextGame()
+        playOutGame(session, winner: .teamA)
+        XCTAssertTrue(session.isMatchOver)
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 1)
+
+        session.undo()
+        XCTAssertFalse(session.isMatchOver)
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 0)
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs, [])
+
+        playOutGame(session, winner: .teamA)
+        XCTAssertTrue(session.isMatchOver)
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 1)
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs.count, 1)
+    }
+
+    func testFailedDeleteOnUndoIsRetriedAtTheNextSaveSoThereIsNeverASecondRecord() throws {
+        let session = makeSession()
+        session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfOne, firstServingTeam: .teamA)
+        tap(session, .teamA, times: 11)
+        let original = try XCTUnwrap(try repository.fetchMatchHistory().first).id
+
+        struct DeleteFailed: Error {}
+        session.deleteMatchRecord = { _ in throw DeleteFailed() }
+        session.undo()
+        XCTAssertFalse(session.isMatchOver, "the undo still takes effect in the live match")
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 1, "the stale record is still there")
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs, [original],
+                       "and still queued: it is only dropped once it is really deleted")
+
+        // The delete works again: replaying the deciding point replaces it.
+        session.deleteMatchRecord = { [repository] in try repository!.deleteMatch($0) }
+        tap(session, .teamA, times: 1)
+        XCTAssertTrue(session.isMatchOver)
+        let history = try repository.fetchMatchHistory()
+        XCTAssertEqual(history.count, 1)
+        XCTAssertNotEqual(history.first?.id, original)
+        XCTAssertEqual(PendingSyncStore(suiteName: suite).pendingMatchIDs, [history[0].id])
+    }
+
+    func testPointCallbackRunsBeforeTheSnapshotIsWritten() throws {
+        let session = makeSession()
+        session.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        var scoreSeenInCallback: Int?
+        var snapshotScoreAtCallback: Int?
+        session.recordPoint(for: .teamA) { _ in
+            scoreSeenInCallback = session.score(for: .teamA)
+            snapshotScoreAtCallback = try? self.repository
+                .loadInProgressMatch(proUnlocked: true, demoPointCap: nil)?.match.currentGame.state.teamAScore
+        }
+        XCTAssertEqual(scoreSeenInCallback, 1, "the UI state is already updated for the haptic")
+        XCTAssertEqual(snapshotScoreAtCallback, 0, "the slower snapshot write comes after the callback")
+        XCTAssertEqual(try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil)?.match.currentGame.state.teamAScore, 1)
+    }
+
+    func testDecidedMatchSnapshotIsNotWrittenSoAFailedFinalSaveResumesOnePointShort() throws {
+        let session = makeSession()
+        session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfOne, firstServingTeam: .teamA)
+        tap(session, .teamA, times: 10)
+        struct SaveFailed: Error {}
+        session.saveFailureForTesting = SaveFailed()
+        session.recordPoint(for: .teamA)
+        XCTAssertTrue(session.isMatchOver)
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 0)
+        // Killed now: the snapshot from before the deciding point is what's left.
+        let relaunched = makeSession()
+        XCTAssertTrue(relaunched.resumeIfNeeded())
+        XCTAssertEqual(relaunched.score(for: .teamA), 10)
+        XCTAssertFalse(relaunched.isMatchOver)
+        // Back in the first session, Done retries the save and succeeds.
+        session.saveFailureForTesting = nil
+        try session.dismissFinishedMatch()
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 1)
     }
 }

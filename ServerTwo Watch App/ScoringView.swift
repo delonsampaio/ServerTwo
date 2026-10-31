@@ -6,7 +6,6 @@ import PickleballKit
 /// wide as the screen and a big score still fits at the largest text sizes.
 struct ScoringView: View {
     let session: StandaloneMatchSession
-    let onAbandon: () -> Void
 
     @State private var confirmingEnd = false
 
@@ -32,15 +31,12 @@ struct ScoringView: View {
         }
         .alert("End match?", isPresented: $confirmingEnd) {
             Button("End Match", role: .destructive) {
+                // The flow shows Home by itself once the session is idle.
                 session.abandon()
-                onAbandon()
             }
             Button("Keep Playing", role: .cancel) {}
         } message: {
             Text("The score will not be saved.")
-        }
-        .onChange(of: session.sideSwitchNotice) { _, notice in
-            if notice != nil { WatchHaptics.playNotice() }
         }
     }
 
@@ -50,7 +46,13 @@ struct ScoringView: View {
             ScoreZone(session: session, team: .teamB)
             Button {
                 session.undo()
-                WatchHaptics.playUndo()
+                // An undo can bring the "Switch back" notice up; one haptic,
+                // the stronger one, not a click and then a notification.
+                if session.sideSwitchNotice != nil {
+                    WatchHaptics.playNotice()
+                } else {
+                    WatchHaptics.playUndo()
+                }
             } label: {
                 Label("Undo", systemImage: "arrow.uturn.backward")
                     .font(.footnote.weight(.semibold))
@@ -79,8 +81,16 @@ private struct ScoreZone: View {
 
     var body: some View {
         Button {
-            let outcome = session.recordPoint(for: team)
-            WatchHaptics.play(for: outcome)
+            // The haptic goes in the callback, which runs before the snapshot
+            // write, so it is not delayed by the disk. When the point raises
+            // the side-switch notice only the stronger haptic plays.
+            session.recordPoint(for: team) { outcome in
+                if session.sideSwitchNotice != nil {
+                    WatchHaptics.playNotice()
+                } else {
+                    WatchHaptics.play(for: outcome)
+                }
+            }
         } label: {
             HStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -111,7 +121,9 @@ private struct ScoreZone: View {
             // VoiceOver reads the full label whatever the size.
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
             .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // 44 pt floor: with large system text the title and Undo grow and
+            // squeeze the zones, which must never get shorter than a tap target.
+            .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity)
             // The serving team's zone is solid accent, the other a quiet
             // tint of it: a glanceable cue that backs up the text badge.
             .background(

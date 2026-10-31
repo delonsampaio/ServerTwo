@@ -1,36 +1,38 @@
 import SwiftUI
 import PickleballKit
 
-/// Picks the screen from the session: scoring, game over and match over follow
-/// the engine's state (so a relaunch lands on the right one); only the two
-/// pre-match screens (home, coin flip) are local state.
+/// Shows the screen `WatchFlow` picks from the session's state (scoring, game
+/// over and match over follow the engine, so a relaunch lands on the right
+/// one); the only local state is the coin-flip step, owned by the tested flow.
 struct WatchRootView: View {
-    enum Stage { case home, coinFlip }
-
     let session: StandaloneMatchSession
-    @State private var stage: Stage
+    @State private var flow: WatchFlow
     @State private var rules = LastUsedRules()
 
-    init(session: StandaloneMatchSession, initialStage: Stage = .home) {
+    init(session: StandaloneMatchSession, initialFlow: WatchFlow = WatchFlow()) {
         self.session = session
-        _stage = State(initialValue: initialStage)
+        _flow = State(initialValue: initialFlow)
     }
 
     var body: some View {
         NavigationStack {
-            if session.isActive {
-                if session.isMatchOver {
-                    MatchOverView(session: session)
-                } else if session.isGameOver {
-                    GameOverView(session: session)
-                } else {
-                    ScoringView(session: session, onAbandon: { stage = .home })
-                }
-            } else if stage == .coinFlip {
+            switch flow.screen(
+                isActive: session.isActive, isGameOver: session.isGameOver, isMatchOver: session.isMatchOver
+            ) {
+            case .matchOver:
+                MatchOverView(session: session)
+            case .gameOver:
+                GameOverView(session: session)
+            case .scoring:
+                ScoringView(session: session)
+            case .coinFlip:
                 CoinFlipView(
-                    onCancel: { stage = .home },
+                    onCancel: { flow.coinFlipCancelled() },
                     onBegin: { firstServer in
                         rules.save()
+                        // Clear the coin-flip step BEFORE the match exists, so
+                        // when "Done" later ends it the flow shows Home.
+                        flow.matchBegan()
                         session.start(
                             configuration: rules.configuration,
                             format: rules.matchFormat,
@@ -38,8 +40,8 @@ struct WatchRootView: View {
                         )
                     }
                 )
-            } else {
-                HomeView(rules: $rules, onStart: { stage = .coinFlip })
+            case .home:
+                HomeView(rules: $rules, onStart: { flow.startMatchTapped() })
             }
         }
     }

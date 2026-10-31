@@ -27,7 +27,7 @@ struct MatchOverView: View {
                 Button {
                     do {
                         try session.dismissFinishedMatch()
-                        WatchHaptics.playUndo()
+                        WatchHaptics.playDone()
                     } catch {
                         saveFailed = true
                     }

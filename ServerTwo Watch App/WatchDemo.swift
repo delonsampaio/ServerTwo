@@ -21,8 +21,12 @@ struct WatchDemo {
     }
 
     @MainActor
-    func apply(to session: StandaloneMatchSession) -> WatchRootView.Stage {
-        if state == "coinFlip" { return .coinFlip }
+    func apply(to session: StandaloneMatchSession) -> WatchFlow {
+        var flow = WatchFlow()
+        if state == "coinFlip" {
+            flow.startMatchTapped()
+            return flow
+        }
         let bestOfThree = state != "sideSwitch"
         session.start(
             configuration: GameConfiguration(playMode: .doubles, scoringFormat: .sideOut),
@@ -53,7 +57,7 @@ struct WatchDemo {
             play(session, toScoreA: 7, b: 3)
             serve(session, .teamA)
         }
-        return .home
+        return flow
     }
 
     /// Taps until the board reads `a`-`b` (or the game/match ends first). In
