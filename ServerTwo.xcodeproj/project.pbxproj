@@ -586,7 +586,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Server Two: Pickleball Tracker";
+				INFOPLIST_KEY_CFBundleDisplayName = "Server Two";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports-games";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -631,7 +632,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Server Two: Pickleball Tracker";
+				INFOPLIST_KEY_CFBundleDisplayName = "Server Two";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports-games";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -828,6 +830,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ServerTwo Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Server Two";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Server Two reads your heart rate during a match so you can see it while you score.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Server Two saves each match to Health as a pickleball workout.";
 				INFOPLIST_KEY_WKApplication = YES;
@@ -867,6 +870,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ServerTwo Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Server Two";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Server Two reads your heart rate during a match so you can see it while you score.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Server Two saves each match to Health as a pickleball workout.";
 				INFOPLIST_KEY_WKApplication = YES;
