@@ -29,76 +29,98 @@ struct OnboardingView: View {
     /// context, for an analogous reliability reason.
     let modelContext: ModelContext
     @State private var yourName: String = ""
+    @FocusState private var isNameFocused: Bool
     // 64 pt and 32 pt at the default text size; they scale with Dynamic Type.
     @ScaledMetric(relativeTo: .largeTitle) private var heroIconSize: CGFloat = 64
     @ScaledMetric(relativeTo: .title2) private var featureIconWidth: CGFloat = 32
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    Image(systemName: "figure.pickleball")
-                        .font(.system(size: heroIconSize))
-                        .foregroundStyle(.tint)
-                        .accessibilityHidden(true)
-                    Text("Welcome to Server Two")
-                        .font(.title.bold())
-                        .multilineTextAlignment(.center)
-                    Text("Score singles and doubles matches point by point. Server Two keeps track of who's serving, which side everyone's on, and your stats over time.")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Color.secondaryText)
-
-                    VStack(alignment: .leading, spacing: 16) {
-                        featureRow(
-                            icon: "arrow.left.arrow.right.circle.fill",
-                            title: "Automatic Court Positions",
-                            detail: "Doubles side-out games show which partner is on the left or right. Hold a score card to swap them if you started the other way round."
-                        )
-                        featureRow(
-                            icon: "hand.tap.fill",
-                            title: "Tap to Score, Hold to Correct",
-                            detail: "Tap a card to score a point, or press and hold to fix a disputed score."
-                        )
-                        featureRow(
-                            icon: "person.2.fill",
-                            title: "Partner & Rival Chemistry",
-                            detail: "See your record with every partner and against every rival."
-                        )
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    VStack(spacing: 8) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "person.crop.circle.fill")
-                                .foregroundStyle(Color.accentColor)
-                                .accessibilityHidden(true)
-                            TextField("Your Name (Optional)", text: $yourName)
-                                .accessibilityIdentifier("Your Name")
-                        }
-                        .padding(14)
-                        .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        Text("Set this once so your personal win/loss record starts tracking automatically.")
-                            .font(.caption)
-                            .foregroundStyle(Color.secondaryText)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 24) {
+                        Image(systemName: "figure.pickleball")
+                            .font(.system(size: heroIconSize))
+                            .foregroundStyle(.tint)
+                            .accessibilityHidden(true)
+                        Text("Welcome to Server Two")
+                            .font(.title.bold())
                             .multilineTextAlignment(.center)
-                    }
+                        Text("Score singles and doubles matches point by point. Server Two keeps track of who's serving, which side everyone's on, and your stats over time.")
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(Color.secondaryText)
 
-                    // Deliberately NOT identified "Done": the toolbar button owns
-                    // that identifier, which every UI test's
-                    // `dismissOnboardingIfPresented` taps.
-                    Button {
-                        finish()
-                    } label: {
-                        Text("Get Started")
-                            .frame(maxWidth: .infinity)
+                        VStack(alignment: .leading, spacing: 16) {
+                            featureRow(
+                                icon: "arrow.left.arrow.right.circle.fill",
+                                title: "Automatic Court Positions",
+                                detail: "Doubles side-out games show which partner is on the left or right. Hold a score card to swap them if you started the other way round."
+                            )
+                            featureRow(
+                                icon: "hand.tap.fill",
+                                title: "Tap to Score, Hold to Correct",
+                                detail: "Tap a card to score a point, or press and hold to fix a disputed score."
+                            )
+                            featureRow(
+                                icon: "person.2.fill",
+                                title: "Partner & Rival Chemistry",
+                                detail: "See your record with every partner and against every rival."
+                            )
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        // The name field and the button below it: scrolled into view
+                        // together when the keyboard opens, so neither is covered.
+                        VStack(spacing: 24) {
+                            VStack(spacing: 8) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "person.crop.circle.fill")
+                                        .foregroundStyle(Color.accentColor)
+                                        .accessibilityHidden(true)
+                                    TextField("Your Name (Optional)", text: $yourName)
+                                        .focused($isNameFocused)
+                                        .textContentType(.givenName)
+                                        .submitLabel(.done)
+                                        .onSubmit { finish() }
+                                        .accessibilityIdentifier("Your Name")
+                                }
+                                .padding(14)
+                                .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                Text("Set this once so your personal win/loss record starts tracking automatically.")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.secondaryText)
+                                    .multilineTextAlignment(.center)
+                            }
+
+                            // Deliberately NOT identified "Done": the toolbar button owns
+                            // that identifier, which every UI test's
+                            // `dismissOnboardingIfPresented` taps.
+                            Button {
+                                finish()
+                            } label: {
+                                Text("Get Started")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.glassProminent)
+                            .controlSize(.large)
+                            .accessibilityIdentifier("Get Started")
+                        }
+                        .id(Self.nameSectionID)
                     }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.large)
-                    .accessibilityIdentifier("Get Started")
+                    .padding()
                 }
-                .padding()
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollDismissesKeyboard(.interactively)
+                // The keyboard's height reaches the scroll view a moment after focus
+                // moves, so the scroll waits for it.
+                .onChange(of: isNameFocused) { _, focused in
+                    guard focused else { return }
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        withAnimation { proxy.scrollTo(Self.nameSectionID, anchor: .bottom) }
+                    }
+                }
             }
-            .scrollBounceBehavior(.basedOnSize)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
@@ -111,6 +133,8 @@ struct OnboardingView: View {
             }
         }
     }
+
+    private static let nameSectionID = "nameSection"
 
     private func featureRow(icon: String, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
