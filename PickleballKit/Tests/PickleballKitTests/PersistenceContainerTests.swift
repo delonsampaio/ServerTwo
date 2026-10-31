@@ -36,4 +36,32 @@ final class PersistenceContainerTests: XCTestCase {
         XCTAssertTrue(inProgressEntityNames.contains("InProgressGameState"))
         XCTAssertEqual(historyEntityNames, ["TeamSide", "MatchRecord", "GameRecord", "PointEvent", "SavedPlayer"])
     }
+
+    func testLocalOnlyContainerHoldsEveryModelInOneStoreWithoutCloudKit() throws {
+        let container = try PersistenceContainer.makeLocalOnlyContainer(isStoredInMemoryOnly: true)
+        XCTAssertEqual(container.configurations.count, 1)
+        let configuration = try XCTUnwrap(container.configurations.first)
+        // `CloudKitDatabase` is not Equatable, so compare its description with
+        // `.none`'s (a CloudKit database prints its container identifier).
+        XCTAssertEqual(
+            String(describing: configuration.cloudKitDatabase),
+            String(describing: ModelConfiguration.CloudKitDatabase.none)
+        )
+        let entityNames = Set((configuration.schema?.entities ?? []).map { $0.name })
+        XCTAssertEqual(
+            entityNames,
+            ["TeamSide", "MatchRecord", "GameRecord", "PointEvent", "SavedPlayer", "InProgressGameState"]
+        )
+    }
+
+    func testLocalOnlyContainerStoresAFinishedMatchAndASnapshot() throws {
+        let context = ModelContext(try PersistenceContainer.makeLocalOnlyContainer(isStoredInMemoryOnly: true))
+        let repository = MatchRepository(modelContext: context)
+        let match = PickleballMatch(configuration: GameConfiguration(playMode: .singles), matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil)
+        for _ in 0..<11 { match.recordPoint(for: .teamA) }
+        try repository.saveInProgressSnapshot(for: match, startedAt: Date())
+        try repository.saveCompletedMatch(match, teamAName: "Team A", teamBName: "Team B", startedAt: Date())
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 1)
+        XCTAssertNil(try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil))
+    }
 }

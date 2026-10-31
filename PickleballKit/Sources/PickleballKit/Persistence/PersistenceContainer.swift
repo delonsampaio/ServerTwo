@@ -48,6 +48,22 @@ public enum PersistenceContainer {
         return try ModelContainer(for: fullSchema, configurations: historyConfiguration, inProgressConfiguration)
     }
 
+    /// One local-only store holding every model, no CloudKit. For the
+    /// standalone Watch app, which has no iCloud entitlement and keeps its
+    /// finished matches on the device until the iPhone confirms them.
+    /// `isStoredInMemoryOnly` exists for tests.
+    public static func makeLocalOnlyContainer(isStoredInMemoryOnly: Bool = false) throws -> ModelContainer {
+        let configuration = ModelConfiguration(
+            // Unique per in-memory container for the same bleed-through reason
+            // as `makeInMemoryContainer`.
+            isStoredInMemoryOnly ? "Watch-\(UUID().uuidString)" : "Watch",
+            schema: fullSchema,
+            isStoredInMemoryOnly: isStoredInMemoryOnly,
+            cloudKitDatabase: .none
+        )
+        return try ModelContainer(for: fullSchema, configurations: configuration)
+    }
+
     /// An in-memory container with no CloudKit involvement, for tests. Each
     /// call gets uniquely-named configurations — reusing a fixed name like
     /// "History" across many in-memory containers in the same test process

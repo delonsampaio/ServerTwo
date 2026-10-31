@@ -30,23 +30,13 @@ enum ScoringPrompt: Identifiable, Equatable {
         completedGameCount: Int
     )
 
-    /// `switchBack` is the undo/correction case: the engine restores the whole
-    /// earlier game state including `hasSideSwitched`, so dropping back under
-    /// the threshold puts the teams back on their starting ends.
-    enum SideSwitchDirection: Equatable {
-        case switchSides
-        case switchBack
-    }
+    /// The direction type and the "what does the user need telling" rule live
+    /// in PickleballKit so the Watch app announces a change of ends under the
+    /// same rules; this keeps the phone's existing call sites unchanged.
+    typealias SideSwitchDirection = PickleballKit.SideSwitchDirection
 
-    /// What (if anything) the user needs telling, given the live
-    /// `hasSideSwitched` flag and the value they were last prompted about for
-    /// this game. Equal means they already know the current state of the court.
     static func sideSwitchDirection(hasSwitched: Bool, promptedState: Bool) -> SideSwitchDirection? {
-        switch (hasSwitched, promptedState) {
-        case (true, false): .switchSides
-        case (false, true): .switchBack
-        default: nil
-        }
+        PickleballKit.SideSwitchDirection.needed(hasSwitched: hasSwitched, promptedState: promptedState)
     }
 
     /// Whether a change in `completedGames.count` should raise Game Over, and
