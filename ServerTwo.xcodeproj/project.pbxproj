@@ -82,6 +82,14 @@
 			);
 			target = 15A000000000000000000004 /* ServerTwoLiveActivity */;
 		};
+		15B000000000000000000012 /* Exceptions for "ServerTwo Watch App" folder in "ServerTwo Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				ServerTwoWatchApp.entitlements,
+			);
+			target = 15B000000000000000000004 /* ServerTwo Watch App */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -115,6 +123,9 @@
 		};
 		15B000000000000000000002 /* ServerTwo Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				15B000000000000000000012 /* Exceptions for "ServerTwo Watch App" folder in "ServerTwo Watch App" target */,
+			);
 			path = "ServerTwo Watch App";
 			sourceTree = "<group>";
 		};
@@ -807,12 +818,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "ServerTwo Watch App/ServerTwoWatchApp.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4CD86DZ6WP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ServerTwo Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Server Two";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Server Two reads your heart rate during a match so you can see it while you score.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Server Two saves each match to Health as a pickleball workout.";
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.delonsampaio.ServerTwo;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
@@ -842,12 +857,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "ServerTwo Watch App/ServerTwoWatchApp.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4CD86DZ6WP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "ServerTwo Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Server Two";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Server Two reads your heart rate during a match so you can see it while you score.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Server Two saves each match to Health as a pickleball workout.";
 				INFOPLIST_KEY_WKApplication = YES;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.delonsampaio.ServerTwo;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
