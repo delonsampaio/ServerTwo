@@ -3,6 +3,7 @@ import PickleballKit
 
 struct HomeView: View {
     @Binding var rules: LastUsedRules
+    let access: WatchAccess
     let onStart: () -> Void
     @State private var showingRules = false
 
@@ -25,7 +26,18 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!access.canStartMatch)
                 .accessibilityIdentifier("Start Match")
+
+                // No purchase UI on the watch in v1: the unlock happens on the
+                // iPhone and reaches here over WatchConnectivity.
+                if !access.canStartMatch {
+                    Text("Free demo used. Unlock Server Two Pro on your iPhone.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("DemoUsed")
+                }
 
                 Button("Rules") { showingRules = true }
                     .frame(minHeight: 44)

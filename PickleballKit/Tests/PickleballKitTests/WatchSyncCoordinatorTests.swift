@@ -177,4 +177,11 @@ final class WatchSyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(pending.isPending(id))
         XCTAssertNotNil(try repository.fetchMatchRecord(id: id))
     }
+
+    func testThePhonesStateIsForwardedFromTheTransport() {
+        var received: [PhoneStateContext] = []
+        coordinator.onPhoneState = { received.append($0) }
+        transport.simulatePhoneState(PhoneStateContext(proUnlocked: true, completedMatchCount: 2))
+        XCTAssertEqual(received, [PhoneStateContext(proUnlocked: true, completedMatchCount: 2)])
+    }
 }

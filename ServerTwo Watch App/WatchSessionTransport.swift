@@ -14,6 +14,7 @@ nonisolated final class WatchSessionTransport: NSObject, WCSessionDelegate, Watc
     private struct Handlers: Sendable {
         let onActivated: @MainActor @Sendable () -> Void
         let onAcknowledged: @MainActor @Sendable (UUID) -> Void
+        let onPhoneState: @MainActor @Sendable (PhoneStateContext) -> Void
     }
 
     private let handlers = OSAllocatedUnfairLock<Handlers?>(initialState: nil)
@@ -55,9 +56,12 @@ nonisolated final class WatchSessionTransport: NSObject, WCSessionDelegate, Watc
 
     func start(
         onActivated: @escaping @MainActor @Sendable () -> Void,
-        onAcknowledged: @escaping @MainActor @Sendable (UUID) -> Void
+        onAcknowledged: @escaping @MainActor @Sendable (UUID) -> Void,
+        onPhoneState: @escaping @MainActor @Sendable (PhoneStateContext) -> Void
     ) {
-        handlers.withLock { $0 = Handlers(onActivated: onActivated, onAcknowledged: onAcknowledged) }
+        handlers.withLock {
+            $0 = Handlers(onActivated: onActivated, onAcknowledged: onAcknowledged, onPhoneState: onPhoneState)
+        }
         guard WCSession.isSupported() else { return }
         // Delegate first, then activate: callbacks that arrive during
         // activation must have somewhere to go.
@@ -75,7 +79,20 @@ nonisolated final class WatchSessionTransport: NSObject, WCSessionDelegate, Watc
         if let error { log.error("watch: WCSession activation failed: \(error.localizedDescription, privacy: .public)") }
         log.info("watch: activation finished (\(Self.stateSummary(), privacy: .public))")
         guard activationState == .activated, let handlers = handlers.withLock({ $0 }) else { return }
-        Task { @MainActor in handlers.onActivated() }
+        // The phone's last pushed state (Pro flag, demo count) is kept by the
+        // system for the next launch; apply it before anything else needs it.
+        let lastState = PhoneStateContext(applicationContext: session.receivedApplicationContext)
+        Task { @MainActor in
+            if let lastState { handlers.onPhoneState(lastState) }
+            handlers.onActivated()
+        }
+    }
+
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        let state = PhoneStateContext(applicationContext: applicationContext)
+        log.info("watch: received phone state pro=\(state?.proUnlocked.description ?? "unreadable", privacy: .public) count=\(state?.completedMatchCount ?? -1, privacy: .public)")
+        guard let state, let handlers = handlers.withLock({ $0 }) else { return }
+        Task { @MainActor in handlers.onPhoneState(state) }
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {

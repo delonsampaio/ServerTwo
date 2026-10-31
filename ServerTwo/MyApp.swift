@@ -43,10 +43,22 @@ struct MyApp: App {
             repository: MatchRepository(modelContext: container.mainContext),
             didImport: { controller.recordCompletedMatchSaved(historyCountBeforeSave: $0) }
         )
-        let watchSync = PhoneWatchSync { incoming, acknowledger in
-            guard receiver.receive(incoming, acknowledger: acknowledger) == .imported else { return }
-            NotificationCenter.default.post(name: .matchSyncedFromWatch, object: nil)
-        }
+        // The Watch's free-demo gate needs the Pro flag and the shared match
+        // count: pushed at activation, on an entitlement change and whenever a
+        // match is counted (`onDemoStateChanged`).
+        let watchSync = PhoneWatchSync(
+            handler: { incoming, acknowledger in
+                guard receiver.receive(incoming, acknowledger: acknowledger) == .imported else { return }
+                NotificationCenter.default.post(name: .matchSyncedFromWatch, object: nil)
+            },
+            onActivated: { [controller] in controller.onDemoStateChanged?() }
+        )
+        let publisher = PhoneStatePublisher(
+            pusher: watchSync,
+            isPro: { [controller] in controller.proUnlocked },
+            completedMatchCount: { [controller] in controller.completedMatchCount }
+        )
+        controller.onDemoStateChanged = { publisher.publish() }
         watchSync.activate()
         self.watchSync = watchSync
         #endif

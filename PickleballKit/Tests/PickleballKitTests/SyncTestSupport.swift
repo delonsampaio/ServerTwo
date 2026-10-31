@@ -100,21 +100,25 @@ final class FakeWatchTransport: WatchSyncTransport {
     private(set) var started = false
     private var onActivated: (@MainActor @Sendable () -> Void)?
     private var onAcknowledged: (@MainActor @Sendable (UUID) -> Void)?
+    private var onPhoneState: (@MainActor @Sendable (PhoneStateContext) -> Void)?
 
     func hasOutstandingTransfer(forMatchID id: UUID) -> Bool { outstanding.contains(id) }
     func send(_ message: SyncedMatchMessage) { sent.append(message) }
 
     func start(
         onActivated: @escaping @MainActor @Sendable () -> Void,
-        onAcknowledged: @escaping @MainActor @Sendable (UUID) -> Void
+        onAcknowledged: @escaping @MainActor @Sendable (UUID) -> Void,
+        onPhoneState: @escaping @MainActor @Sendable (PhoneStateContext) -> Void
     ) {
         started = true
+        self.onPhoneState = onPhoneState
         self.onActivated = onActivated
         self.onAcknowledged = onAcknowledged
     }
 
     func simulateActivation() { onActivated?() }
     func simulateAcknowledgement(_ id: UUID) { onAcknowledged?(id) }
+    func simulatePhoneState(_ context: PhoneStateContext) { onPhoneState?(context) }
 }
 
 final class FakeAcknowledger: PhoneSyncAcknowledging {

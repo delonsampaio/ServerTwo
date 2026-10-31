@@ -639,4 +639,69 @@ final class StandaloneMatchSessionTests: XCTestCase {
         XCTAssertEqual(fired, 0)
         XCTAssertEqual(try repository.fetchMatchHistory().count, 0)
     }
+
+    // MARK: Free-demo counter (B1 gate)
+
+    private func makeCountingSession(_ counter: WatchLifetimeCounter) -> StandaloneMatchSession {
+        StandaloneMatchSession(
+            repository: repository,
+            pendingSync: PendingSyncStore(suiteName: suite),
+            lifetimeCounter: counter,
+            now: { [unowned self] in
+                self.clock.addTimeInterval(60)
+                return self.clock
+            }
+        )
+    }
+
+    func testSavingAMatchCountsItOnce() throws {
+        let counter = WatchLifetimeCounter(suiteName: suite)
+        let session = makeCountingSession(counter)
+        XCTAssertEqual(counter.count, 0)
+        finishMatch(session)
+        XCTAssertEqual(counter.count, 1)
+        try session.dismissFinishedMatch()  // Done must not count it again
+        XCTAssertEqual(counter.count, 1)
+    }
+
+    func testUndoingTheDecidingPointGivesTheMatchBackAndReplayingCountsAgain() throws {
+        let counter = WatchLifetimeCounter(suiteName: suite)
+        let session = makeCountingSession(counter)
+        finishMatch(session)
+        session.undo()
+        XCTAssertEqual(counter.count, 0)
+        playOutGame(session, winner: .teamA)
+        XCTAssertEqual(counter.count, 1)
+    }
+
+    func testAFailedSaveDoesNotCount() throws {
+        let counter = WatchLifetimeCounter(suiteName: suite)
+        let session = makeCountingSession(counter)
+        session.saveFailureForTesting = NSError(domain: "x", code: 1)
+        finishMatch(session)
+        XCTAssertEqual(counter.count, 0)
+        session.saveFailureForTesting = nil
+        try session.dismissFinishedMatch()
+        XCTAssertEqual(counter.count, 1)
+    }
+
+    func testASaveThatThrowsAfterStoringStillCountsOnce() throws {
+        let counter = WatchLifetimeCounter(suiteName: suite)
+        let session = makeCountingSession(counter)
+        repository.afterSaveHookForTesting = { throw HookFailure() }
+        finishMatch(session)
+        XCTAssertEqual(counter.count, 1)
+        repository.afterSaveHookForTesting = nil
+        try session.dismissFinishedMatch()
+        XCTAssertEqual(counter.count, 1)
+    }
+
+    func testAbandoningAMatchInProgressNeverCounts() {
+        let counter = WatchLifetimeCounter(suiteName: suite)
+        let session = makeCountingSession(counter)
+        session.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        tap(session, .teamA, times: 3)
+        session.abandon()
+        XCTAssertEqual(counter.count, 0)
+    }
 }

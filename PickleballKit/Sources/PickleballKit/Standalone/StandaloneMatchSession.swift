@@ -55,6 +55,9 @@ public final class StandaloneMatchSession {
 
     private let repository: MatchRepository
     private let pendingSync: PendingSyncStore
+    /// Matches this Watch has completed for life (the free-demo budget):
+    /// +1 when a finished match is saved, -1 when its deciding point is undone.
+    private let lifetimeCounter: WatchLifetimeCounter
     private let now: () -> Date
 
     private var startedAt = Date()
@@ -97,10 +100,12 @@ public final class StandaloneMatchSession {
     public init(
         repository: MatchRepository,
         pendingSync: PendingSyncStore = PendingSyncStore(),
+        lifetimeCounter: WatchLifetimeCounter = WatchLifetimeCounter(),
         now: @escaping () -> Date = { Date() }
     ) {
         self.repository = repository
         self.pendingSync = pendingSync
+        self.lifetimeCounter = lifetimeCounter
         self.now = now
         self.deleteMatchRecord = { try repository.deleteMatch($0) }
     }
@@ -415,9 +420,11 @@ public final class StandaloneMatchSession {
                 throw error
             }
             savedRecord = stored
+            lifetimeCounter.increment()
             return stored
         }
         savedRecord = record
+        lifetimeCounter.increment()
         return record
     }
 
@@ -427,6 +434,10 @@ public final class StandaloneMatchSession {
     private func unsaveFinishedMatch() {
         guard let record = savedRecord else { return }
         savedRecord = nil
+        // The match is open again, so it no longer counts toward the demo (the
+        // replayed ending counts when it is saved); decided here, not on the
+        // delete result, or a failed delete would count the match twice.
+        lifetimeCounter.decrement()
         do {
             try deleteMatchRecord(record)
             pendingSync.confirmSynced(record.id)

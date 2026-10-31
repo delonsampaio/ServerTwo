@@ -13,6 +13,7 @@ struct ServerTwoWatchApp: App {
     /// Held for the app's lifetime: it owns the WCSession delegate, which must
     /// exist from launch so a queued acknowledgement is not dropped.
     private let syncCoordinator: WatchSyncCoordinator
+    private let access: WatchAccess
 
     init() {
         var flow = WatchFlow()
@@ -28,6 +29,8 @@ struct ServerTwoWatchApp: App {
         if demo != nil {
             pendingSync = PendingSyncStore(suiteName: "WatchDemo")
         }
+        // Standard defaults in the real app; a throwaway suite for demos.
+        let counterSuite: String? = demo != nil ? "WatchDemo" : nil
         #endif
 
         let session: StandaloneMatchSession
@@ -35,14 +38,22 @@ struct ServerTwoWatchApp: App {
         #if DEBUG
         if demo != nil, let memory = try? PersistenceContainer.makeInMemoryContainer() {
             syncRepository = MatchRepository(modelContext: ModelContext(memory))
-            session = StandaloneMatchSession(repository: syncRepository, pendingSync: pendingSync)
+            session = StandaloneMatchSession(
+                repository: syncRepository, pendingSync: pendingSync,
+                lifetimeCounter: WatchLifetimeCounter(suiteName: counterSuite)
+            )
             flow = demo?.apply(to: session) ?? WatchFlow()
         } else {
-            session = StandaloneMatchSession(repository: repository, pendingSync: pendingSync)
+            session = StandaloneMatchSession(
+                repository: repository, pendingSync: pendingSync,
+                lifetimeCounter: WatchLifetimeCounter(suiteName: counterSuite)
+            )
             session.resumeIfNeeded()
         }
         #else
-        session = StandaloneMatchSession(repository: repository, pendingSync: pendingSync)
+        session = StandaloneMatchSession(
+            repository: repository, pendingSync: pendingSync, lifetimeCounter: WatchLifetimeCounter()
+        )
         // A match interrupted by a crash or a relaunch comes straight back.
         session.resumeIfNeeded()
         #endif
@@ -53,6 +64,23 @@ struct ServerTwoWatchApp: App {
         let coordinator = WatchSyncCoordinator(
             repository: syncRepository, pendingSync: pendingSync, transport: WatchSessionTransport(), session: session
         )
+        // The free-demo gate: StoreKit Pro here, or Pro and the shared match
+        // count pushed by the iPhone (cached, so it works offline from Apple).
+        let access: WatchAccess
+        #if DEBUG
+        if let demo {
+            access = demo.makeAccess(suiteName: "WatchDemo")
+        } else {
+            access = WatchAccess(
+                counter: WatchLifetimeCounter(), cache: WatchEntitlementCache(), entitlements: WatchStoreKitEntitlements()
+            )
+        }
+        #else
+        access = WatchAccess(
+            counter: WatchLifetimeCounter(), cache: WatchEntitlementCache(), entitlements: WatchStoreKitEntitlements()
+        )
+        #endif
+        coordinator.onPhoneState = { access.apply($0) }
         coordinator.start()
         #if DEBUG
         WatchAutoSync.playAndFinishIfRequested(on: session, arguments: ProcessInfo.processInfo.arguments)
@@ -61,12 +89,13 @@ struct ServerTwoWatchApp: App {
         self.modelContainer = container
         self.initialFlow = flow
         self.syncCoordinator = coordinator
+        self.access = access
         _session = State(initialValue: session)
     }
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView(session: session, initialFlow: initialFlow)
+            WatchRootView(session: session, access: access, initialFlow: initialFlow)
         }
     }
 

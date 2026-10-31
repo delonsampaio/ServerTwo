@@ -12,10 +12,12 @@ public protocol WatchSyncTransport: AnyObject {
     func hasOutstandingTransfer(forMatchID id: UUID) -> Bool
     func send(_ message: SyncedMatchMessage)
     /// Activates the session and registers the callbacks: activation finished,
-    /// and an acknowledgement from the phone.
+    /// an acknowledgement from the phone, and the phone's Pro/count state (also
+    /// delivered once at activation if the phone sent one earlier).
     func start(
         onActivated: @escaping @MainActor @Sendable () -> Void,
-        onAcknowledged: @escaping @MainActor @Sendable (UUID) -> Void
+        onAcknowledged: @escaping @MainActor @Sendable (UUID) -> Void,
+        onPhoneState: @escaping @MainActor @Sendable (PhoneStateContext) -> Void
     )
 }
 
@@ -35,6 +37,8 @@ public final class WatchSyncCoordinator {
     private let session: StandaloneMatchSession
     /// Test seam: how a record is deleted after an acknowledgement.
     var deleteRecord: (MatchRecord) throws -> Void
+    /// Receives the phone's Pro flag and demo count (the free-demo gate).
+    public var onPhoneState: (@MainActor (PhoneStateContext) -> Void)?
 
     public init(
         repository: MatchRepository,
@@ -55,7 +59,8 @@ public final class WatchSyncCoordinator {
         session.onFinishedMatchDismissed = { [weak self] in self?.syncPending() }
         transport.start(
             onActivated: { [weak self] in self?.syncPending() },
-            onAcknowledged: { [weak self] id in self?.handleAcknowledgement(matchID: id) }
+            onAcknowledged: { [weak self] id in self?.handleAcknowledgement(matchID: id) },
+            onPhoneState: { [weak self] state in self?.onPhoneState?(state) }
         )
     }
 

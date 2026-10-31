@@ -128,7 +128,20 @@ final class ActiveMatchController {
     /// StoreKit is read at launch. Losing Pro mid-match (a refund) never
     /// interrupts the live match: this only gates starting the next one.
     var proUnlocked: Bool {
-        didSet { userDefaults.set(proUnlocked, forKey: Keys.proEntitlementCache) }
+        didSet {
+            userDefaults.set(proUnlocked, forKey: Keys.proEntitlementCache)
+            onDemoStateChanged?()
+        }
+    }
+
+    /// Called when what the Watch needs for its free-demo gate changed: the Pro
+    /// flag, or the completed-match count. `MyApp` uses it to push both to the
+    /// Watch.
+    var onDemoStateChanged: (@MainActor () -> Void)?
+
+    /// What the demo gate counts, for the Watch to share the budget.
+    var completedMatchCount: Int {
+        effectiveCompletedMatchCount(historyCount: currentHistoryCount())
     }
 
     /// How many full matches a free user may complete before `canStartNewMatch`
@@ -167,6 +180,7 @@ final class ActiveMatchController {
     func recordCompletedMatchSaved(historyCountBeforeSave: Int) {
         let stored = userDefaults.integer(forKey: Keys.lifetimeCompletedMatchCount)
         userDefaults.set(max(stored, historyCountBeforeSave) + 1, forKey: Keys.lifetimeCompletedMatchCount)
+        onDemoStateChanged?()
     }
 
     /// Quick Log's save, routed through the controller (instead of straight to

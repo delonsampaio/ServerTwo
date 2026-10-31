@@ -1,5 +1,6 @@
 import StoreKit
 import Observation
+import PickleballKit
 
 /// Owns the Server Two Pro purchase: product loading, purchase, restore and
 /// the entitlement decision. Created once in `MyApp`.
@@ -12,7 +13,9 @@ import Observation
 @Observable
 final class StoreManager {
     /// Non-consumable, Family Sharing on.
-    nonisolated static let proProductID = "com.delonsampaio.ServerTwo.pro"
+    // The product id and the unlock rule live in PickleballKit so the Watch app
+    // applies exactly the same ones.
+    nonisolated static let proProductID = ProEntitlementRule.productID
 
     enum ProductState: Equatable {
         case loading
@@ -100,7 +103,9 @@ final class StoreManager {
     /// revoked copy never counts, so a refund or a family member leaving
     /// re-locks while a still-valid second copy keeps Pro.
     nonisolated static func isProEntitled(from entitlements: [VerifiedEntitlement]) -> Bool {
-        entitlements.contains { $0.productID == proProductID && $0.revocationDate == nil }
+        ProEntitlementRule.isPro(from: entitlements.map {
+            ProEntitlementRecord(productID: $0.productID, revocationDate: $0.revocationDate)
+        })
     }
 
     func refreshEntitlements() async {

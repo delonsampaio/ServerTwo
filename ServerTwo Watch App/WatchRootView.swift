@@ -6,11 +6,13 @@ import PickleballKit
 /// one); the only local state is the coin-flip step, owned by the tested flow.
 struct WatchRootView: View {
     let session: StandaloneMatchSession
+    let access: WatchAccess
     @State private var flow: WatchFlow
     @State private var rules = LastUsedRules()
 
-    init(session: StandaloneMatchSession, initialFlow: WatchFlow = WatchFlow()) {
+    init(session: StandaloneMatchSession, access: WatchAccess, initialFlow: WatchFlow = WatchFlow()) {
         self.session = session
+        self.access = access
         _flow = State(initialValue: initialFlow)
     }
 
@@ -41,8 +43,15 @@ struct WatchRootView: View {
                     }
                 )
             case .home:
-                HomeView(rules: $rules, onStart: { flow.startMatchTapped() })
+                // The free-demo gate is checked here, when a match is about to
+                // start, and never mid-match.
+                HomeView(rules: $rules, access: access, onStart: {
+                    guard access.canStartMatch else { return }
+                    flow.startMatchTapped()
+                })
             }
         }
+        // StoreKit's cached entitlements: read at launch, free to repeat.
+        .task { await access.refreshEntitlements() }
     }
 }

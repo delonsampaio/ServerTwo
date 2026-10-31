@@ -15,8 +15,11 @@ import PickleballKit
 /// activation and would be lost if nothing were listening yet. A transfer is
 /// decoded here, on the delegate queue, into `Sendable` values; only those hop
 /// to the main actor.
-nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAcknowledging, Sendable {
+nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAcknowledging, PhoneStatePushing, Sendable {
     private let handler: @MainActor @Sendable (IncomingSyncedMatch, any PhoneSyncAcknowledging) -> Void
+    /// Runs on the main actor each time the session finishes activating, which
+    /// is when the phone (re)publishes its Pro flag and demo count.
+    private let onActivated: @MainActor @Sendable () -> Void
     private let log = Logger(subsystem: "com.delonsampaio.ServerTwo", category: "WatchSync")
 
     /// One line of WCSession state for the device log (Console): activation,
@@ -30,8 +33,12 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
             + "outstandingTransfers=\(session.outstandingUserInfoTransfers.count)"
     }
 
-    init(handler: @escaping @MainActor @Sendable (IncomingSyncedMatch, any PhoneSyncAcknowledging) -> Void) {
+    init(
+        handler: @escaping @MainActor @Sendable (IncomingSyncedMatch, any PhoneSyncAcknowledging) -> Void,
+        onActivated: @escaping @MainActor @Sendable () -> Void
+    ) {
         self.handler = handler
+        self.onActivated = onActivated
         super.init()
     }
 
@@ -57,6 +64,25 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
         log.info("phone: acknowledgement for \(matchID.uuidString, privacy: .public) queued (\(Self.stateSummary(), privacy: .public))")
     }
 
+    // MARK: PhoneStatePushing
+
+    /// The phone's Pro flag and demo count for the Watch's free-demo gate. Only
+    /// the latest value matters, which is what an application context is for.
+    /// Errors are ignored (the next trigger pushes again) but logged.
+    func push(_ context: PhoneStateContext) {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated,
+              WCSession.default.isPaired else {
+            log.notice("phone: state push skipped (\(Self.stateSummary(), privacy: .public))")
+            return
+        }
+        do {
+            try WCSession.default.updateApplicationContext(context.applicationContext)
+            log.info("phone: pushed state pro=\(context.proUnlocked, privacy: .public) count=\(context.completedMatchCount, privacy: .public)")
+        } catch {
+            log.error("phone: state push failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     // MARK: WCSessionDelegate
 
     func session(
@@ -66,6 +92,9 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
     ) {
         if let error { log.error("phone: WCSession activation failed: \(error.localizedDescription, privacy: .public)") }
         log.info("phone: activation finished (\(Self.stateSummary(), privacy: .public))")
+        guard activationState == .activated else { return }
+        let onActivated = onActivated
+        Task { @MainActor in onActivated() }
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}

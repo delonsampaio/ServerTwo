@@ -7,7 +7,7 @@ import PickleballKit
 /// tapping through the flow:
 ///
 ///     -Debug-WatchDemoMatch                         doubles best of 3, game 2, Team A serving
-///     -Debug-WatchDemoMatch -Debug-WatchDemoState <scoringB|gameOver|matchOver|sideSwitch|coinFlip>
+///     -Debug-WatchDemoMatch -Debug-WatchDemoState <scoringB|gameOver|matchOver|sideSwitch|coinFlip|home|homeBlocked>
 struct WatchDemo {
     let state: String
 
@@ -20,9 +20,23 @@ struct WatchDemo {
         }
     }
 
+    /// The demo's gate: `homeBlocked` shows Home with the free demo used (the
+    /// phone reports one completed match, no Pro); every other state is open.
+    /// Never touches StoreKit or the real counters.
+    @MainActor
+    func makeAccess(suiteName: String) -> WatchAccess {
+        let counter = WatchLifetimeCounter(suiteName: suiteName)
+        let access = WatchAccess(
+            counter: counter, cache: WatchEntitlementCache(suiteName: suiteName), entitlements: NoWatchEntitlements()
+        )
+        access.apply(PhoneStateContext(proUnlocked: false, completedMatchCount: state == "homeBlocked" ? 1 : 0))
+        return access
+    }
+
     @MainActor
     func apply(to session: StandaloneMatchSession) -> WatchFlow {
         var flow = WatchFlow()
+        if state == "homeBlocked" || state == "home" { return flow }
         if state == "coinFlip" {
             flow.startMatchTapped()
             return flow

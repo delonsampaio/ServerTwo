@@ -105,3 +105,42 @@ final class ScreenRefreshTimingTests: XCTestCase {
         XCTAssertNil(ScreenRefreshTiming.timing(for: Notification.Name("something.else")))
     }
 }
+
+/// The phone's side of the Watch's free-demo gate: what makes the app push its
+/// Pro flag and match count (the push itself is `PhoneStatePublisher`, tested
+/// in the kit).
+@MainActor
+final class DemoStateHookTests: XCTestCase {
+    private func makeController() throws -> ActiveMatchController {
+        let suite = "DemoStateHookTests-\(UUID().uuidString)"
+        addTeardownBlock { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        return ActiveMatchController(
+            modelContext: ModelContext(try PersistenceContainer.makeInMemoryContainer()),
+            userDefaults: UserDefaults(suiteName: suite)!
+        )
+    }
+
+    func testAnEntitlementChangeNotifiesTheWatchHook() throws {
+        let controller = try makeController()
+        var calls = 0
+        controller.onDemoStateChanged = { calls += 1 }
+        controller.proUnlocked = true
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testACountedMatchNotifiesTheWatchHookAndRaisesTheCount() throws {
+        let controller = try makeController()
+        var calls = 0
+        controller.onDemoStateChanged = { calls += 1 }
+        XCTAssertEqual(controller.completedMatchCount, 0)
+        controller.recordCompletedMatchSaved(historyCountBeforeSave: 0)
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(controller.completedMatchCount, 1)
+    }
+
+    func testAnImportedWatchMatchRaisesTheCountTheWatchWillSee() throws {
+        let controller = try makeController()
+        controller.recordCompletedMatchSaved(historyCountBeforeSave: 0)  // what the receiver's didImport does
+        XCTAssertGreaterThanOrEqual(controller.completedMatchCount, 1)
+    }
+}
