@@ -115,4 +115,45 @@ final class RematchRequestTests: XCTestCase {
         let resolvedID = try repository.upsertSavedPlayer(name: request.teamAPlayer1.name)?.id
         XCTAssertEqual(resolvedID, delon.id, "Should reuse the existing 'Delon' SavedPlayer, not create a duplicate")
     }
+
+    /// A match saved with no players (every Watch match, or a phone match with
+    /// blank names) has sides called "Team A"/"Team B". Those are placeholders,
+    /// not names: Rematch used to prefill them as player names, and starting the
+    /// match then created real SavedPlayers called "Team A" and "Team B".
+    func testRematchOfAPlaceholderNamedMatchPrefillsBlankSlotsAndCreatesNoSavedPlayer() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let match = PickleballMatch(
+            configuration: GameConfiguration(winningScore: .eleven, winByTwo: true),
+            matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil
+        )
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        let record = try repository.saveCompletedMatch(match, teamAName: "Team A", teamBName: "Team B", startedAt: Date())
+
+        let request = try XCTUnwrap(RematchRequest(match: record))
+
+        for slot in [request.teamAPlayer1, request.teamAPlayer2, request.teamBPlayer1, request.teamBPlayer2] {
+            XCTAssertEqual(slot?.name ?? "", "", "a placeholder must not be prefilled as a player name")
+            XCTAssertNil(slot?.savedPlayerID)
+            // What `MatchSetupView.applyRematch` does with each slot.
+            XCTAssertNil(try repository.upsertSavedPlayer(name: slot?.name ?? ""))
+        }
+        XCTAssertEqual(try repository.fetchAllSavedPlayers().count, 0)
+    }
+
+    /// The guard is for the exact placeholder only: a real name that merely
+    /// starts with "Team" still splits and prefills as before.
+    func testRematchStillPrefillsARealNameThatContainsTeam() throws {
+        let context = try makeInMemoryContext()
+        let repository = MatchRepository(modelContext: context)
+        let match = PickleballMatch(
+            configuration: GameConfiguration(winningScore: .eleven, winByTwo: true),
+            matchFormat: .bestOfOne, firstServingTeam: .teamA, proUnlocked: true, demoPointCap: nil
+        )
+        for _ in 1...11 { match.recordPoint(for: .teamA) }
+        let record = try repository.saveCompletedMatch(match, teamAName: "Team Rocket", teamBName: "Team B", startedAt: Date())
+        let request = try XCTUnwrap(RematchRequest(match: record))
+        XCTAssertEqual(request.teamAPlayer1.name, "Team Rocket")
+        XCTAssertEqual(request.teamBPlayer1.name, "")
+    }
 }

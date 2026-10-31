@@ -51,6 +51,13 @@ struct RematchRequest: Equatable, Identifiable {
             let second = players.count > 1 ? PlayerSlot(name: players[1].name, savedPlayerID: players[1].id) : nil
             return (first, second)
         }
+        // A side nobody was entered for is named "Team A"/"Team B": a
+        // placeholder, not a player (the same guard as
+        // `EditMatchPlayersValidation.currentEntries`). Prefilling it would turn
+        // it into a real SavedPlayer when the rematch starts.
+        guard side.displayName != TeamNaming.placeholderName(for: side.team) else {
+            return (PlayerSlot(name: "", savedPlayerID: nil), nil)
+        }
         // Legacy match, saved before SavedPlayer existed: `players` is nil
         // and all we have is the free-text display name. Split ONLY on the
         // exact literal " & " — the one and only separator this app itself
