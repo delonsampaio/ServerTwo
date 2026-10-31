@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		15A00000000000000000000D /* ServerTwoLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 15A000000000000000000001 /* ServerTwoLiveActivity.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		15B00000000000000000000D /* ServerTwo Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 15B000000000000000000001 /* ServerTwo Watch App.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		15B000000000000000000010 /* PickleballKit in Frameworks */ = {isa = PBXBuildFile; productRef = 15B000000000000000000011 /* PickleballKit */; };
 		3EB3FC499D0DB78AB6D3BA17 /* PickleballKit in Frameworks */ = {isa = PBXBuildFile; productRef = 969E0BF3056A04B055A486A9 /* PickleballKit */; };
 		E89E98593F8A445170DC27C8 /* PickleballKit in Frameworks */ = {isa = PBXBuildFile; productRef = A6DB44C3210F757D3BF85B00 /* PickleballKit */; };
 /* End PBXBuildFile section */
@@ -34,6 +36,13 @@
 			remoteGlobalIDString = 15A000000000000000000004;
 			remoteInfo = ServerTwoLiveActivity;
 		};
+		15B00000000000000000000F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 15B000000000000000000004;
+			remoteInfo = "ServerTwo Watch App";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -46,6 +55,15 @@
 			);
 			name = "Embed Foundation Extensions";
 		};
+		15B00000000000000000000C /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolder = Product;
+			files = (
+				15B00000000000000000000D /* ServerTwo Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +71,7 @@
 		14039D42307739FF007414B8 /* ServerTwoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ServerTwoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		14039D4F30773A61007414B8 /* ServerTwoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ServerTwoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15A000000000000000000001 /* ServerTwoLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ServerTwoLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		15B000000000000000000001 /* ServerTwo Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ServerTwo Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -94,6 +113,11 @@
 			path = ServerTwoLiveActivityShared;
 			sourceTree = "<group>";
 		};
+		15B000000000000000000002 /* ServerTwo Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "ServerTwo Watch App";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,6 +143,12 @@
 			files = (
 			);
 		};
+		15B000000000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				15B000000000000000000010 /* PickleballKit in Frameworks */,
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -130,6 +160,7 @@
 				14039D5030773A61007414B8 /* ServerTwoUITests */,
 				15A000000000000000000002 /* ServerTwoLiveActivity */,
 				15A000000000000000000003 /* ServerTwoLiveActivityShared */,
+				15B000000000000000000002 /* ServerTwo Watch App */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -141,6 +172,7 @@
 				14039D42307739FF007414B8 /* ServerTwoTests.xctest */,
 				14039D4F30773A61007414B8 /* ServerTwoUITests.xctest */,
 				15A000000000000000000001 /* ServerTwoLiveActivity.appex */,
+				15B000000000000000000001 /* ServerTwo Watch App.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -156,11 +188,13 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				15A00000000000000000000C /* Embed Foundation Extensions */,
+				15B00000000000000000000C /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				15A00000000000000000000E /* PBXTargetDependency */,
+				15B00000000000000000000E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* ServerTwo */,
@@ -238,6 +272,27 @@
 			productReference = 15A000000000000000000001 /* ServerTwoLiveActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		15B000000000000000000004 /* ServerTwo Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15B000000000000000000005 /* Build configuration list for PBXNativeTarget "ServerTwo Watch App" */;
+			buildPhases = (
+				15B000000000000000000008 /* Sources */,
+				15B000000000000000000009 /* Frameworks */,
+				15B00000000000000000000A /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				15B000000000000000000002 /* ServerTwo Watch App */,
+			);
+			name = "ServerTwo Watch App";
+			packageProductDependencies = (
+				15B000000000000000000011 /* PickleballKit */,
+			);
+			productName = "ServerTwo Watch App";
+			productReference = 15B000000000000000000001 /* ServerTwo Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -260,6 +315,9 @@
 						TestTargetID = 000000000000000100000000;
 					};
 					15A000000000000000000004 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					15B000000000000000000004 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -285,6 +343,7 @@
 				14039D41307739FF007414B8 /* ServerTwoTests */,
 				14039D4E30773A61007414B8 /* ServerTwoUITests */,
 				15A000000000000000000004 /* ServerTwoLiveActivity */,
+				15B000000000000000000004 /* ServerTwo Watch App */,
 			);
 		};
 /* End PBXProject section */
@@ -306,6 +365,11 @@
 			);
 		};
 		15A00000000000000000000A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		15B00000000000000000000A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -333,6 +397,11 @@
 			files = (
 			);
 		};
+		15B000000000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -351,6 +420,12 @@
 			platformFilter = ios;
 			target = 15A000000000000000000004 /* ServerTwoLiveActivity */;
 			targetProxy = 15A00000000000000000000F /* PBXContainerItemProxy */;
+		};
+		15B00000000000000000000E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 15B000000000000000000004 /* ServerTwo Watch App */;
+			targetProxy = 15B00000000000000000000F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -727,6 +802,76 @@
 			};
 			name = Release;
 		};
+		15B000000000000000000006 /* Debug configuration for PBXNativeTarget "ServerTwo Watch App" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4CD86DZ6WP;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Server Two";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.delonsampaio.ServerTwo;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.delonsampaio.ServerTwo.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		15B000000000000000000007 /* Release configuration for PBXNativeTarget "ServerTwo Watch App" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4CD86DZ6WP;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Server Two";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.delonsampaio.ServerTwo;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.delonsampaio.ServerTwo.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -770,6 +915,14 @@
 			);
 			defaultConfigurationName = Release;
 		};
+		15B000000000000000000005 /* Build configuration list for PBXNativeTarget "ServerTwo Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15B000000000000000000006 /* Debug configuration for PBXNativeTarget "ServerTwo Watch App" */,
+				15B000000000000000000007 /* Release configuration for PBXNativeTarget "ServerTwo Watch App" */,
+			);
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -780,6 +933,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		15B000000000000000000011 /* PickleballKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E70168260E60A4443FCC2715 /* XCLocalSwiftPackageReference "PickleballKit" */;
+			productName = PickleballKit;
+		};
 		969E0BF3056A04B055A486A9 /* PickleballKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E70168260E60A4443FCC2715 /* XCLocalSwiftPackageReference "PickleballKit" */;
