@@ -68,6 +68,9 @@ public final class WatchSyncCoordinator {
     /// with the system, and still has a record.
     public func syncPending() {
         guard transport.isActivated else { return }
+        let playersStore = session.playersStore
+        // Player entries live only as long as their match is pending.
+        playersStore.prune(keepingSavedMatches: Set(pendingSync.pendingMatchIDs))
         let heldBack = session.heldBackMatchIDs
         for id in pendingSync.pendingMatchIDs where !heldBack.contains(id) {
             let record: MatchRecord?
@@ -81,10 +84,12 @@ public final class WatchSyncCoordinator {
                 // The match is gone (store fell back to memory, or a crash
                 // between marking and saving): nothing to send, nothing to wait for.
                 pendingSync.confirmSynced(id)
+                playersStore.removePlayers(forSavedMatch: id)
                 continue
             }
             guard !transport.hasOutstandingTransfer(forMatchID: id) else { continue }
-            guard let data = try? SyncedMatchPayload(record: record).encoded() else { continue }
+            let players = playersStore.players(forSavedMatch: id) ?? .empty
+            guard let data = try? SyncedMatchPayload(record: record, players: players).encoded() else { continue }
             transport.send(SyncedMatchMessage(matchID: id, payload: data))
         }
     }
@@ -104,5 +109,6 @@ public final class WatchSyncCoordinator {
             return
         }
         pendingSync.confirmSynced(id)
+        session.playersStore.removePlayers(forSavedMatch: id)
     }
 }

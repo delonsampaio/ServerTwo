@@ -9,6 +9,11 @@ import Foundation
 /// `schemaVersion` is bumped only when an older phone could not make sense of
 /// the new shape; the phone refuses (without acknowledging) a version it does
 /// not know, so the Watch keeps the match queued until the phone app updates.
+///
+/// `teamAPlayers` / `teamBPlayers` are additive and optional (absent in older
+/// payloads, and when no players were chosen), so the version stays 1: an older
+/// phone ignores the keys and imports the match by `teamAName` / `teamBName`,
+/// which are always filled.
 public struct SyncedMatchPayload: Codable, Sendable, Equatable {
     public static let currentSchemaVersion = 1
 
@@ -60,6 +65,8 @@ public struct SyncedMatchPayload: Codable, Sendable, Equatable {
     public var winningTeamRawValue: String
     public var teamAName: String
     public var teamBName: String
+    public var teamAPlayers: [SyncedPlayerRef]?
+    public var teamBPlayers: [SyncedPlayerRef]?
     public var games: [Game]
 
     public init(
@@ -72,6 +79,8 @@ public struct SyncedMatchPayload: Codable, Sendable, Equatable {
         winningTeamRawValue: String,
         teamAName: String,
         teamBName: String,
+        teamAPlayers: [SyncedPlayerRef]? = nil,
+        teamBPlayers: [SyncedPlayerRef]? = nil,
         games: [Game]
     ) {
         self.schemaVersion = schemaVersion
@@ -83,13 +92,17 @@ public struct SyncedMatchPayload: Codable, Sendable, Equatable {
         self.winningTeamRawValue = winningTeamRawValue
         self.teamAName = teamAName
         self.teamBName = teamBName
+        self.teamAPlayers = teamAPlayers
+        self.teamBPlayers = teamBPlayers
         self.games = games
     }
 
     /// Builds the payload from a saved match. Games and points are written in
     /// order (SwiftData's to-many arrays are unordered). Must be called where
-    /// the record's context lives (the main actor on the Watch).
-    public init(record: MatchRecord) {
+    /// the record's context lives (the main actor on the Watch). `players` are
+    /// the Watch's remembered entries for this match; a side with none sends no
+    /// array, and the names always come from the record.
+    public init(record: MatchRecord, players: WatchMatchPlayers = .empty) {
         let sides = record.teamSides ?? []
         let games = (record.games ?? []).sorted { $0.gameNumber < $1.gameNumber }.map { game in
             Game(
@@ -117,6 +130,8 @@ public struct SyncedMatchPayload: Codable, Sendable, Equatable {
             winningTeamRawValue: record.winningTeamRawValue,
             teamAName: sides.first { $0.team == .teamA }?.displayName ?? TeamNaming.placeholderName(for: .teamA),
             teamBName: sides.first { $0.team == .teamB }?.displayName ?? TeamNaming.placeholderName(for: .teamB),
+            teamAPlayers: players.teamA.isEmpty ? nil : players.teamA,
+            teamBPlayers: players.teamB.isEmpty ? nil : players.teamB,
             games: games
         )
     }

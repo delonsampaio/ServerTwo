@@ -55,12 +55,17 @@ public final class StandaloneMatchSession {
 
     private let repository: MatchRepository
     private let pendingSync: PendingSyncStore
+    /// The players of the match in progress, and of every saved match until the
+    /// phone has it; read by the sync coordinator to build the payload.
+    public let playersStore: WatchPlayersStore
     /// Matches this Watch has completed for life (the free-demo budget):
     /// +1 when a finished match is saved, -1 when its deciding point is undone.
     private let lifetimeCounter: WatchLifetimeCounter
     private let now: () -> Date
 
     private var startedAt = Date()
+    /// The players of the match in progress (empty: default team names).
+    private var players = WatchMatchPlayers.empty
     /// Positional with `match.completedGames`; `nil` for games finished before
     /// a relaunch (their wall-clock time was not captured by this session).
     private var gameCompletionDates: [Date?] = []
@@ -111,11 +116,13 @@ public final class StandaloneMatchSession {
     public init(
         repository: MatchRepository,
         pendingSync: PendingSyncStore = PendingSyncStore(),
+        playersStore: WatchPlayersStore = WatchPlayersStore(),
         lifetimeCounter: WatchLifetimeCounter = WatchLifetimeCounter(),
         now: @escaping () -> Date = { Date() }
     ) {
         self.repository = repository
         self.pendingSync = pendingSync
+        self.playersStore = playersStore
         self.lifetimeCounter = lifetimeCounter
         self.now = now
         self.deleteMatchRecord = { try repository.deleteMatch($0) }
@@ -145,8 +152,10 @@ public final class StandaloneMatchSession {
         match?.gamesWon(for: team) ?? 0
     }
 
+    /// The side's players joined ("Mike & Sarah"), or the default name when
+    /// none were chosen.
     public func teamName(for team: Team) -> String {
-        team == .teamA ? Self.teamAName : Self.teamBName
+        players.teamName(for: team)
     }
 
     /// Zero-based index of the game being played (the decided one once the
@@ -226,8 +235,15 @@ public final class StandaloneMatchSession {
     // MARK: Lifecycle
 
     /// Begins a fresh match (replacing any saved snapshot) once the coin flip
-    /// has decided who serves first.
-    public func start(configuration: GameConfiguration, format: MatchFormat, firstServingTeam: Team) {
+    /// has decided who serves first. `players` are cut to the configuration's
+    /// play mode (one a side in singles, two in doubles) and remembered until
+    /// the match has synced, since the saved record keeps only display names.
+    public func start(
+        configuration: GameConfiguration,
+        format: MatchFormat,
+        firstServingTeam: Team,
+        players: WatchMatchPlayers = .empty
+    ) {
         let newMatch = PickleballMatch(
             configuration: configuration,
             matchFormat: format,
@@ -238,6 +254,8 @@ public final class StandaloneMatchSession {
             demoPointCap: nil
         )
         match = newMatch
+        self.players = players.sliced(for: configuration.playMode)
+        playersStore.setCurrentMatchPlayers(self.players)
         startedAt = now()
         gameCompletionDates = []
         isGameOver = false
@@ -250,23 +268,35 @@ public final class StandaloneMatchSession {
     }
 
     /// Restores a match interrupted by a relaunch or crash. Returns whether
-    /// there was one. Teams are always the default names on the Watch, so only
-    /// the engine state and the start time need restoring.
+    /// there was one. The engine state and the start time come from the
+    /// snapshot, the players from the Watch's current-match store.
     @discardableResult
     public func resumeIfNeeded() -> Bool {
-        guard match == nil,
-              let resumed = try? repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil)
-        else { return match != nil }
+        guard match == nil else { return true }
+        let loaded: ResumedMatch?
+        do {
+            loaded = try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil)
+        } catch {
+            return false
+        }
+        guard let resumed = loaded else {
+            // Nothing in progress, so a leftover player entry is stale (the
+            // match was saved or abandoned right before the app went away).
+            playersStore.clearCurrentMatchPlayers()
+            return false
+        }
         // A snapshot whose match is already saved (the save stored the record
         // but failed before clearing the snapshot) must not come back: replaying
         // its last point would save, count and send the same match a second time.
         // Snapshot and record carry the same start instant.
         if (try? repository.fetchMatchRecord(startedAt: resumed.startedAt)) != nil {
             try? repository.clearInProgressSnapshot()
+            playersStore.clearCurrentMatchPlayers()
             return false
         }
         let restored = resumed.match
         match = restored
+        players = (playersStore.currentMatchPlayers ?? .empty).sliced(for: restored.configuration.playMode)
         startedAt = resumed.startedAt
         gameCompletionDates = Array(repeating: nil, count: restored.completedGames.count)
         savedRecord = nil
@@ -414,6 +444,15 @@ public final class StandaloneMatchSession {
         sideSwitchNotice = nil
         gameCompletionDates = []
         savedRecord = nil
+        players = .empty
+        playersStore.clearCurrentMatchPlayers()
+    }
+
+    /// A match id leaves the pending queue (acknowledged by the phone elsewhere):
+    /// its remembered players go with it.
+    private func forgetPending(_ id: UUID) {
+        pendingSync.confirmSynced(id)
+        playersStore.removePlayers(forSavedMatch: id)
     }
 
     private func saveIfNeeded() throws -> MatchRecord {
@@ -423,13 +462,16 @@ public final class StandaloneMatchSession {
         // first; if it still cannot be deleted the save fails (Done retries).
         if let stale = staleRecord {
             try deleteMatchRecord(stale)
-            pendingSync.confirmSynced(stale.id)
+            forgetPending(stale.id)
             staleRecord = nil
         }
         // Queued BEFORE the save, with the id the record will get: a crash
         // between the two leaves a pending id with no record (sync drops it),
         // whereas the other order could leave a saved match nobody sends.
+        // The players are written first for the same reason: a pending id must
+        // never be visible without them.
         let id = UUID()
+        playersStore.setPlayers(players, forSavedMatch: id)
         pendingSync.markPending(id)
         let record: MatchRecord
         do {
@@ -437,8 +479,8 @@ public final class StandaloneMatchSession {
             if let saveFailureForTesting { throw saveFailureForTesting }
             record = try repository.saveCompletedMatch(
                 match,
-                teamAName: Self.teamAName,
-                teamBName: Self.teamBName,
+                teamAName: teamName(for: .teamA),
+                teamBName: teamName(for: .teamB),
                 startedAt: startedAt,
                 completedAt: now(),
                 gameCompletionDates: gameCompletionDates,
@@ -449,7 +491,7 @@ public final class StandaloneMatchSession {
             // snapshot is its last step). Then the match exists: keep it queued
             // and use it, or a retry would save the same match a second time.
             guard let stored = try? repository.fetchMatchRecord(id: id) else {
-                pendingSync.confirmSynced(id)
+                forgetPending(id)
                 throw error
             }
             savedRecord = stored
@@ -474,7 +516,7 @@ public final class StandaloneMatchSession {
         lifetimeCounter.decrement()
         do {
             try deleteMatchRecord(record)
-            pendingSync.confirmSynced(record.id)
+            forgetPending(record.id)
         } catch {
             // Keep it (and its pending id) for the retry at the next save.
             staleRecord = record
@@ -486,7 +528,7 @@ public final class StandaloneMatchSession {
     private func removeStaleRecord() {
         guard let stale = staleRecord else { return }
         if (try? deleteMatchRecord(stale)) != nil {
-            pendingSync.confirmSynced(stale.id)
+            forgetPending(stale.id)
             staleRecord = nil
         }
     }

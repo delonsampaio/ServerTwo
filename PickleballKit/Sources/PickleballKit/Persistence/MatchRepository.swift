@@ -505,18 +505,14 @@ public final class MatchRepository {
         try modelContext.save()
     }
 
-    /// Suggestion chips for `MatchSetupView`'s name fields. Empty `query`
-    /// returns everyone. Ranking is derived fresh from match history on
-    /// every call, not cached — see this plan's Task 1 rationale against
-    /// stored counters.
-    public func suggestedPlayers(matching query: String) throws -> [SavedPlayer] {
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let players = try fetchAllSavedPlayers()
-        let matches = try fetchMatchHistory()
-
-        // Build stats dictionary once, keyed by player ID. Initialize every player
-        // (even those with no matches) to (Date.distantPast, 0), then update from
-        // match history. This avoids O(N*M*log(N)) closure calls during sort.
+    /// Most recent completed match and number of matches per player id. Built
+    /// once, keyed by id, with every player present (even with no matches, as
+    /// `(Date.distantPast, 0)`), which avoids O(N*M*log(N)) closure calls
+    /// during a sort.
+    static func playerUsage(
+        players: [SavedPlayer],
+        matches: [MatchRecord]
+    ) -> [UUID: (mostRecent: Date, timesPlayed: Int)] {
         var statsDict: [UUID: (mostRecent: Date, timesPlayed: Int)] = [:]
         for player in players {
             statsDict[player.id] = (Date.distantPast, 0)
@@ -534,6 +530,19 @@ public final class MatchRepository {
                 }
             }
         }
+        return statsDict
+    }
+
+    /// Suggestion chips for `MatchSetupView`'s name fields. Empty `query`
+    /// returns everyone. Ranking is derived fresh from match history on
+    /// every call, not cached — see this plan's Task 1 rationale against
+    /// stored counters.
+    public func suggestedPlayers(matching query: String) throws -> [SavedPlayer] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let players = try fetchAllSavedPlayers()
+        let matches = try fetchMatchHistory()
+
+        let statsDict = Self.playerUsage(players: players, matches: matches)
 
         let filtered = trimmedQuery.isEmpty
             ? players

@@ -21,6 +21,7 @@ final class StandaloneMatchSessionTests: XCTestCase {
         StandaloneMatchSession(
             repository: repository,
             pendingSync: PendingSyncStore(suiteName: suite),
+            playersStore: WatchPlayersStore(suiteName: suite),
             now: { [unowned self] in
                 self.clock.addTimeInterval(60)
                 return self.clock
@@ -646,6 +647,7 @@ final class StandaloneMatchSessionTests: XCTestCase {
         StandaloneMatchSession(
             repository: repository,
             pendingSync: PendingSyncStore(suiteName: suite),
+            playersStore: WatchPlayersStore(suiteName: suite),
             lifetimeCounter: counter,
             now: { [unowned self] in
                 self.clock.addTimeInterval(60)

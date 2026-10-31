@@ -41,9 +41,12 @@ enum SyncFixtures {
     static func payload(
         id: UUID = UUID(),
         teamAName: String = "Team A",
-        teamBName: String = "Team B"
+        teamBName: String = "Team B",
+        teamAPlayers: [SyncedPlayerRef]? = nil,
+        teamBPlayers: [SyncedPlayerRef]? = nil,
+        configuration: GameConfiguration = GameConfiguration()
     ) -> SyncedMatchPayload {
-        let configuration = try! JSONEncoder().encode(GameConfiguration())
+        let configuration = try! JSONEncoder().encode(configuration)
         return SyncedMatchPayload(
             id: id,
             startedAt: t0,
@@ -53,6 +56,8 @@ enum SyncFixtures {
             winningTeamRawValue: Team.teamA.rawValue,
             teamAName: teamAName,
             teamBName: teamBName,
+            teamAPlayers: teamAPlayers,
+            teamBPlayers: teamBPlayers,
             games: [
                 game(1, 11, 9, completedAt: t0.addingTimeInterval(600)),
                 game(2, 8, 11, completedAt: t0.addingTimeInterval(1200)),

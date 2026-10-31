@@ -77,29 +77,61 @@ public struct WatchLifetimeCounter: Sendable {
 }
 
 /// What the iPhone tells the Watch (`updateApplicationContext`): whether Pro is
-/// unlocked there and how many matches the phone counts toward the demo. Plain
-/// property-list values only, as WatchConnectivity requires.
+/// unlocked there, how many matches the phone counts toward the demo, and the
+/// saved players the Watch can pick from. Plain property-list values only, as
+/// WatchConnectivity requires.
 public struct PhoneStateContext: Codable, Sendable, Equatable {
     public static let proUnlockedKey = "proUnlocked"
     public static let completedMatchCountKey = "completedMatchCount"
+    public static let playersKey = "players"
 
     public let proUnlocked: Bool
     public let completedMatchCount: Int
+    /// The phone's ordered player list. `nil` means "not part of this state"
+    /// (an old phone, or a list that could not be read): the Watch keeps what
+    /// it has. `[]` is an explicit empty list and clears the Watch's copy.
+    public let players: [WatchPlayer]?
 
-    public init(proUnlocked: Bool, completedMatchCount: Int) {
+    public init(proUnlocked: Bool, completedMatchCount: Int, players: [WatchPlayer]? = nil) {
         self.proUnlocked = proUnlocked
         self.completedMatchCount = completedMatchCount
+        self.players = players
     }
 
     public var applicationContext: [String: Any] {
-        [Self.proUnlockedKey: proUnlocked, Self.completedMatchCountKey: completedMatchCount]
+        var context: [String: Any] = [Self.proUnlockedKey: proUnlocked, Self.completedMatchCountKey: completedMatchCount]
+        // JSON `Data` (a property list type) rather than an array of
+        // dictionaries, so the entries' types survive the round trip exactly.
+        if let players, let data = try? JSONEncoder().encode(players) {
+            context[Self.playersKey] = data
+        }
+        return context
     }
 
     /// `nil` for a dictionary that is not this state (missing or mistyped keys).
+    /// The `players` entry is optional: absent or not a JSON array it reads as
+    /// `nil`; an array keeps its readable entries.
     public init?(applicationContext: [String: Any]) {
         guard let pro = applicationContext[Self.proUnlockedKey] as? Bool,
               let count = applicationContext[Self.completedMatchCountKey] as? Int else { return nil }
-        self.init(proUnlocked: pro, completedMatchCount: max(0, count))
+        self.init(
+            proUnlocked: pro,
+            completedMatchCount: max(0, count),
+            players: (applicationContext[Self.playersKey] as? Data).flatMap(Self.decodePlayers)
+        )
+    }
+
+    /// Each element on its own, so one malformed entry costs only itself.
+    private static func decodePlayers(from data: Data) -> [WatchPlayer]? {
+        guard let entries = try? JSONDecoder().decode([Lossy<WatchPlayer>].self, from: data) else { return nil }
+        return entries.compactMap(\.value)
+    }
+
+    private struct Lossy<Value: Decodable>: Decodable {
+        let value: Value?
+        init(from decoder: Decoder) throws {
+            value = try? Value(from: decoder)
+        }
     }
 }
 
@@ -189,26 +221,37 @@ public protocol PhoneStatePushing: Sendable {
     func push(_ context: PhoneStateContext)
 }
 
-/// Pushes the phone's current Pro flag and demo count. Every trigger (session
-/// activation, an entitlement change, a saved or imported match) just calls
-/// `publish()`: the state is read fresh each time, so the order cannot matter.
+/// Pushes the phone's current Pro flag, demo count and saved-player list.
+/// Every trigger (session activation, an entitlement change, a saved or
+/// imported match, the app becoming active, Manage Players closing) just calls
+/// `publish()`: the state is read fresh each time, so the order cannot matter,
+/// and an unchanged state is dropped by the pusher.
 @MainActor
 public final class PhoneStatePublisher {
     private let pusher: any PhoneStatePushing
     private let isPro: @MainActor () -> Bool
     private let completedMatchCount: @MainActor () -> Int
+    private let players: @MainActor () -> [WatchPlayer]?
 
+    /// `players` returns `nil` when the list cannot be read right now (the
+    /// Watch then keeps its copy); it is capped and cleaned here.
     public init(
         pusher: any PhoneStatePushing,
         isPro: @escaping @MainActor () -> Bool,
-        completedMatchCount: @escaping @MainActor () -> Int
+        completedMatchCount: @escaping @MainActor () -> Int,
+        players: @escaping @MainActor () -> [WatchPlayer]? = { nil }
     ) {
         self.pusher = pusher
         self.isPro = isPro
         self.completedMatchCount = completedMatchCount
+        self.players = players
     }
 
     public func publish() {
-        pusher.push(PhoneStateContext(proUnlocked: isPro(), completedMatchCount: completedMatchCount()))
+        pusher.push(PhoneStateContext(
+            proUnlocked: isPro(),
+            completedMatchCount: completedMatchCount(),
+            players: players().map(WatchPlayerList.normalized)
+        ))
     }
 }

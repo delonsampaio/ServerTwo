@@ -243,4 +243,21 @@ final class PhoneStatePublisherTests: XCTestCase {
             PhoneStateContext(proUnlocked: true, completedMatchCount: 1),
         ])
     }
+
+    func testPublishCarriesTheCleanedPlayerListAndNilWhenItCannotBeRead() {
+        var list: [WatchPlayer]? = [
+            WatchPlayer(id: UUID(), name: "  Ann ", isMe: true),
+            WatchPlayer(id: UUID(), name: "   "),
+        ]
+        let pusher = FakePusher()
+        let publisher = PhoneStatePublisher(pusher: pusher, isPro: { false }, completedMatchCount: { 0 }, players: { list })
+
+        publisher.publish()
+        list = nil  // the store could not be read: the Watch keeps its copy
+        publisher.publish()
+        list = []   // an explicit empty list clears it
+        publisher.publish()
+
+        XCTAssertEqual(pusher.contexts.map { $0.players?.map(\.name) }, [["Ann"], nil, []])
+    }
 }

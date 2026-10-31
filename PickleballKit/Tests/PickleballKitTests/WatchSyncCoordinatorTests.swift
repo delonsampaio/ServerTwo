@@ -17,7 +17,9 @@ final class WatchSyncCoordinatorTests: XCTestCase {
         repository = MatchRepository(modelContext: context, seenMatchIDs: SeenMatchIDStore(suiteName: makeSyncSuite()))
         pending = PendingSyncStore(suiteName: suite)
         transport = FakeWatchTransport()
-        session = StandaloneMatchSession(repository: repository, pendingSync: pending)
+        session = StandaloneMatchSession(
+            repository: repository, pendingSync: pending, playersStore: WatchPlayersStore(suiteName: suite)
+        )
         coordinator = WatchSyncCoordinator(
             repository: repository, pendingSync: pending, transport: transport, session: session
         )

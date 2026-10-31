@@ -56,6 +56,9 @@ struct ValidatedSyncedMatch {
     let configurationData: Data
     let teamAName: String
     let teamBName: String
+    /// Cleaned and capped to the play mode (empty for an old payload).
+    let teamAPlayers: [SyncedPlayerRef]
+    let teamBPlayers: [SyncedPlayerRef]
     let games: [Game]
 }
 
@@ -124,6 +127,7 @@ enum SyncedMatchValidator {
             ))
         }
 
+        let playersPerSide = WatchMatchPlayers.maxPlayersPerSide(for: configuration.playMode)
         let derivedWinner: Team? = gamesWon[.teamA, default: 0] >= format.gamesToWin ? .teamA
             : gamesWon[.teamB, default: 0] >= format.gamesToWin ? .teamB : nil
         guard derivedWinner == winner else { return .failure(.winnerMismatch) }
@@ -137,6 +141,8 @@ enum SyncedMatchValidator {
             configurationData: payload.configurationData,
             teamAName: sanitizedName(payload.teamAName, team: .teamA),
             teamBName: sanitizedName(payload.teamBName, team: .teamB),
+            teamAPlayers: validatedPlayers(payload.teamAPlayers, limit: playersPerSide),
+            teamBPlayers: validatedPlayers(payload.teamBPlayers, limit: playersPerSide),
             games: validated
         ))
     }
@@ -167,6 +173,21 @@ enum SyncedMatchValidator {
         if let last = result.last,
            last.teamAScoreAfter != game.teamAFinalScore || last.teamBScoreAfter != game.teamBFinalScore {
             return nil
+        }
+        return result
+    }
+
+    /// Player entries are checked like the other payload text (control
+    /// characters removed, trimmed, non-blank, at most `maxNameLength`); an
+    /// invalid entry is dropped, not repaired, and the match still imports
+    /// (its name strings remain). At most `limit` entries survive: one a side
+    /// for singles, two for doubles, decided by the payload's configuration.
+    static func validatedPlayers(_ entries: [SyncedPlayerRef]?, limit: Int) -> [SyncedPlayerRef] {
+        var result: [SyncedPlayerRef] = []
+        for entry in entries ?? [] {
+            guard let name = PlayerNameRules.validated(entry.name) else { continue }
+            result.append(SyncedPlayerRef(savedPlayerID: entry.savedPlayerID, name: name))
+            if result.count == limit { break }
         }
         return result
     }
@@ -205,13 +226,27 @@ extension MatchRepository {
     /// changes nothing, so an edited match is never overwritten and a deleted
     /// one never comes back. Never touches the in-progress snapshot (unlike
     /// `saveCompletedMatch`): a live phone match must not lose its crash
-    /// recovery because a Watch match arrived. Players stay empty (display
-    /// names only; Edit Players links them later).
+    /// recovery because a Watch match arrived.
     ///
-    /// One `save()`; on failure `rollback()` discards the inserted graph (all
-    /// inserts, so no staged delete can make it trap) and the error is thrown,
-    /// which the caller treats as "do not acknowledge, try again later".
+    /// Players: a payload from a Watch that chose players carries entries per
+    /// side; each is linked to a saved player here (see `resolveSyncedPlayer`),
+    /// and a name the phone has never seen becomes a new saved player, exactly
+    /// like a name typed in match setup. A payload without entries (an older
+    /// Watch, or no players chosen) imports its display names only, unlinked.
+    ///
+    /// One `save()` commits the match AND any new players together, so nothing
+    /// is half-imported (this never calls `upsertSavedPlayer`, which saves on
+    /// its own). On failure `rollback()` discards the inserted graph, new
+    /// players included (all inserts, so no staged delete can make it trap),
+    /// and the error is thrown, which the caller treats as "do not
+    /// acknowledge, try again later".
     public func importSyncedMatch(_ payload: SyncedMatchPayload) throws -> ImportResult {
+        try importSyncedMatch(payload, beforeSave: nil)
+    }
+
+    /// `beforeSave` is a test seam: it runs after everything is inserted and
+    /// before the single `save()`, so a test can make that step fail.
+    func importSyncedMatch(_ payload: SyncedMatchPayload, beforeSave: (() throws -> Void)?) throws -> ImportResult {
         guard payload.schemaVersion <= SyncedMatchPayload.currentSchemaVersion else {
             return .unsupportedNewerSchema
         }
@@ -246,6 +281,10 @@ extension MatchRepository {
             modelContext.insert(teamASide)
             modelContext.insert(teamBSide)
 
+            if !match.teamAPlayers.isEmpty || !match.teamBPlayers.isEmpty {
+                try linkSyncedPlayers(match, teamASide: teamASide, teamBSide: teamBSide)
+            }
+
             var gameRecords: [GameRecord] = []
             for game in match.games {
                 let gameRecord = GameRecord(
@@ -271,6 +310,7 @@ extension MatchRepository {
                 gameRecords.append(gameRecord)
             }
             record.games = gameRecords
+            try beforeSave?()
             try modelContext.save()
         } catch {
             modelContext.rollback()
@@ -278,5 +318,57 @@ extension MatchRepository {
         }
         seenMatchIDs.insert(payload.id)
         return .imported
+    }
+
+    /// Links the entries of a validated payload to saved players and renames
+    /// each side after them, all unsaved (the import's one `save()` commits).
+    /// One fetch of all saved players is the working list: a new player is
+    /// inserted and appended to it, so two slots with the same new name share
+    /// one player. A player is linked at most once per match: a repeat, on the
+    /// same side or the other, is dropped (the second side loses it).
+    private func linkSyncedPlayers(
+        _ match: ValidatedSyncedMatch,
+        teamASide: TeamSide,
+        teamBSide: TeamSide
+    ) throws {
+        var working = try fetchAllSavedPlayers()
+        var used = Set<ObjectIdentifier>()
+        func link(_ entries: [SyncedPlayerRef]) -> [SavedPlayer] {
+            var linked: [SavedPlayer] = []
+            for entry in entries {
+                let player = resolveSyncedPlayer(entry, working: &working)
+                if used.insert(ObjectIdentifier(player)).inserted { linked.append(player) }
+            }
+            return linked
+        }
+        let playersA = link(match.teamAPlayers)
+        let playersB = link(match.teamBPlayers)
+        // A side whose entries all resolved to nobody keeps the payload's
+        // name; otherwise the name is rebuilt from the linked players, as
+        // `updateSides` does (a renamed saved player shows its current name).
+        if !playersA.isEmpty {
+            teamASide.players = playersA
+            teamASide.displayName = TeamNaming.displayName(forPlayerNames: playersA.map(\.name), team: .teamA)
+        }
+        if !playersB.isEmpty {
+            teamBSide.players = playersB
+            teamBSide.displayName = TeamNaming.displayName(forPlayerNames: playersB.map(\.name), team: .teamB)
+        }
+    }
+
+    /// A known id is trusted, even if the player was renamed since the Watch
+    /// last heard (the Watch cannot edit a picked name, and matching the old
+    /// name could attach the wrong "Mike"). A missing or unknown id falls back
+    /// to a case-insensitive name match, then to a new player: inserted
+    /// WITHOUT saving, so the caller's rollback can still discard it.
+    private func resolveSyncedPlayer(_ entry: SyncedPlayerRef, working: inout [SavedPlayer]) -> SavedPlayer {
+        if let id = entry.savedPlayerID, let known = working.first(where: { $0.id == id }) { return known }
+        if let named = working.first(where: { $0.name.caseInsensitiveCompare(entry.name) == .orderedSame }) {
+            return named
+        }
+        let player = SavedPlayer(name: entry.name)
+        modelContext.insert(player)
+        working.append(player)
+        return player
     }
 }
