@@ -73,6 +73,26 @@ final class StoreKitBackend: StoreBackend {
                 revocationDate: transaction.revocationDate
             ))
         }
+        // `currentEntitlements` was seen empty right after a verified purchase
+        // of this non-consumable (StoreKit's Xcode test environment on a real
+        // iPhone), which left Pro locked. The product's latest transaction is
+        // the same ownership record: a refund or a revoked family share still
+        // arrives on it with a revocation date, which the unlock rule rejects.
+        if !entitlements.contains(where: { $0.productID == StoreManager.proProductID }),
+           let latest = await Transaction.latest(for: StoreManager.proProductID) {
+            switch latest {
+            case .verified(let transaction):
+                log.info("entitlements: using latest transaction, revoked: \(transaction.revocationDate != nil)")
+                entitlements.append(VerifiedEntitlement(
+                    transactionID: transaction.id,
+                    productID: transaction.productID,
+                    ownershipType: transaction.ownershipType,
+                    revocationDate: transaction.revocationDate
+                ))
+            case .unverified(_, let error):
+                log.error("entitlements: latest transaction UNVERIFIED: \(String(describing: error), privacy: .public)")
+            }
+        }
         log.info("entitlements: \(entitlements.count) verified: \(entitlements.map(\.productID).joined(separator: ","), privacy: .public)")
         return entitlements
     }
