@@ -7,12 +7,17 @@ import PickleballKit
 struct WatchRootView: View {
     let session: StandaloneMatchSession
     let access: WatchAccess
+    let workout: WorkoutController
     @State private var flow: WatchFlow
     @State private var rules = LastUsedRules()
 
-    init(session: StandaloneMatchSession, access: WatchAccess, initialFlow: WatchFlow = WatchFlow()) {
+    init(
+        session: StandaloneMatchSession, access: WatchAccess, workout: WorkoutController,
+        initialFlow: WatchFlow = WatchFlow()
+    ) {
         self.session = session
         self.access = access
+        self.workout = workout
         _flow = State(initialValue: initialFlow)
     }
 
@@ -26,7 +31,7 @@ struct WatchRootView: View {
             case .gameOver:
                 GameOverView(session: session)
             case .scoring:
-                ScoringView(session: session)
+                ScoringView(session: session, workout: workout)
             case .coinFlip:
                 CoinFlipView(
                     onCancel: { flow.coinFlipCancelled() },

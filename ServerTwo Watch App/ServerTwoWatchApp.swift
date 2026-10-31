@@ -14,6 +14,8 @@ struct ServerTwoWatchApp: App {
     /// exist from launch so a queued acknowledgement is not dropped.
     private let syncCoordinator: WatchSyncCoordinator
     private let access: WatchAccess
+    /// Held for the app's lifetime: it follows the session's lifecycle events.
+    private let workout: WorkoutController
 
     init() {
         var flow = WatchFlow()
@@ -61,6 +63,23 @@ struct ServerTwoWatchApp: App {
         session.resumeIfNeeded()
         #endif
 
+        // The workout follows the match; demo and automation launches get a
+        // no-op backend so no Health prompt or workout comes from a scripted
+        // match.
+        let workoutBackend: any WorkoutBackend
+        #if DEBUG
+        let scripted = demo != nil || ProcessInfo.processInfo.arguments.contains("-Debug-WatchAutoSyncMatch")
+        workoutBackend = scripted ? NoOpWorkoutBackend() : HealthKitWorkoutBackend()
+        #else
+        workoutBackend = HealthKitWorkoutBackend()
+        #endif
+        let workout = WorkoutController(backend: workoutBackend)
+        session.onLifecycleEvent = { workout.handle($0) }
+        // A workout HealthKit kept across a relaunch is reconciled with the
+        // match that `resumeIfNeeded` just brought back (or its absence).
+        let matchIsActive = session.isActive
+        Task { await workout.recoverAtLaunch(matchIsActive: matchIsActive) }
+
         // The sync repository is the one the session saves through, so a
         // delete after an acknowledgement happens in the context that holds the
         // record. Done and launch activation trigger the sync.
@@ -93,12 +112,13 @@ struct ServerTwoWatchApp: App {
         self.initialFlow = flow
         self.syncCoordinator = coordinator
         self.access = access
+        self.workout = workout
         _session = State(initialValue: session)
     }
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView(session: session, access: access, initialFlow: initialFlow)
+            WatchRootView(session: session, access: access, workout: workout, initialFlow: initialFlow)
         }
     }
 

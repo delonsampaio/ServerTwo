@@ -6,8 +6,10 @@ import PickleballKit
 /// wide as the screen and a big score still fits at the largest text sizes.
 struct ScoringView: View {
     let session: StandaloneMatchSession
+    let workout: WorkoutController
 
     @State private var confirmingEnd = false
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
 
     var body: some View {
         Group {
@@ -44,24 +46,12 @@ struct ScoringView: View {
         VStack(spacing: 4) {
             ScoreZone(session: session, team: .teamA)
             ScoreZone(session: session, team: .teamB)
-            Button {
-                session.undo()
-                // An undo can bring the "Switch back" notice up; one haptic,
-                // the stronger one, not a click and then a notification.
-                if session.sideSwitchNotice != nil {
-                    WatchHaptics.playNotice()
-                } else {
-                    WatchHaptics.playUndo()
+            HStack(spacing: 6) {
+                undoButton
+                if let bpm = workout.heartRate, !isLuminanceReduced {
+                    heartRateReadout(bpm)
                 }
-            } label: {
-                Label("Undo", systemImage: "arrow.uturn.backward")
-                    .font(.footnote.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
             }
-            .buttonStyle(.bordered)
-            .disabled(!session.canUndo)
-            .accessibilityLabel("Undo last point")
-            .accessibilityIdentifier("Undo")
         }
         .scenePadding(.horizontal)
         // Every point of height goes to the tap zones: the Undo button's bottom
@@ -69,6 +59,47 @@ struct ScoringView: View {
         // screen's), which gives each zone more than the 44 pt minimum height
         // on the smaller watches.
         .ignoresSafeArea(.container, edges: .bottom)
+    }
+
+    /// Keeps the flexible width and 44 pt height: the readout beside it is
+    /// small and only takes what it needs.
+    private var undoButton: some View {
+        Button {
+            session.undo()
+            // An undo can bring the "Switch back" notice up; one haptic,
+            // the stronger one, not a click and then a notification.
+            if session.sideSwitchNotice != nil {
+                WatchHaptics.playNotice()
+            } else {
+                WatchHaptics.playUndo()
+            }
+        } label: {
+            Label("Undo", systemImage: "arrow.uturn.backward")
+                .font(.footnote.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!session.canUndo)
+        .accessibilityLabel("Undo last point")
+        .accessibilityIdentifier("Undo")
+    }
+
+    /// Hidden in Always-On and while no rate exists; the zones above keep their
+    /// height because it shares the Undo row. Capped at `.large` so it
+    /// stays small beside Undo.
+    private func heartRateReadout(_ bpm: Int) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: "heart.fill")
+            Text("\(bpm)").monospacedDigit()
+        }
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(.red)
+        .lineLimit(1)
+        .fixedSize()
+        .dynamicTypeSize(...DynamicTypeSize.large)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Heart rate, \(bpm) beats per minute")
+        .accessibilityIdentifier("HeartRate")
     }
 }
 

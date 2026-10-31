@@ -58,6 +58,7 @@ struct HomeView: View {
 struct RulesSheet: View {
     @Binding var rules: LastUsedRules
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(WorkoutPreference.key) private var recordsWorkout = true
 
     var body: some View {
         NavigationStack {
@@ -75,6 +76,10 @@ struct RulesSheet: View {
                     Text("Best of 3").tag(MatchFormat.bestOfThree)
                     Text("Best of 5").tag(MatchFormat.bestOfFive)
                 }
+                // Read when a match starts; a match already under way keeps
+                // the workout it began with.
+                Toggle("Record workout", isOn: $recordsWorkout)
+                    .accessibilityIdentifier("Record workout")
             }
             .navigationTitle("Rules")
             .toolbar {

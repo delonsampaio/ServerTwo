@@ -6,7 +6,7 @@
 
 - **A (this spec, built):** the watchOS app target, a platform-neutral match session in `PickleballKit`, a local-only store, and the scoring screens. The Watch scores a whole match on its own and saves the finished match locally.
 - **B1 (built, see "Sync (B1)" and "As built (B1)"):** the match sync below. **B2 (built as the free-demo gate, see "As built (B1 fixes + gate)"):** the phone's Pro entitlement on the Watch. Original description of B: WatchConnectivity queue of finished matches to the phone. The Watch sends the matches in its pending-sync set (below) with `transferUserInfo`; the phone saves each into its CloudKit store and dedupes by match UUID (`MatchRecord.id`), then acknowledges so the Watch calls `confirmSynced`. Also decides how the phone's Pro entitlement reaches the Watch: StoreKit `currentEntitlements` on the Watch and a per-device demo counter, handled together with B because both need the phone link.
-- **C (designed below, see "Workout (C)"):** `HKWorkoutSession` (pickleball workout) so watchOS keeps the app foregrounded during a match and logs a workout, heart rate on the scoring screen, and the Health permission. No HealthKit entitlement or usage string exists in the target until C.
+- **C (built, see "Workout (C)" and "As built (C)"):** `HKWorkoutSession` (pickleball workout) so watchOS keeps the app foregrounded during a match and logs a workout, heart rate on the scoring screen, and the Health permission.
 - **Follow-up after device testing:** Digital Crown scoring. Deferred on purpose: whether a crown tick should mean "point for the serving team" or select a team, and how it feels with wet hands, can only be judged on a real watch.
 
 ## Decisions (approved)
@@ -224,3 +224,41 @@ A Gemini review of the first draft was checked against the code and the watchOS 
 ### Not verifiable in the simulator
 
 Tap-to-score with a live session, staying frontmost on wrist drop and in Always-On, real heart rate, the system Health permission sheet on a real Watch, recovery after a real kill, and whether the Watch app is accepted by Validate App with HealthKit and no phone-side entitlement. Device checklist for the user is added when built.
+
+## As built (C)
+
+### What was built
+
+- `PickleballKit`: `MatchLifecycleEvent` and `StandaloneMatchSession.onLifecycleEvent` (events as designed above: `decided` is emitted right after the haptic callback and before the save, `finished(matchID:)` before `onFinishedMatchDismissed`), `WorkoutBackend`, `WorkoutController` (`phase` is idle, starting, running, paused or ending; a serial queue where each operation awaits the previous one; the enable switch read when the match starts) and `WorkoutPreference` (key `watchRecordWorkout`, default on). 32 new tests (22 for the controller with a fake backend, 10 for the session hook); the package has 403 tests, all passing.
+- Watch target: `HealthKitWorkoutBackend` (`.pickleball`, `.unknown` location, authorization sets as designed, `end()` then `endCollection` then `finishWorkout`, `HKMetadataKeyExternalUUID` before finishing, discard as end, endCollection, discardWorkout, recovery by re-attaching delegates only), a `nonisolated` `WorkoutDelegateAdapter` (only `let` `@Sendable` closures; the heart-rate statistic is read into an `Int` on HealthKit's queue before hopping to the main actor), `NoOpWorkoutBackend` for `-Debug-WatchDemoMatch` and `-Debug-WatchAutoSyncMatch`, all wired in `ServerTwoWatchApp.init` (`recoverAtLaunch` in a `Task` right after `resumeIfNeeded`). No `@unchecked Sendable`, `nonisolated(unsafe)` or `@preconcurrency`.
+- UI: "Record workout" toggle in the Rules sheet (`@AppStorage`), the heart readout at the trailing end of the Undo row (identifier `HeartRate`, hidden in Always-On and while no rate exists).
+- Settings: `ServerTwo Watch App/ServerTwoWatchApp.entitlements` (HealthKit, empty access array) through `CODE_SIGN_ENTITLEMENTS`, both usage strings through `INFOPLIST_KEY_*`, and `WKBackgroundModes` = `workout-processing` through a small `ServerTwo Watch App/Info.plist` fragment merged with the generated one. Both files are excluded from the target's resources by a `PBXFileSystemSynchronizedBuildFileExceptionSet`, like the Live Activity's `Info.plist`.
+
+### Deviations from the design
+
+- **`INFOPLIST_KEY_WKBackgroundModes` does not work**: the key did not land in the built Info.plist (not investigated further). The fragment `Info.plist` (through `INFOPLIST_FILE`) does land, in Debug and Release.
+- **Heart rate is cleared while the workout is paused** (the readout is on the scoring screen only, so it never shows at match over, but an Undo no longer shows a stale rate until the next sample).
+- **Callbacks carry an identity** (a generation in the controller, an attachment id in the backend) so a late callback from an earlier session cannot stop or feed the next match's workout.
+
+### Verified
+
+`swift test` in `PickleballKit` (403 tests, 0 failures), `plutil -lint` on the project, the entitlements and the Info.plist fragment, `xcodebuild -list`, Debug and Release builds of the Watch scheme (no project-source warnings), and an iOS build of the `ServerTwo` scheme with the embedded `Watch/ServerTwo Watch App.app` (its Info.plist has `WKBackgroundModes`). The built Watch Info.plist (Debug and Release) has both Health usage strings and `workout-processing`. The simulator build is ad-hoc signed: `codesign -d --entitlements -` shows no entitlements, but the entitlements embedded in the executable (`__TEXT,__entitlements`, from the `.xcent`) contain `com.apple.developer.healthkit` and an empty `com.apple.developer.healthkit.access`. The iOS build used the "iPhone 17 Pro iOS 27" simulator: the plain "iPhone 17 Pro" runs iOS 26.5, below the app's deployment target.
+
+### Not verified (nothing was run against real HealthKit)
+
+Everything under "Not verifiable in the simulator" above, plus: that `WKBackgroundModes` with only `workout-processing` is what App Store validation wants, that the provisioning profile (automatic signing) gains the HealthKit capability for `com.delonsampaio.ServerTwo.watchkitapp` at the first device build or archive, that `recoverActiveWorkoutSession` returns the session after a real kill, that `endCollection`/`finishWorkout` after `end()` saves a complete workout (the order is the documented one, not run), the delegate threading under Swift 6 at runtime (it compiles clean; no Health callback ever fired), and how the toggle, the readout and the Undo row look on screen (no screenshot was taken for the readout: nothing in the demo launches produces a heart rate).
+
+### Device checklist (C)
+
+16. First launch with a fresh install: start a match; the Health permission sheet appears at the first match start (not at launch) and asks for workout, active energy and heart rate. Allow all. Scoring is usable under the sheet.
+17. During a match the BPM readout appears beside Undo within a few seconds, Undo keeps its width and the zones keep their height at the largest text size and on the 40 mm watch; the readout disappears in Always-On and comes back on wake.
+18. Wrist down for a minute mid-game, wake: the app is still frontmost, and the match is where it was (this is what the workout is for).
+19. Play a match to the end and tap Done: one "Pickleball" workout in Health on the iPhone, with a duration that ends at the deciding point (not at Done), and the match's id in its metadata if you can inspect it.
+20. Undo the deciding point, replay and finish: still a single workout (no pause gap in the duration beyond the time between the two points).
+21. End Match mid-game: no workout appears in Health.
+22. Deny Health access (or turn the switch off in the Rules sheet): scoring is unchanged, no BPM, no error UI, nothing in Health. With the switch off nothing asks for permission at all.
+23. Done then Start Match immediately: the second match gets its own workout and the first is complete in Health.
+24. Start Apple's Workout app mid-match: the Server Two workout stops silently, scoring continues, no BPM.
+25. Force-quit mid-match and relaunch: the match resumes, the workout resumes (BPM comes back), and finishing it gives one workout. Force-quit on the match-over screen and relaunch: the workout is finished into Health without waiting for another match.
+26. Passcode-locked watch at Done: no error, and the workout appears in Health after unlocking.
+27. Archive and Validate App with the HealthKit entitlement on the Watch app only (the iPhone app declares none); if validation asks for the usage strings on the iPhone target, add them there.
