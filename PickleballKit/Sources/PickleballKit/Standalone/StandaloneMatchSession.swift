@@ -142,6 +142,20 @@ public final class StandaloneMatchSession {
         return "SERVER \(serverNumber.rawValue)"
     }
 
+    /// What a tap on this team's zone means, same wording as the iPhone's score
+    /// card caption: in side-out scoring a tap on the receiving team is not a
+    /// point but "second server" or "side out", which users otherwise tapped
+    /// twice by mistake.
+    public func tapCaption(for team: Team) -> String {
+        guard let match, match.configuration.scoringFormat == .sideOut, team != servingTeam else {
+            return "Tap to Score"
+        }
+        // Doubles Server 1 losing a rally hands the serve to Server 2 (same
+        // team); anything else (singles, or Server 2) is a full side out.
+        return match.configuration.playMode == .doubles && serverNumber == .one
+            ? "Tap for 2nd Server" : "Tap for Side Out"
+    }
+
     /// The VoiceOver label for a team's tap zone, e.g.
     /// "Team A, 7 points, serving, server 2".
     public func spokenSummary(for team: Team) -> String {

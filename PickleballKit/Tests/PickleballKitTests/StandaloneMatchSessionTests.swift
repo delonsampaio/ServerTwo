@@ -97,6 +97,24 @@ final class StandaloneMatchSessionTests: XCTestCase {
         XCTAssertEqual(rally.servingCaption(for: .teamA), "SERVING")
     }
 
+    func testTapCaptionExplainsWhatATapOnEachZoneDoes() {
+        let doubles = makeSession()
+        doubles.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        XCTAssertEqual(doubles.tapCaption(for: .teamA), "Tap to Score")
+        // Server 2 is up first (0-0-2): the other team's tap is a full side out.
+        XCTAssertEqual(doubles.tapCaption(for: .teamB), "Tap for Side Out")
+        doubles.recordPoint(for: .teamB)               // side out: B serves, Server 1
+        XCTAssertEqual(doubles.tapCaption(for: .teamA), "Tap for 2nd Server")
+
+        let rally = makeSession()
+        rally.start(configuration: GameConfiguration(scoringFormat: .rally(freeze: false)), format: .bestOfOne, firstServingTeam: .teamA)
+        XCTAssertEqual(rally.tapCaption(for: .teamB), "Tap to Score")
+
+        let singles = makeSession()
+        singles.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfOne, firstServingTeam: .teamA)
+        XCTAssertEqual(singles.tapCaption(for: .teamB), "Tap for Side Out")
+    }
+
     func testFullGameToElevenEndsTheMatchInABestOfOne() {
         let session = makeSession()
         session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfOne, firstServingTeam: .teamA)
