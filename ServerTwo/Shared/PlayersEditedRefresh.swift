@@ -16,6 +16,10 @@ extension Notification.Name {
     /// above, screens reload IMMEDIATELY: nothing they show is being edited, and
     /// a new match should appear while the user is looking at History.
     static let matchSyncedFromWatch = Notification.Name("ServerTwo.matchSyncedFromWatch")
+    /// Posted when Manage Players goes off screen (closed, or another screen
+    /// pushed over it): the saved players may have changed, so the Watch gets
+    /// a fresh player list. Nothing reloads because of it.
+    static let managePlayersClosed = Notification.Name("ServerTwo.managePlayersClosed")
 }
 
 /// When a screen refreshes for each notification, as a pure decision so it is

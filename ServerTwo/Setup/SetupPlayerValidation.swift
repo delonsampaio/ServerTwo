@@ -26,6 +26,6 @@ enum SetupPlayerValidation {
     /// The one line both setup and the Edit Players sheet show for a repeated
     /// player.
     static func reason(forDuplicate name: String) -> String {
-        "\(name) is listed more than once. Add an initial to tell them apart, for example Mike S."
+        PlayerNameRules.duplicateReason(forName: name)
     }
 }

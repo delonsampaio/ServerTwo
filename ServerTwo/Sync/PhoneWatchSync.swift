@@ -71,7 +71,7 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
 
     // MARK: PhoneStatePushing
 
-    /// The phone's Pro flag and demo count for the Watch's free-demo gate. Only
+    /// The phone's Pro flag, demo count and saved-player list for the Watch. Only
     /// the latest value matters, which is what an application context is for.
     /// Errors are ignored (the next trigger pushes again) but logged.
     func push(_ context: PhoneStateContext) {
@@ -84,7 +84,8 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
         do {
             try WCSession.default.updateApplicationContext(context.applicationContext)
             lastPushed.withLock { $0 = context }
-            log.info("phone: pushed state pro=\(context.proUnlocked, privacy: .public) count=\(context.completedMatchCount, privacy: .public)")
+            // Counts only: player names never go to the log.
+            log.info("phone: pushed state pro=\(context.proUnlocked, privacy: .public) count=\(context.completedMatchCount, privacy: .public) players=\(context.players?.count ?? -1, privacy: .public)")
         } catch {
             log.error("phone: state push failed: \(error.localizedDescription, privacy: .public)")
         }

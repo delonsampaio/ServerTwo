@@ -44,8 +44,11 @@ struct MyApp: App {
             didImport: { controller.recordCompletedMatchSaved(historyCountBeforeSave: $0) }
         )
         // The Watch's free-demo gate needs the Pro flag and the shared match
-        // count: pushed at activation, on an entitlement change and whenever a
-        // match is counted (`onDemoStateChanged`).
+        // count, and its player picker the saved players: pushed at activation,
+        // on an entitlement change, whenever a match is counted (a completed
+        // match, and so also a Watch match that created players), when the app
+        // becomes active and when Manage Players closes (all through
+        // `onDemoStateChanged`; an unchanged state is not sent again).
         let watchSync = PhoneWatchSync(
             handler: { incoming, acknowledger in
                 guard receiver.receive(incoming, acknowledger: acknowledger) == .imported else { return }
@@ -53,10 +56,13 @@ struct MyApp: App {
             },
             onActivated: { [controller] in controller.onDemoStateChanged?() }
         )
+        let playersRepository = MatchRepository(modelContext: container.mainContext)
         let publisher = PhoneStatePublisher(
             pusher: watchSync,
             isPro: { [controller] in controller.proUnlocked },
-            completedMatchCount: { [controller] in controller.completedMatchCount }
+            completedMatchCount: { [controller] in controller.completedMatchCount },
+            // `nil` when the store cannot be read: the Watch keeps its list.
+            players: { try? playersRepository.watchPlayerList() }
         )
         controller.onDemoStateChanged = { publisher.publish() }
         watchSync.activate()
@@ -90,7 +96,13 @@ struct MyApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active { voiceAnnouncer.stop() }
-                    if phase == .active { liveActivity.retryIfNeeded() }
+                    if phase == .active {
+                        liveActivity.retryIfNeeded()
+                        activeMatchController.onDemoStateChanged?()
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .managePlayersClosed)) { _ in
+                    activeMatchController.onDemoStateChanged?()
                 }
                 .modelContainer(modelContainer)
                 .preferredColorScheme(appSettings.theme.colorScheme)

@@ -100,6 +100,7 @@ struct ManagePlayersView: View {
             }
         }
         .task { loadPlayers() }
+        .onDisappear { NotificationCenter.default.post(name: .managePlayersClosed, object: nil) }
         // A `.sheet`, not `.alert`, hosts the rename form. On this OS a
         // `.alert` with an embedded `TextField` renders through a
         // UICollectionView-backed UIAlertController whose "Save" button
