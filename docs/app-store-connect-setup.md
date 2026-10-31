@@ -128,22 +128,21 @@ through Xcode Cloud. What is already done in the project: placeholder app icons
 equivalent with your own 1024x1024 PNG, no transparency; `scripts/make_app_icon.py`
 generated the placeholders), the Home Screen name `Server Two`, the export
 compliance answer in the Info.plist, privacy manifests, shared schemes
-in `ServerTwo.xcodeproj/xcshareddata`, and the privacy and support pages in
-`docs/site/`.
+in `ServerTwo.xcodeproj/xcshareddata`, and the support and privacy pages
+(`docs/index.html` and `docs/privacy.html`, laid out like the LiftLogic and Did I Feed The Dog pages).
 
 ### 9.1 Before you start
 
-1. Open `docs/site/privacy.html` and `docs/site/support.html` and replace both
-   occurrences of `[CONTACT EMAIL]` in each with your real contact address.
-2. Host the pages. A simple option is GitHub Pages: repository **Settings**,
-   **Pages**, source **Deploy from a branch**, branch `main`, folder `/docs`.
-   The pages would then be at
-   `https://<your-github-user>.github.io/<repo-name>/site/privacy.html` and
-   `.../site/support.html`.
-   **Note:** this publishes everything under `docs/`, including the design
-   specs and plans in `docs/superpowers/` and this guide. If you do not want
-   that, move the two pages to their own folder (or a separate repository) and
-   publish only that.
+1. The pages use the contact address `delon.sampaio+servertwo@gmail.com`, the
+   same plus-address pattern as your other apps. Change it in both
+   `docs/index.html` and `docs/privacy.html` if you prefer another.
+2. Host the pages the same way as LiftLogic and Did I Feed The Dog: GitHub Pages
+   from branch `main`, folder `/docs` (repository **Settings**, **Pages**). The
+   URLs will be `https://delonsampaio.github.io/ServerTwo/` (support) and
+   `https://delonsampaio.github.io/ServerTwo/privacy.html` (privacy). Use them
+   in App Store Connect as the Support URL and Privacy Policy URL. This
+   repository is public, so `docs/superpowers/` (specs and plans) is already
+   visible on GitHub; Pages additionally serves its files from the same site.
 
 ### 9.2 Create the app record
 
