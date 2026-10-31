@@ -5,7 +5,7 @@
 ## Sub-projects
 
 - **A (this spec, built):** the watchOS app target, a platform-neutral match session in `PickleballKit`, a local-only store, and the scoring screens. The Watch scores a whole match on its own and saves the finished match locally.
-- **B (not built):** WatchConnectivity queue of finished matches to the phone. The Watch sends the matches in its pending-sync set (below) with `transferUserInfo`; the phone saves each into its CloudKit store and dedupes by match UUID (`MatchRecord.id`), then acknowledges so the Watch calls `confirmSynced`. Also decides how the phone's Pro entitlement reaches the Watch: StoreKit `currentEntitlements` on the Watch and a per-device demo counter, handled together with B because both need the phone link.
+- **B1 (built, see "Sync (B1)" and "As built (B1)"):** the match sync below. **B2 (not built):** the phone's Pro entitlement on the Watch. Original description of B: WatchConnectivity queue of finished matches to the phone. The Watch sends the matches in its pending-sync set (below) with `transferUserInfo`; the phone saves each into its CloudKit store and dedupes by match UUID (`MatchRecord.id`), then acknowledges so the Watch calls `confirmSynced`. Also decides how the phone's Pro entitlement reaches the Watch: StoreKit `currentEntitlements` on the Watch and a per-device demo counter, handled together with B because both need the phone link.
 - **C (not built):** `HKWorkoutSession` (pickleball workout) so watchOS keeps the app foregrounded during a match and logs a workout, heart rate on the scoring screen, and the Health permission. No HealthKit entitlement or usage string exists in the target until C.
 - **Follow-up after device testing:** Digital Crown scoring. Deferred on purpose: whether a crown tick should mean "point for the serving team" or select a team, and how it feels with wet hands, can only be judged on a real watch.
 
@@ -79,3 +79,71 @@ Tapping, haptic feel, battery and Always-On behaviour, Digital Crown, a relaunch
 11. Legibility of the zones on a 40 mm watch, especially the "Tap for 2nd Server" line, in sun and at the largest text size.
 12. Done after a finished match lands on Home (not the coin flip), and End Match returns to Home.
 13. Archive the iOS app (with the embedded Watch app), Validate, and upload to TestFlight; fix whatever validation says (icons first).
+
+## Sync (B1)
+
+Finished Watch matches reach the iPhone over WatchConnectivity `transferUserInfo`, and the Watch forgets a match only when the phone says it has it. The rules, in the order they matter:
+
+### Payload
+
+`SyncedMatchPayload` (`PickleballKit/Sources/PickleballKit/Sync/`), `Codable`, `Sendable`, `schemaVersion` 1: match id (the `MatchRecord.id`), start and completion dates, format, rules (`configurationData`), winner, both team names and every game with its final score, winner, completion date and point log (sequence number, scorer, score after). JSON with sorted keys and dates as numbers, so a resend is byte-identical. The transfer is `["matchID": uuidString, "schema": 1, "payload": Data]`; the phone's acknowledgement is `["syncedMatchID": uuidString]`. Only the Watch builds payloads, from the saved `MatchRecord`.
+
+### Watch side
+
+- **When it syncs:** only (a) when the user taps Done on the match-over screen (`StandaloneMatchSession.dismissFinishedMatch`) and (b) when `WCSession` finishes activating at launch. Never on a reachability change.
+- **Never the undoable match:** the match still on the match-over screen can be undone (the record is deleted). It is excluded (`heldBackMatchIDs`, which is `undoableSavedMatchID` plus a record whose delete failed after an undo). Sending it first would let an undo after the send leave the phone with a match that never finished, plus the replayed one as a second match.
+- **Per pending id:** fetch the record by id; no record (orphan: the store fell back to memory, or a crash between marking and saving) means drop the id; skip if `outstandingUserInfoTransfers` already holds a transfer for it; else `transferUserInfo`. A transfer finishing, or failing in `didFinish`, changes nothing: only the phone's acknowledgement confirms, and a failure just leaves the id pending for the next launch or Done.
+- **On the acknowledgement:** delete the local record, then `confirmSynced`. The watch has no history screen, so there is no "keep last N". The delete goes first so a failed delete leaves the id pending and the next ack retries it. An ack for a held-back match is ignored (it stays pending, is sent after Done, and the phone answers "duplicate").
+- **Crash window:** `markPending(id)` runs BEFORE `saveCompletedMatch` (which takes the id), and `confirmSynced` runs if the save throws. If the save throws after the record was stored (clearing the snapshot is its last step) the record is looked up by id and kept, so a retry cannot save the same match twice.
+- **Structure:** the logic is `WatchSyncCoordinator` in the kit behind `WatchSyncTransport`; the real `WCSession` shim, `WatchSessionTransport`, lives in the Watch target.
+
+### Phone side
+
+- **`MatchRepository.importSyncedMatch(_:) -> ImportResult`** (`imported`, `duplicate`, `rejected(reason)`, `unsupportedNewerSchema`): inserts the match, both sides (no players, names as received), games and points in one `save()`, `rollback()` on failure (inserts only, so no staged-delete trap). It never calls `clearInProgressSnapshot()`: a match being scored on the phone keeps its crash recovery.
+- **Idempotent, first write wins:** a match whose id already exists, or whose id is in the bounded "seen ids" set (`SeenMatchIDStore`, 500 ids, oldest dropped), is a `duplicate` and nothing changes: an edited match is never overwritten and the demo counter is never touched. The seen set is filled on every import AND by `MatchRepository.deleteMatch` / `deleteAllMatchHistory` (so every phone delete path, including the test reset), so a late resend of a deleted match is not imported again.
+- **Versions:** `schemaVersion` above the app's is `unsupportedNewerSchema`: not stored, NOT acknowledged, NOT marked seen, so it is retried after the user updates the phone app. A version the app knows but a payload that is undecodable or invalid is `rejected` and IS acknowledged, so a permanently malformed record cannot loop forever (with no readable id there is nothing to acknowledge). A storage failure is not acknowledged either (transient).
+- **Validation before inserting:** rules decode and are sane (timeouts 0...10); game count within 1...(2 x games to win - 1); game numbers 1, 2, 3...; every score pair a legal completed game under the rules (`isCompletedGameScore`, scores at most 99, game winner is the higher score); no game after a team reached games to win; derived match winner equals the payload winner; per game at most 500 points, sequence numbers contiguous from 1, scores 0...99 and never decreasing, last point equals the game's final score (no stricter than the engine, whose manual correction can skip scores); names trimmed, control characters removed, 64 characters at most, empty becomes "Team A"/"Team B" (placeholders pass through unchanged, which is what keeps Edit Players and Rematch treating the side as blank); dates finite, `startedAt` is the earlier of start and completion, a game completion date outside the match window becomes unknown.
+- **Demo counter:** for `.imported` only, `ActiveMatchController.recordCompletedMatchSaved(historyCountBeforeSave:)` with the history size read before the insert; never for a duplicate or a reject.
+- **Delivery:** `PhoneWatchSync` (app target, not main-actor) is the `WCSession` delegate, created and activated in `MyApp.init` before any view and held by `MyApp`, so a background delivery is not dropped; it handles `sessionDidBecomeInactive` and re-activates in `sessionDidDeactivate`. It decodes on the delegate queue into `Sendable` values, hops to the main actor, and the kit's `WatchMatchReceiver` imports on `modelContainer.mainContext` (the context SwiftUI reads), acknowledges per the table above through `PhoneSyncAcknowledging`, and the app then posts `.matchSyncedFromWatch` for an imported match.
+- **Screens:** History, Home and Player detail reload immediately on `.matchSyncedFromWatch` (the timing is the tested `ScreenRefreshTiming`); edits and deletes still wait for the next appearance.
+- **History collapses duplicates:** `fetchMatchHistory()` shows one row per match id (a reinstall racing CloudKit can create two), keeping the row with linked players if any.
+
+## As built (B1)
+
+### What was built
+
+- **`PickleballKit`:** the `Sync/` folder (`SyncedMatchPayload` with wire keys, `SyncedMatchMessage`, `IncomingSyncedMatch`; `SeenMatchIDStore`; `MatchRepository.importSyncedMatch` with the validator and `fetchMatchRecord(id:)`; `WatchSyncCoordinator` and `WatchSyncTransport`; `WatchMatchReceiver` and `PhoneSyncAcknowledging`). `MatchRepository` takes an injectable `SeenMatchIDStore`, `saveCompletedMatch` takes an optional `id`, delete paths fill the seen set, `fetchMatchHistory` dedupes by id. `StandaloneMatchSession` gained `undoableSavedMatchID`, `heldBackMatchIDs`, `onFinishedMatchDismissed` and the mark-before-save order. 58 new tests (326 in the package, 268 before).
+- **Watch target:** `WatchSessionTransport` (the `WCSession` adapter) and the coordinator started from `ServerTwoWatchApp.init`; a DEBUG-only `-Debug-WatchAutoSyncMatch` launch argument plays one quick match against the real store and taps Done.
+- **iPhone target:** `PhoneWatchSync`, the wiring in `MyApp.init`, `.matchSyncedFromWatch` with `ScreenRefreshTiming` in `PlayersEditedRefresh.swift`, and `recordCompletedMatchSaved` made internal. The controller keeps its own `ModelContext`: a test proves its `canStartNewMatch` and the counter see a match imported on the main context, so it was not switched.
+- **Side fix (existing bug):** `RematchRequest` split a "Team A"/"Team B" side's name unconditionally, so a Rematch of a match with blank names created real SavedPlayers called "Team A" and "Team B" when the match started. It now uses the same placeholder guard as Edit Players (blank slots). Two tests.
+
+### Decisions the design left open
+
+- Only an `.imported` match posts `.matchSyncedFromWatch` (nothing else changes data).
+- An ack for the held-back (undoable) match is ignored instead of confirming it, so it is still sent after Done (the phone answers "duplicate" and acks again).
+- The seen set lives in the phone's standard defaults and is also filled when the Watch deletes its own records (undo, after an ack): harmless, bounded, and it keeps one code path.
+- A label (`matchID`) that disagrees with the payload's id is rejected and the label is acknowledged.
+- Deleting a match on another device (CloudKit) does not reach this phone's seen set; a late resend after that is the one case a deleted match could return (a deletion made on this phone is covered).
+
+### Verified
+
+`swift test` in `PickleballKit`: 326 tests pass. Watch scheme Debug and Release and iOS scheme Debug and Release builds (fresh derived data each, so every file compiled; no project-source warnings in any log; the Release iOS bundle embeds `Watch/ServerTwo Watch App.app`). One focused iOS run (`ServerTwoTests`, `DeleteMatchUITests`, `ScoringPromptsUITests`): 382 tests, all pass (the new app tests: import visible to the controller and counter once, resend and delete-then-resend not counted, a reject not counted, refresh timing, the Rematch guard). Tests that were written after the code they cover (the kit tests were written after the implementation; the RED run was done by stashing the sources, which failed to compile with "cannot find ... in scope"; the app-target tests had no separate RED run).
+
+On a paired watchOS 27 + iOS 27 simulator pair (Series 12 46 mm + iPhone 18 Pro Max), `-Debug-WatchAutoSyncMatch` played a match on the Watch, saved it, marked it pending and called `transferUserInfo` on Done and again at relaunch (visible in the Watch's WatchConnectivity log; the transfer stayed "transferring"). The phone's delegate never received it in over 10 minutes across a reboot of both simulators, so the phone import, acknowledgement and the pending list emptying were NOT observed end to end. The simulator pair reported the companion app as not installed for the first minutes and the transfer queued in the Watch's `UserInfoTransfers` was never handed to the phone; this is attributed to the simulator link, not demonstrated to be one. Nothing was faked: the phone half is covered by the unit tests only.
+
+### Not verified (needs real devices)
+
+Everything that crosses `WCSession`: background delivery with the phone app closed, the acknowledgement round trip, and the real-world timing of `outstandingUserInfoTransfers`. Also not exercised: a visionOS or macOS build of the app target (the phone sync code is `#if canImport(WatchConnectivity)`).
+
+### Device checklist for B1 (real Watch and iPhone)
+
+1. Finish a match on the Watch with the phone nearby and the phone app open: after Done, the match appears in History within seconds, without leaving the screen, and the Watch has no pending id and no local record (Debug log or debugger).
+2. Same with the phone app force-quit: the match is delivered in the background and is in History when the app is opened; the Watch's pending list empties after the acknowledgement arrives (maybe only at its next launch).
+3. Finish a match on the Watch while the phone is out of range (or in airplane mode), then reconnect: delivery and acknowledgement happen without any Watch action beyond the next launch or Done.
+4. On the match-over screen tap Undo after the deciding point, then replay and Done: the phone gets exactly one match, never the undone one.
+5. Delete a synced match on the phone, then make the Watch resend (disconnect before the acknowledgement arrives, then reconnect): the match does not come back.
+6. Edit a synced match's players on the phone, then make the Watch resend: the edits are kept.
+7. Demo gate: with Pro locked, a synced match counts once toward the demo limit and deleting it does not give the demo match back.
+8. Two Watches paired over time, and a reinstall of the phone app: no duplicate rows in History (the same match id collapses), and an old Watch queue still delivers.
+9. A phone on an older app version (older schema support): a Watch match is not acknowledged and arrives after the phone app updates.
+10. A match being scored on the phone while a Watch match arrives: the live match and its crash recovery are unaffected.
