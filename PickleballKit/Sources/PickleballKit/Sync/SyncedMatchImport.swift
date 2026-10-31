@@ -192,6 +192,14 @@ extension MatchRepository {
         return try modelContext.fetch(descriptor).first
     }
 
+    /// The saved match that started at exactly this instant, if any (a match and
+    /// its in-progress snapshot share their start time).
+    public func fetchMatchRecord(startedAt: Date) throws -> MatchRecord? {
+        var descriptor = FetchDescriptor<MatchRecord>(predicate: #Predicate { $0.startedAt == startedAt })
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
+    }
+
     /// Stores a match the Watch finished. Idempotent and first-write-wins: a
     /// match already here (by id) or already seen (imported, then deleted)
     /// changes nothing, so an edited match is never overwritten and a deleted

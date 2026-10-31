@@ -20,6 +20,11 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
     /// Runs on the main actor each time the session finishes activating, which
     /// is when the phone (re)publishes its Pro flag and demo count.
     private let onActivated: @MainActor @Sendable () -> Void
+    /// The last state actually handed to the system, so an unchanged state
+    /// (`proUnlocked.didSet` fires on every StoreManager refresh) is not pushed
+    /// again. Cleared at each activation: a new session or a different paired
+    /// Watch needs the state even if it has not changed.
+    private let lastPushed = OSAllocatedUnfairLock<PhoneStateContext?>(initialState: nil)
     private let log = Logger(subsystem: "com.delonsampaio.ServerTwo", category: "WatchSync")
 
     /// One line of WCSession state for the device log (Console): activation,
@@ -71,12 +76,14 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
     /// Errors are ignored (the next trigger pushes again) but logged.
     func push(_ context: PhoneStateContext) {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated,
-              WCSession.default.isPaired else {
+              WCSession.default.isPaired, WCSession.default.isWatchAppInstalled else {
             log.notice("phone: state push skipped (\(Self.stateSummary(), privacy: .public))")
             return
         }
+        guard lastPushed.withLock({ $0 }) != context else { return }
         do {
             try WCSession.default.updateApplicationContext(context.applicationContext)
+            lastPushed.withLock { $0 = context }
             log.info("phone: pushed state pro=\(context.proUnlocked, privacy: .public) count=\(context.completedMatchCount, privacy: .public)")
         } catch {
             log.error("phone: state push failed: \(error.localizedDescription, privacy: .public)")
@@ -93,6 +100,7 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
         if let error { log.error("phone: WCSession activation failed: \(error.localizedDescription, privacy: .public)") }
         log.info("phone: activation finished (\(Self.stateSummary(), privacy: .public))")
         guard activationState == .activated else { return }
+        lastPushed.withLock { $0 = nil }
         let onActivated = onActivated
         Task { @MainActor in onActivated() }
     }

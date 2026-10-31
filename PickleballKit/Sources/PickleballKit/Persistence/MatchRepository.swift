@@ -181,7 +181,12 @@ public final class MatchRepository {
         } catch {
             // A failed save leaves the whole inserted graph pending in the
             // context, where a lookup by id would still find it as if it were
-            // stored. Only inserts are staged here, so `rollback()` is safe.
+            // stored, so it is discarded. `rollback()` drops every unsaved change
+            // in the context, not only this graph: assigning `players` also
+            // stages inverse changes on existing SavedPlayers, and any unrelated
+            // pending work in a shared context goes too (callers save promptly,
+            // so there is none). No delete is ever staged in this context
+            // (`deleteMatch` uses a scratch one), which is what makes it safe.
             modelContext.rollback()
             throw error
         }

@@ -188,6 +188,19 @@ final class WatchAccessTests: XCTestCase {
         XCTAssertFalse(access.canStartMatch)
     }
 
+    func testACachedPhoneProSurvivesAStoreKitFalseRefresh() async {
+        let suite = makeSyncSuite()
+        let counter = WatchLifetimeCounter(suiteName: suite)
+        counter.increment()
+        WatchEntitlementCache(suiteName: suite).apply(PhoneStateContext(proUnlocked: true, completedMatchCount: 1))
+        let access = WatchAccess(
+            counter: counter, cache: WatchEntitlementCache(suiteName: suite), entitlements: FakeEntitlements(pro: false)
+        )
+        await access.refreshEntitlements()  // StoreKit says not Pro
+        XCTAssertTrue(access.isPro, "the cached phone flag still unlocks (until the phone pushes false)")
+        XCTAssertTrue(access.canStartMatch)
+    }
+
     func testTheCachedPhoneStateSurvivesARelaunch() {
         let suite = makeSyncSuite()
         let first = WatchAccess(

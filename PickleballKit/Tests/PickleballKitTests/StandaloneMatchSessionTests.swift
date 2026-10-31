@@ -704,4 +704,59 @@ final class StandaloneMatchSessionTests: XCTestCase {
         session.abandon()
         XCTAssertEqual(counter.count, 0)
     }
+
+    // MARK: Stale snapshot after a recovered save
+
+    func testDoneClearsTheSnapshotLeftByARecoveredSave() throws {
+        let session = makeSession()
+        repository.afterSaveHookForTesting = { throw HookFailure() }
+        finishMatch(session)
+        XCTAssertNotNil(try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil), "precondition: the stale snapshot is on disk")
+
+        repository.afterSaveHookForTesting = nil
+        try session.dismissFinishedMatch()
+
+        XCTAssertNil(try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil))
+    }
+
+    func testAbandonClearsTheSnapshotLeftByARecoveredSave() throws {
+        let session = makeSession()
+        repository.afterSaveHookForTesting = { throw HookFailure() }
+        finishMatch(session)
+        repository.afterSaveHookForTesting = nil
+        session.abandon()
+        XCTAssertNil(try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil))
+    }
+
+    func testARelaunchAfterARecoveredSaveDoesNotResumeTheSavedMatchOrSaveItTwice() throws {
+        let counter = WatchLifetimeCounter(suiteName: suite)
+        let first = makeCountingSession(counter)
+        repository.afterSaveHookForTesting = { throw HookFailure() }
+        finishMatch(first)  // stored and counted, snapshot left behind; then the app dies
+        repository.afterSaveHookForTesting = nil
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 1)
+        XCTAssertEqual(counter.count, 1)
+
+        let relaunched = makeCountingSession(counter)
+        XCTAssertFalse(relaunched.resumeIfNeeded(), "the saved match must not come back")
+        XCTAssertFalse(relaunched.isActive)
+        XCTAssertNil(try repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil), "and the stale snapshot is gone")
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 1, "no second record")
+        XCTAssertEqual(counter.count, 1, "not counted again")
+    }
+
+    func testARelaunchStillResumesAnUnfinishedMatchWithTheSameRecordsAround() throws {
+        // A saved match from earlier must not stop a genuinely unfinished one
+        // (different start time) from resuming.
+        let first = makeSession()
+        finishMatch(first)
+        try first.dismissFinishedMatch()
+        let live = makeSession()
+        live.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        tap(live, .teamA, times: 3)
+
+        let relaunched = makeSession()
+        XCTAssertTrue(relaunched.resumeIfNeeded())
+        XCTAssertEqual(relaunched.score(for: .teamA), 3)
+    }
 }

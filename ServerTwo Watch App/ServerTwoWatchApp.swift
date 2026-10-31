@@ -27,6 +27,9 @@ struct ServerTwoWatchApp: App {
         // defaults suite.
         let demo = WatchDemo(arguments: ProcessInfo.processInfo.arguments)
         if demo != nil {
+            // Every demo launch starts clean: leftovers (a counted demo match,
+            // pending ids, a cached phone state) would change what Home shows.
+            UserDefaults(suiteName: "WatchDemo")?.removePersistentDomain(forName: "WatchDemo")
             pendingSync = PendingSyncStore(suiteName: "WatchDemo")
         }
         // Standard defaults in the real app; a throwaway suite for demos.

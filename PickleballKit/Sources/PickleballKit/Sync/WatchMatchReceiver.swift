@@ -53,8 +53,12 @@ public final class WatchMatchReceiver {
                 Self.log.notice("match \(label, privacy: .public): no schema key and unreadable payload, NOT acknowledged")
                 return .unsupportedNewerSchema
             }
-            Self.log.error("match \(label, privacy: .public): rejected (undecodable payload), acknowledged")
-            acknowledgeIfPossible(incoming.matchID, with: acknowledger)
+            if let id = incoming.matchID {
+                Self.log.error("match \(id.uuidString, privacy: .public): rejected (undecodable payload), acknowledged")
+                acknowledger.acknowledge(matchID: id)
+            } else {
+                Self.log.error("rejected (undecodable payload) with no match id, nothing to acknowledge")
+            }
             return .rejected(.undecodablePayload)
         }
         if let labelled = incoming.matchID, labelled != payload.id {
@@ -89,7 +93,4 @@ public final class WatchMatchReceiver {
         return result
     }
 
-    private func acknowledgeIfPossible(_ id: UUID?, with acknowledger: some PhoneSyncAcknowledging) {
-        if let id { acknowledger.acknowledge(matchID: id) }
-    }
 }

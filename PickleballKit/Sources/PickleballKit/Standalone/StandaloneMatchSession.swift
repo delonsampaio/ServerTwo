@@ -71,6 +71,11 @@ public final class StandaloneMatchSession {
     /// retried at the next save, so a failure can never leave an orphan plus a
     /// second record for the same match.
     private var staleRecord: MatchRecord?
+    /// Set when a save threw AFTER the record was stored (clearing the
+    /// in-progress snapshot is its last step). The snapshot, one point short of
+    /// the final score, is then still on disk; Done and abandon retry the clear,
+    /// and a relaunch discards it (see `resumeIfNeeded`).
+    private var snapshotNeedsClearing = false
 
     /// Called after "Done" has saved the match and returned to idle. The sync
     /// coordinator hooks in here: Done is the moment the finished match can no
@@ -245,6 +250,14 @@ public final class StandaloneMatchSession {
         guard match == nil,
               let resumed = try? repository.loadInProgressMatch(proUnlocked: true, demoPointCap: nil)
         else { return match != nil }
+        // A snapshot whose match is already saved (the save stored the record
+        // but failed before clearing the snapshot) must not come back: replaying
+        // its last point would save, count and send the same match a second time.
+        // Snapshot and record carry the same start instant.
+        if (try? repository.fetchMatchRecord(startedAt: resumed.startedAt)) != nil {
+            try? repository.clearInProgressSnapshot()
+            return false
+        }
         let restored = resumed.match
         match = restored
         startedAt = resumed.startedAt
@@ -352,6 +365,7 @@ public final class StandaloneMatchSession {
     /// return to idle.
     public func dismissFinishedMatch() throws {
         _ = try saveIfNeeded()
+        retrySnapshotClearIfNeeded()
         reset()
         onFinishedMatchDismissed?()
     }
@@ -364,6 +378,7 @@ public final class StandaloneMatchSession {
         // never offer this (End Match is on the scoring screen only), so this
         // makes the unreachable case safe instead of silent.
         if savedRecord != nil {
+            retrySnapshotClearIfNeeded()
             reset()
             onFinishedMatchDismissed?()
             return
@@ -374,6 +389,11 @@ public final class StandaloneMatchSession {
     }
 
     // MARK: Private
+
+    private func retrySnapshotClearIfNeeded() {
+        guard snapshotNeedsClearing else { return }
+        if (try? repository.clearInProgressSnapshot()) != nil { snapshotNeedsClearing = false }
+    }
 
     private func reset() {
         match = nil
@@ -420,6 +440,7 @@ public final class StandaloneMatchSession {
                 throw error
             }
             savedRecord = stored
+            snapshotNeedsClearing = true
             lifetimeCounter.increment()
             return stored
         }
