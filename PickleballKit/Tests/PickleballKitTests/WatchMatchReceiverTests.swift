@@ -99,4 +99,24 @@ final class WatchMatchReceiverTests: XCTestCase {
         XCTAssertEqual(try repository.fetchMatchHistory().count, 0)
         XCTAssertEqual(importedCounts.count, 1)
     }
+
+    func testAnUnreadablePayloadWithNoSchemaKeyIsTreatedAsUnsupportedNotRejected() throws {
+        // A shape from a version this app cannot read may carry no schema key
+        // either; acknowledging it would make the Watch delete its only copy.
+        let id = UUID()
+        let incoming = try XCTUnwrap(IncomingSyncedMatch(userInfo: [
+            "matchID": id.uuidString, "payload": Data([0xFF])
+        ]))
+        XCTAssertNil(incoming.schema)
+        XCTAssertEqual(receiver.receive(incoming, acknowledger: acknowledger), .unsupportedNewerSchema)
+        XCTAssertTrue(acknowledger.acknowledged.isEmpty)
+    }
+
+    func testAReadablePayloadWithNoSchemaKeyStillImports() throws {
+        let payload = SyncFixtures.payload()
+        let incoming = try XCTUnwrap(IncomingSyncedMatch(userInfo: [
+            "matchID": payload.id.uuidString, "payload": try payload.encoded()
+        ]))
+        XCTAssertEqual(receiver.receive(incoming, acknowledger: acknowledger), .imported)
+    }
 }

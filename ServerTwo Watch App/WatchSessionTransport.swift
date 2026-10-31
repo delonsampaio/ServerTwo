@@ -17,7 +17,17 @@ nonisolated final class WatchSessionTransport: NSObject, WCSessionDelegate, Watc
     }
 
     private let handlers = OSAllocatedUnfairLock<Handlers?>(initialState: nil)
-    private let log = Logger(subsystem: "com.delonsampaio.ServerTwo.watchkitapp", category: "sync")
+    private let log = Logger(subsystem: "com.delonsampaio.ServerTwo", category: "WatchSync")
+
+    /// One line of WCSession state for the device log (read through Console),
+    /// so a transfer that never arrives can be told apart from a session that
+    /// never became usable. Cheap and only logged at events, never polled.
+    private static func stateSummary() -> String {
+        guard WCSession.isSupported() else { return "WCSession unsupported" }
+        let session = WCSession.default
+        return "activation=\(session.activationState.rawValue) companionInstalled=\(session.isCompanionAppInstalled) "
+            + "reachable=\(session.isReachable) outstandingTransfers=\(session.outstandingUserInfoTransfers.count)"
+    }
 
     // MARK: WatchSyncTransport
 
@@ -33,10 +43,14 @@ nonisolated final class WatchSessionTransport: NSObject, WCSessionDelegate, Watc
     }
 
     func send(_ message: SyncedMatchMessage) {
-        guard isActivated else { return }
+        guard isActivated else {
+            log.error("watch: match \(message.matchID.uuidString, privacy: .public) NOT queued, session not activated (\(Self.stateSummary(), privacy: .public))")
+            return
+        }
         // Queued by the system and delivered when the phone is reachable, even
         // after this app is suspended or relaunched.
         WCSession.default.transferUserInfo(message.userInfo)
+        log.info("watch: queued match \(message.matchID.uuidString, privacy: .public) (\(Self.stateSummary(), privacy: .public))")
     }
 
     func start(
@@ -58,7 +72,8 @@ nonisolated final class WatchSessionTransport: NSObject, WCSessionDelegate, Watc
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        if let error { log.error("WCSession activation failed: \(error.localizedDescription)") }
+        if let error { log.error("watch: WCSession activation failed: \(error.localizedDescription, privacy: .public)") }
+        log.info("watch: activation finished (\(Self.stateSummary(), privacy: .public))")
         guard activationState == .activated, let handlers = handlers.withLock({ $0 }) else { return }
         Task { @MainActor in handlers.onActivated() }
     }
@@ -66,6 +81,7 @@ nonisolated final class WatchSessionTransport: NSObject, WCSessionDelegate, Watc
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         // Only the phone's acknowledgement matters; extract the id here, on the
         // delegate queue, and hand over just that.
+        log.info("watch: received userInfo, ack=\(SyncedMatchWire.acknowledgedMatchID(in: userInfo)?.uuidString ?? "none", privacy: .public) (\(Self.stateSummary(), privacy: .public))")
         guard let id = SyncedMatchWire.acknowledgedMatchID(in: userInfo),
               let handlers = handlers.withLock({ $0 }) else { return }
         Task { @MainActor in handlers.onAcknowledged(id) }
@@ -75,6 +91,11 @@ nonisolated final class WatchSessionTransport: NSObject, WCSessionDelegate, Watc
         // A finished transfer is NOT an acknowledgement, so success changes
         // nothing; on failure the id simply stays pending and is queued again
         // at the next launch or Done.
-        if let error { log.error("transferUserInfo failed: \(error.localizedDescription)") }
+        let id = SyncedMatchWire.matchID(in: userInfoTransfer.userInfo)?.uuidString ?? "unknown"
+        if let error {
+            log.error("watch: transfer of \(id, privacy: .public) failed: \(error.localizedDescription, privacy: .public) (\(Self.stateSummary(), privacy: .public))")
+        } else {
+            log.info("watch: transfer of \(id, privacy: .public) finished, awaiting the phone's acknowledgement (\(Self.stateSummary(), privacy: .public))")
+        }
     }
 }

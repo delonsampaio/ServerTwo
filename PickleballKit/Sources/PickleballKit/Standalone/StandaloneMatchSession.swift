@@ -353,6 +353,16 @@ public final class StandaloneMatchSession {
 
     /// Abandons without saving anything and drops the snapshot.
     public func abandon() {
+        // A match that is already saved (and pending) is finished, not
+        // abandoned: dropping the session state here would leave its record
+        // queued with nobody to send it until the next launch. The screens
+        // never offer this (End Match is on the scoring screen only), so this
+        // makes the unreachable case safe instead of silent.
+        if savedRecord != nil {
+            reset()
+            onFinishedMatchDismissed?()
+            return
+        }
         try? repository.clearInProgressSnapshot()
         removeStaleRecord()
         reset()

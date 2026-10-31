@@ -17,7 +17,18 @@ import PickleballKit
 /// to the main actor.
 nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAcknowledging, Sendable {
     private let handler: @MainActor @Sendable (IncomingSyncedMatch, any PhoneSyncAcknowledging) -> Void
-    private let log = Logger(subsystem: "com.delonsampaio.ServerTwo", category: "watch-sync")
+    private let log = Logger(subsystem: "com.delonsampaio.ServerTwo", category: "WatchSync")
+
+    /// One line of WCSession state for the device log (Console): activation,
+    /// pairing, whether the Watch app is installed, reachability and queued
+    /// transfers. Logged at events only, never polled.
+    private static func stateSummary() -> String {
+        guard WCSession.isSupported() else { return "WCSession unsupported" }
+        let session = WCSession.default
+        return "activation=\(session.activationState.rawValue) paired=\(session.isPaired) "
+            + "watchAppInstalled=\(session.isWatchAppInstalled) reachable=\(session.isReachable) "
+            + "outstandingTransfers=\(session.outstandingUserInfoTransfers.count)"
+    }
 
     init(handler: @escaping @MainActor @Sendable (IncomingSyncedMatch, any PhoneSyncAcknowledging) -> Void) {
         self.handler = handler
@@ -35,10 +46,15 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
 
     func acknowledge(matchID: UUID) {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated,
-              WCSession.default.isPaired else { return }
+              WCSession.default.isPaired else {
+            // The Watch will resend and get another chance; say so in the log.
+            log.error("phone: acknowledgement for \(matchID.uuidString, privacy: .public) NOT sent (\(Self.stateSummary(), privacy: .public))")
+            return
+        }
         // Queued by the system; if it is lost the Watch resends and the phone
         // simply answers "duplicate" and acknowledges again.
         WCSession.default.transferUserInfo(SyncedMatchWire.acknowledgementUserInfo(for: matchID))
+        log.info("phone: acknowledgement for \(matchID.uuidString, privacy: .public) queued (\(Self.stateSummary(), privacy: .public))")
     }
 
     // MARK: WCSessionDelegate
@@ -48,7 +64,8 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        if let error { log.error("WCSession activation failed: \(error.localizedDescription)") }
+        if let error { log.error("phone: WCSession activation failed: \(error.localizedDescription, privacy: .public)") }
+        log.info("phone: activation finished (\(Self.stateSummary(), privacy: .public))")
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
@@ -60,7 +77,11 @@ nonisolated final class PhoneWatchSync: NSObject, WCSessionDelegate, PhoneSyncAc
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
-        guard let incoming = IncomingSyncedMatch(userInfo: userInfo) else { return }
+        log.info("phone: received userInfo (\(Self.stateSummary(), privacy: .public))")
+        guard let incoming = IncomingSyncedMatch(userInfo: userInfo) else {
+            log.notice("phone: userInfo ignored, not a match transfer")
+            return
+        }
         let handler = handler
         let acknowledger: any PhoneSyncAcknowledging = self
         Task { @MainActor in handler(incoming, acknowledger) }

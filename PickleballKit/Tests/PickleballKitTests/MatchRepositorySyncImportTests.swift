@@ -145,6 +145,21 @@ final class MatchRepositorySyncImportTests: XCTestCase {
         XCTAssertTrue(seen.contains(b))
     }
 
+    func testDeletingAMatchAlsoDeletesItsHiddenTwinsAndRemembersTheIDOnce() throws {
+        let id = UUID()
+        let visible = try SyncFixtures.saveRealMatch(repository, id: id, completedAt: SyncFixtures.t0)
+        try SyncFixtures.saveRealMatch(repository, id: id, completedAt: SyncFixtures.t0)
+        let other = try SyncFixtures.saveRealMatch(repository, completedAt: SyncFixtures.t0.addingTimeInterval(-50))
+        XCTAssertEqual(try counts().matches, 3)
+
+        try repository.deleteMatch(visible)
+
+        XCTAssertEqual(try counts().matches, 1, "both rows with the id are gone")
+        XCTAssertEqual(try repository.fetchMatchHistory().first?.id, other.id)
+        XCTAssertEqual(seen.ids.filter { $0 == id }.count, 1)
+        XCTAssertEqual(try counts().games, 1, "their games and points went with them")
+    }
+
     // MARK: Versions
 
     func testANewerSchemaIsNotStoredNorMarkedSeen() throws {
@@ -223,10 +238,23 @@ final class MatchRepositorySyncImportTests: XCTestCase {
         XCTAssertEqual(try repository.importSyncedMatch(payload), .imported)
     }
 
-    func testOvertimeAndFreezeFinalsAreAcceptedLikeQuickLog() throws {
+    func testAnOvertimeFinalIsAccepted() throws {
         var payload = SyncFixtures.payload()
         payload.games[0] = SyncFixtures.game(1, 13, 11)
         XCTAssertEqual(try repository.importSyncedMatch(payload), .imported)
+    }
+
+    /// Freeze is the one format whose overtime margin is not 2 (see
+    /// `isCompletedGameScore`), so it must pass with a wider one.
+    func testAFreezeOvertimeFinalWithAWiderMarginIsAccepted() throws {
+        var payload = SyncFixtures.payload()
+        payload.configurationData = try JSONEncoder().encode(GameConfiguration(scoringFormat: .rally(freeze: true)))
+        payload.games[0] = SyncFixtures.game(1, 16, 12)
+        XCTAssertEqual(try repository.importSyncedMatch(payload), .imported)
+        // The same final is impossible without freeze.
+        var strict = SyncFixtures.payload()
+        strict.games[0] = SyncFixtures.game(1, 16, 12)
+        XCTAssertEqual(try repository.importSyncedMatch(strict), .rejected(.invalidGameScore))
     }
 
     // MARK: The live phone match

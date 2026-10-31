@@ -35,6 +35,11 @@ public final class MatchRepository {
     /// resend from the Watch can never bring a deleted match back. The default
     /// is the app's standard defaults; tests inject a throwaway suite.
     let seenMatchIDs: SeenMatchIDStore
+    /// Test seams for `saveCompletedMatch`: one runs before its `save()`, the
+    /// other after the save and before the snapshot is cleared (the two places
+    /// a save can fail, with opposite consequences for what is stored).
+    var beforeSaveHookForTesting: (() throws -> Void)?
+    var afterSaveHookForTesting: (() throws -> Void)?
 
     public init(modelContext: ModelContext, seenMatchIDs: SeenMatchIDStore = SeenMatchIDStore()) {
         self.modelContext = modelContext
@@ -170,12 +175,22 @@ public final class MatchRepository {
         }
         record.games = gameRecords
 
-        try modelContext.save()
+        do {
+            try beforeSaveHookForTesting?()
+            try modelContext.save()
+        } catch {
+            // A failed save leaves the whole inserted graph pending in the
+            // context, where a lookup by id would still find it as if it were
+            // stored. Only inserts are staged here, so `rollback()` is safe.
+            modelContext.rollback()
+            throw error
+        }
 
         // The match this just persisted to history can no longer be the
         // "live in-progress match" — clear its crash-recovery snapshot so
         // loadInProgressMatch can't resurface a finished match (which would
         // both read as "currently playing" and risk being saved twice).
+        try afterSaveHookForTesting?()
         try clearInProgressSnapshot()
 
         return record
@@ -701,6 +716,14 @@ public final class MatchRepository {
         scratch.autosaveEnabled = false
         let target = scratch.model(for: match.persistentModelID)
         scratch.delete(target)
+        // Every row sharing the id goes too: a reinstall racing CloudKit can
+        // leave a hidden twin (history shows one row per id), and a twin left
+        // behind would reappear the moment the visible row is deleted.
+        let matchID = match.id
+        for twin in try scratch.fetch(FetchDescriptor<MatchRecord>(predicate: #Predicate { $0.id == matchID }))
+        where twin.persistentModelID != match.persistentModelID {
+            scratch.delete(twin)
+        }
         try beforeSave?()
         try scratch.save()
     }

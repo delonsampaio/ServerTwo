@@ -573,4 +573,70 @@ final class StandaloneMatchSessionTests: XCTestCase {
         try session.dismissFinishedMatch()
         XCTAssertEqual(fired, 1)
     }
+
+    // MARK: Save failures (review gaps)
+
+    private struct HookFailure: Error {}
+
+    func testASaveThatThrowsBeforeStoringLeavesNothingAndNoPendingID() throws {
+        let session = makeSession()
+        let pending = PendingSyncStore(suiteName: suite)
+        repository.beforeSaveHookForTesting = { throw HookFailure() }
+        finishMatch(session)  // the automatic save at the deciding point throws
+
+        XCTAssertNil(session.undoableSavedMatchID, "no record to point at")
+        XCTAssertEqual(pending.pendingMatchIDs, [])
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<MatchRecord>()), 0, "the unsaved graph was rolled back")
+
+        // Done retries and now stores exactly one match, queued once.
+        repository.beforeSaveHookForTesting = nil
+        try session.dismissFinishedMatch()
+        let history = try repository.fetchMatchHistory()
+        XCTAssertEqual(history.count, 1)
+        XCTAssertEqual(pending.pendingMatchIDs, [history[0].id])
+    }
+
+    func testASaveThatThrowsAfterStoringKeepsTheStoredRecordAndDoesNotDuplicate() throws {
+        let session = makeSession()
+        let pending = PendingSyncStore(suiteName: suite)
+        repository.afterSaveHookForTesting = { throw HookFailure() }
+        finishMatch(session)
+
+        let history = try repository.fetchMatchHistory()
+        XCTAssertEqual(history.count, 1, "the record really was stored")
+        XCTAssertEqual(session.undoableSavedMatchID, history[0].id)
+        XCTAssertEqual(pending.pendingMatchIDs, [history[0].id])
+
+        repository.afterSaveHookForTesting = nil
+        try session.dismissFinishedMatch()
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 1, "Done does not save the match a second time")
+        XCTAssertEqual(pending.pendingMatchIDs, [history[0].id])
+    }
+
+    func testAbandonOnAnAlreadySavedMatchKeepsItQueuedAndTriggersSync() throws {
+        let session = makeSession()
+        let pending = PendingSyncStore(suiteName: suite)
+        var fired = 0
+        session.onFinishedMatchDismissed = { fired += 1 }
+        finishMatch(session)
+        let id = try XCTUnwrap(session.undoableSavedMatchID)
+
+        session.abandon()
+
+        XCTAssertEqual(fired, 1, "the pending match is handed to sync, not orphaned")
+        XCTAssertEqual(pending.pendingMatchIDs, [id])
+        XCTAssertNotNil(try repository.fetchMatchRecord(id: id))
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testAbandonMidMatchStillSavesNothing() throws {
+        let session = makeSession()
+        var fired = 0
+        session.onFinishedMatchDismissed = { fired += 1 }
+        session.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        tap(session, .teamA, times: 3)
+        session.abandon()
+        XCTAssertEqual(fired, 0)
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 0)
+    }
 }

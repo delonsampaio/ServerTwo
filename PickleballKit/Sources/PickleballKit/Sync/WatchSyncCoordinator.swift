@@ -33,6 +33,8 @@ public final class WatchSyncCoordinator {
     private let pendingSync: PendingSyncStore
     private let transport: any WatchSyncTransport
     private let session: StandaloneMatchSession
+    /// Test seam: how a record is deleted after an acknowledgement.
+    var deleteRecord: (MatchRecord) throws -> Void
 
     public init(
         repository: MatchRepository,
@@ -44,6 +46,7 @@ public final class WatchSyncCoordinator {
         self.pendingSync = pendingSync
         self.transport = transport
         self.session = session
+        self.deleteRecord = { try repository.deleteMatch($0) }
     }
 
     /// Wires the Done trigger and starts the transport (whose activation then
@@ -90,7 +93,7 @@ public final class WatchSyncCoordinator {
         guard !session.heldBackMatchIDs.contains(id), pendingSync.isPending(id) else { return }
         do {
             if let record = try repository.fetchMatchRecord(id: id) {
-                try repository.deleteMatch(record)
+                try deleteRecord(record)
             }
         } catch {
             return

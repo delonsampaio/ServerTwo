@@ -149,4 +149,32 @@ final class WatchSyncCoordinatorTests: XCTestCase {
         transport.simulateActivation()
         XCTAssertEqual(transport.sent.map(\.matchID), [id, id])
     }
+
+    func testAFailedLocalDeleteOnAcknowledgementLeavesTheIDPending() throws {
+        let id = try queuedMatch()
+        coordinator.deleteRecord = { _ in throw NSError(domain: "x", code: 1) }
+        transport.simulateAcknowledgement(id)
+        XCTAssertTrue(pending.isPending(id), "kept so the next acknowledgement retries the delete")
+        XCTAssertNotNil(try repository.fetchMatchRecord(id: id))
+
+        coordinator.deleteRecord = { [repository] in try repository!.deleteMatch($0) }
+        transport.simulateAcknowledgement(id)
+        XCTAssertFalse(pending.isPending(id))
+        XCTAssertNil(try repository.fetchMatchRecord(id: id))
+    }
+
+    func testAnAcknowledgementForAStaleRecordIsIgnoredAndItIsNeverSent() throws {
+        finishMatchOnSession()
+        let id = try XCTUnwrap(session.undoableSavedMatchID)
+        session.deleteMatchRecord = { _ in throw NSError(domain: "x", code: 1) }
+        session.undo()  // the delete fails: the record is kept as stale
+        XCTAssertNil(session.undoableSavedMatchID)
+        XCTAssertEqual(session.heldBackMatchIDs, [id])
+
+        transport.simulateActivation()
+        XCTAssertTrue(transport.sent.isEmpty, "a stale record is not a match")
+        transport.simulateAcknowledgement(id)
+        XCTAssertTrue(pending.isPending(id))
+        XCTAssertNotNil(try repository.fetchMatchRecord(id: id))
+    }
 }
