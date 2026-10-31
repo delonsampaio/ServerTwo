@@ -10,6 +10,9 @@ struct ServerTwoWatchApp: App {
     /// `.modelContainer` modifier.
     private let modelContainer: ModelContainer
     private let initialFlow: WatchFlow
+    /// Held for the app's lifetime: it owns the WCSession delegate, which must
+    /// exist from launch so a queued acknowledgement is not dropped.
+    private let syncCoordinator: WatchSyncCoordinator
 
     init() {
         var flow = WatchFlow()
@@ -28,11 +31,11 @@ struct ServerTwoWatchApp: App {
         #endif
 
         let session: StandaloneMatchSession
+        var syncRepository = repository
         #if DEBUG
         if demo != nil, let memory = try? PersistenceContainer.makeInMemoryContainer() {
-            session = StandaloneMatchSession(
-                repository: MatchRepository(modelContext: ModelContext(memory)), pendingSync: pendingSync
-            )
+            syncRepository = MatchRepository(modelContext: ModelContext(memory))
+            session = StandaloneMatchSession(repository: syncRepository, pendingSync: pendingSync)
             flow = demo?.apply(to: session) ?? WatchFlow()
         } else {
             session = StandaloneMatchSession(repository: repository, pendingSync: pendingSync)
@@ -44,8 +47,20 @@ struct ServerTwoWatchApp: App {
         session.resumeIfNeeded()
         #endif
 
+        // The sync repository is the one the session saves through, so a
+        // delete after an acknowledgement happens in the context that holds the
+        // record. Done and launch activation trigger the sync.
+        let coordinator = WatchSyncCoordinator(
+            repository: syncRepository, pendingSync: pendingSync, transport: WatchSessionTransport(), session: session
+        )
+        coordinator.start()
+        #if DEBUG
+        WatchAutoSync.playAndFinishIfRequested(on: session, arguments: ProcessInfo.processInfo.arguments)
+        #endif
+
         self.modelContainer = container
         self.initialFlow = flow
+        self.syncCoordinator = coordinator
         _session = State(initialValue: session)
     }
 

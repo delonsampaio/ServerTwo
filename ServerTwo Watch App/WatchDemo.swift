@@ -85,4 +85,27 @@ struct WatchDemo {
         }
     }
 }
+
+/// Debug-only `-Debug-WatchAutoSyncMatch`: plays one quick match (singles, one
+/// game to 11, Team A winning) against the REAL store and pending queue, then
+/// taps Done, so the Watch to iPhone sync can be checked end to end on paired
+/// simulators without a simulator being able to tap the watch screens.
+enum WatchAutoSync {
+    @MainActor
+    static func playAndFinishIfRequested(on session: StandaloneMatchSession, arguments: [String]) {
+        guard arguments.contains("-Debug-WatchAutoSyncMatch"), !session.isActive else { return }
+        session.start(
+            configuration: GameConfiguration(playMode: .singles, scoringFormat: .sideOut),
+            format: .bestOfOne,
+            firstServingTeam: .teamA
+        )
+        var taps = 0
+        while !session.isMatchOver, taps < 100 {
+            session.acknowledgeSideSwitchNotice()
+            session.recordPoint(for: .teamA)
+            taps += 1
+        }
+        try? session.dismissFinishedMatch()
+    }
+}
 #endif
