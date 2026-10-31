@@ -520,4 +520,57 @@ final class StandaloneMatchSessionTests: XCTestCase {
         try session.dismissFinishedMatch()
         XCTAssertEqual(try repository.fetchMatchHistory().count, 1)
     }
+
+    // MARK: Sync hooks (B1)
+
+    private func finishMatch(_ session: StandaloneMatchSession) {
+        session.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        playOutGame(session, winner: .teamA)
+    }
+
+    func testThePendingIDIsQueuedBeforeTheSaveAndIsTheRecordsID() throws {
+        let session = makeSession()
+        let pending = PendingSyncStore(suiteName: suite)
+        var pendingDuringSave: [UUID] = []
+        session.beforeSaveForTesting = { pendingDuringSave = pending.pendingMatchIDs }
+        finishMatch(session)
+        let record = try XCTUnwrap(try repository.fetchMatchHistory().first)
+        XCTAssertEqual(pendingDuringSave, [record.id], "marked pending before saveCompletedMatch ran")
+        XCTAssertEqual(pending.pendingMatchIDs, [record.id])
+    }
+
+    func testAFailedSaveRemovesTheIDItQueuedBeforehand() throws {
+        let session = makeSession()
+        let pending = PendingSyncStore(suiteName: suite)
+        session.saveFailureForTesting = NSError(domain: "x", code: 1)
+        finishMatch(session)  // the automatic save at the deciding point fails
+        XCTAssertEqual(pending.pendingMatchIDs, [], "no pending id without a record")
+        XCTAssertEqual(try repository.fetchMatchHistory().count, 0)
+    }
+
+    func testUndoableSavedMatchIDIsSetOnMatchOverAndClearedByUndoAndDone() throws {
+        let session = makeSession()
+        XCTAssertNil(session.undoableSavedMatchID)
+        finishMatch(session)
+        let id = try XCTUnwrap(session.undoableSavedMatchID)
+        XCTAssertEqual(session.heldBackMatchIDs, [id])
+
+        session.undo()
+        XCTAssertNil(session.undoableSavedMatchID)
+
+        playOutGame(session, winner: .teamA)
+        XCTAssertNotNil(session.undoableSavedMatchID)
+        try session.dismissFinishedMatch()
+        XCTAssertNil(session.undoableSavedMatchID)
+        XCTAssertTrue(session.heldBackMatchIDs.isEmpty)
+    }
+
+    func testDismissingFiresTheDoneCallbackOnlyAfterASuccessfulSave() throws {
+        let session = makeSession()
+        var fired = 0
+        session.onFinishedMatchDismissed = { fired += 1 }
+        finishMatch(session)
+        try session.dismissFinishedMatch()
+        XCTAssertEqual(fired, 1)
+    }
 }

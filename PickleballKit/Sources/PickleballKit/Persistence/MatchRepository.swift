@@ -28,10 +28,17 @@ public struct ResumedMatch {
 /// Wraps all SwiftData access for match persistence. UI code should never
 /// touch `ModelContext` directly — it goes through this type instead.
 public final class MatchRepository {
-    private let modelContext: ModelContext
+    // Internal (not private) so the sync import in `MatchRepository+Sync.swift`
+    // shares the one context and the one seen-id store.
+    let modelContext: ModelContext
+    /// Remembers every match id this device has imported or deleted, so a late
+    /// resend from the Watch can never bring a deleted match back. The default
+    /// is the app's standard defaults; tests inject a throwaway suite.
+    let seenMatchIDs: SeenMatchIDStore
 
-    public init(modelContext: ModelContext) {
+    public init(modelContext: ModelContext, seenMatchIDs: SeenMatchIDStore = SeenMatchIDStore()) {
         self.modelContext = modelContext
+        self.seenMatchIDs = seenMatchIDs
     }
 
     // MARK: In-progress snapshot (crash recovery)
@@ -90,7 +97,11 @@ public final class MatchRepository {
         completedAt: Date = Date(),
         teamAPlayers: [SavedPlayer] = [],
         teamBPlayers: [SavedPlayer] = [],
-        gameCompletionDates: [Date?] = []
+        gameCompletionDates: [Date?] = [],
+        // Lets a caller choose the id up front: the Watch records it in its
+        // pending-sync queue BEFORE saving, so a crash between the two can
+        // never leave a saved match nobody knows to send.
+        id: UUID = UUID()
     ) throws -> MatchRecord {
         guard let winner = match.matchWinner else {
             throw MatchRepositoryError.matchNotOver
@@ -98,6 +109,7 @@ public final class MatchRepository {
 
         let configurationData = try JSONEncoder().encode(match.configuration)
         let record = MatchRecord(
+            id: id,
             startedAt: startedAt,
             completedAt: completedAt,
             matchFormat: match.matchFormat,
@@ -336,6 +348,12 @@ public final class MatchRepository {
         return player
     }
 
+    /// Newest first, one row per match id. `id` carries no uniqueness
+    /// constraint (the store syncs through CloudKit, which cannot enforce one),
+    /// so a reinstall racing a CloudKit download, or a retried import, can
+    /// leave two rows for the same match. They are collapsed here, keeping the
+    /// row that has linked players if any (the one the user edited), otherwise
+    /// the first in sort order; the rest are hidden, not deleted.
     public func fetchMatchHistory() throws -> [MatchRecord] {
         let descriptor = FetchDescriptor<MatchRecord>(
             sortBy: [
@@ -343,7 +361,23 @@ public final class MatchRepository {
                 SortDescriptor(\.id)
             ]
         )
-        return try modelContext.fetch(descriptor)
+        let rows = try modelContext.fetch(descriptor)
+        var chosen: [UUID: MatchRecord] = [:]
+        for row in rows {
+            guard let current = chosen[row.id] else {
+                chosen[row.id] = row
+                continue
+            }
+            if !Self.hasLinkedPlayers(current), Self.hasLinkedPlayers(row) {
+                chosen[row.id] = row
+            }
+        }
+        guard chosen.count != rows.count else { return rows }
+        return rows.filter { chosen[$0.id] === $0 }
+    }
+
+    private static func hasLinkedPlayers(_ match: MatchRecord) -> Bool {
+        (match.teamSides ?? []).contains { !($0.players ?? []).isEmpty }
     }
 
     // MARK: Saved Players
@@ -658,6 +692,11 @@ public final class MatchRepository {
     /// staged and before the single `save()`, so a test can make that step
     /// fail and check that the match is left intact.
     func deleteMatch(_ match: MatchRecord, beforeSave: (() throws -> Void)?) throws {
+        // Remembered BEFORE the delete: if the save succeeds but the app dies
+        // before anything else runs, a late resend must still find the id. If
+        // the delete then fails the match is simply a duplicate on resend, as
+        // it would have been anyway.
+        seenMatchIDs.insert(match.id)
         let scratch = ModelContext(modelContext.container)
         scratch.autosaveEnabled = false
         let target = scratch.model(for: match.persistentModelID)
@@ -670,6 +709,7 @@ public final class MatchRepository {
     /// `GameRecord`, and `PointEvent` rows via their `.cascade` delete rules.
     public func deleteAllMatchHistory() throws {
         let existing = try modelContext.fetch(FetchDescriptor<MatchRecord>())
+        seenMatchIDs.insert(contentsOf: existing.map(\.id))
         for record in existing {
             modelContext.delete(record)
         }

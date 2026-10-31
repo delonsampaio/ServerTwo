@@ -69,10 +69,30 @@ public final class StandaloneMatchSession {
     /// second record for the same match.
     private var staleRecord: MatchRecord?
 
+    /// Called after "Done" has saved the match and returned to idle. The sync
+    /// coordinator hooks in here: Done is the moment the finished match can no
+    /// longer be undone, so it is the moment it may be sent to the iPhone.
+    public var onFinishedMatchDismissed: (@MainActor () -> Void)?
+
+    /// The id of the finished match that is still on the match-over screen,
+    /// where Undo can delete it. It must not be sent to the iPhone yet, or an
+    /// undo after the send would leave the phone with a match that never
+    /// finished (and the replayed one as a second match).
+    public var undoableSavedMatchID: UUID? { savedRecord?.id }
+
+    /// Every match id sync must leave alone for now: the undoable one, and a
+    /// record whose delete failed after an undo (it is not a real match, and
+    /// is deleted at the next save).
+    public var heldBackMatchIDs: Set<UUID> {
+        Set([savedRecord?.id, staleRecord?.id].compactMap { $0 })
+    }
+
     /// Test seams. `deleteMatchRecord` defaults to the repository's delete;
     /// `saveFailureForTesting` makes the next save(s) throw.
     var deleteMatchRecord: (MatchRecord) throws -> Void
     var saveFailureForTesting: Error?
+    /// Runs right before the repository save, after the id was queued.
+    var beforeSaveForTesting: (() -> Void)?
 
     public init(
         repository: MatchRepository,
@@ -328,6 +348,7 @@ public final class StandaloneMatchSession {
     public func dismissFinishedMatch() throws {
         _ = try saveIfNeeded()
         reset()
+        onFinishedMatchDismissed?()
     }
 
     /// Abandons without saving anything and drops the snapshot.
@@ -350,7 +371,6 @@ public final class StandaloneMatchSession {
     private func saveIfNeeded() throws -> MatchRecord {
         if let savedRecord { return savedRecord }
         guard let match else { throw MatchRepositoryError.matchNotOver }
-        if let saveFailureForTesting { throw saveFailureForTesting }
         // Replace, never duplicate: a record whose delete failed earlier goes
         // first; if it still cannot be deleted the save fails (Done retries).
         if let stale = staleRecord {
@@ -358,15 +378,35 @@ public final class StandaloneMatchSession {
             pendingSync.confirmSynced(stale.id)
             staleRecord = nil
         }
-        let record = try repository.saveCompletedMatch(
-            match,
-            teamAName: Self.teamAName,
-            teamBName: Self.teamBName,
-            startedAt: startedAt,
-            completedAt: now(),
-            gameCompletionDates: gameCompletionDates
-        )
-        pendingSync.markPending(record.id)
+        // Queued BEFORE the save, with the id the record will get: a crash
+        // between the two leaves a pending id with no record (sync drops it),
+        // whereas the other order could leave a saved match nobody sends.
+        let id = UUID()
+        pendingSync.markPending(id)
+        let record: MatchRecord
+        do {
+            beforeSaveForTesting?()
+            if let saveFailureForTesting { throw saveFailureForTesting }
+            record = try repository.saveCompletedMatch(
+                match,
+                teamAName: Self.teamAName,
+                teamBName: Self.teamBName,
+                startedAt: startedAt,
+                completedAt: now(),
+                gameCompletionDates: gameCompletionDates,
+                id: id
+            )
+        } catch {
+            // The save can fail AFTER the record was stored (clearing the
+            // snapshot is its last step). Then the match exists: keep it queued
+            // and use it, or a retry would save the same match a second time.
+            guard let stored = try? repository.fetchMatchRecord(id: id) else {
+                pendingSync.confirmSynced(id)
+                throw error
+            }
+            savedRecord = stored
+            return stored
+        }
         savedRecord = record
         return record
     }
