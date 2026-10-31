@@ -219,11 +219,13 @@ Add one later if you want it.
   uploads. If an upload is refused because a build with that number already
   exists for the version, the fix is a `ci_scripts/ci_post_clone.sh` or
   `ci_scripts/ci_pre_xcodebuild.sh` script that sets the build number from the
-  `CI_BUILD_NUMBER` environment variable, for example with
-  `agvtool new-version -all "$CI_BUILD_NUMBER"` (run in the repository root;
-  mark the script executable). The app, the Watch app and the Live Activity must
-  all end up with the same build number, which `agvtool` with `-all` does for
-  the whole project. I did not add such a script, because I could not confirm
+  `CI_BUILD_NUMBER` environment variable. A simple version rewrites every
+  `CURRENT_PROJECT_VERSION = 1;` in `ServerTwo.xcodeproj/project.pbxproj` with
+  `sed -i '' "s/CURRENT_PROJECT_VERSION = 1;/CURRENT_PROJECT_VERSION = $CI_BUILD_NUMBER;/"`
+  (put it in `ci_scripts/ci_pre_xcodebuild.sh`, and mark the script executable).
+  All targets (app, Watch app, Live Activity) must end up with the same number,
+  and this does that. (`agvtool` also works, but only if the project uses Apple
+  generic versioning, which this one does not set.) I did not add such a script, because I could not confirm
   that it is needed; check the first build.
 - **Free compute.** From memory, the Apple Developer Program includes about
   25 compute hours per month for Xcode Cloud. Confirm the current allowance and
