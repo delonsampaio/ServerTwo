@@ -167,6 +167,16 @@ struct OnboardingView: View {
     }
 }
 
+extension OnboardingView {
+    /// A "Me" player already exists, which after a reinstall means the history
+    /// came back from iCloud: the name question has been answered before.
+    /// `hasSeenOnboarding` lives in this device's UserDefaults, so it is gone
+    /// with the app and cannot tell a new user from a returning one.
+    static func returningUserExists(in context: ModelContext) -> Bool {
+        (try? MatchRepository(modelContext: context).fetchMePlayer()) != nil
+    }
+}
+
 #Preview {
     let container = try! PersistenceContainer.makeInMemoryContainer()
     return OnboardingView(modelContext: container.mainContext)

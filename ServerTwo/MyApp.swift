@@ -119,10 +119,27 @@ struct MyApp: App {
                 }
                 .task {
                     applyTestOverridesIfNeeded()
+                    skipOnboardingForReturningUser()
                     startDemoLiveActivityIfRequested()
                     await storeManager.start()
                 }
+                // After a reinstall the "Me" player arrives from iCloud a little
+                // after launch, so the check repeats when a download finishes.
+                .onChange(of: cloudSync.lastImport) { _, _ in
+                    skipOnboardingForReturningUser()
+                }
         }
+    }
+
+    /// Closes (or never shows) onboarding once a "Me" player exists, so a
+    /// reinstall that restores your history does not ask for your name again.
+    /// UI tests that reset state are exempt: they exercise onboarding itself.
+    private func skipOnboardingForReturningUser() {
+        guard !hasSeenOnboarding,
+              !ProcessInfo.processInfo.arguments.contains("-UITest-ResetState"),
+              OnboardingView.returningUserExists(in: modelContainer.mainContext)
+        else { return }
+        hasSeenOnboarding = true
     }
 
     /// UI tests must never touch the audio session: any `-UITest-` launch
