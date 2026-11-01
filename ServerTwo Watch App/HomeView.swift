@@ -13,6 +13,14 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 8) {
+                // The system navigation title sits at the leading edge beside
+                // the clock; the app name reads better centred on Home.
+                Text("Server Two")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+
                 // The rules Start Match will use, so the player sees them
                 // without opening the sheet.
                 Text(rules.configuration.summaryText(matchFormat: rules.matchFormat))
@@ -49,7 +57,6 @@ struct HomeView: View {
                     .accessibilityIdentifier("Rules")
             }
         }
-        .navigationTitle("Server Two")
         .sheet(isPresented: $showingRules) {
             RulesSheet(rules: $rules)
         }
