@@ -198,6 +198,29 @@ public final class StandaloneMatchSession {
         return "SERVER \(serverNumber.rawValue)"
     }
 
+    /// The call the server says before serving, written out: serving score,
+    /// receiving score, server number ("7–5–2"). Only in doubles side-out (the
+    /// one format with a third number), `nil` while a Game Over notice is up or
+    /// once the match is decided. The serving team can be either zone, so the
+    /// order here is what the player cannot read off the screen.
+    public var scoreCall: String? {
+        guard let numbers = scoreCallNumbers else { return nil }
+        return "\(numbers.serving)–\(numbers.receiving)–\(numbers.server)"
+    }
+
+    /// The same call for VoiceOver, one number at a time.
+    public var spokenScoreCall: String? {
+        guard let numbers = scoreCallNumbers else { return nil }
+        return "Score call, \(numbers.serving), \(numbers.receiving), server \(numbers.server)"
+    }
+
+    private var scoreCallNumbers: (serving: Int, receiving: Int, server: Int)? {
+        guard let match, !isGameOver, !match.isMatchOver,
+              match.configuration.scoringFormat == .sideOut, match.configuration.playMode == .doubles
+        else { return nil }
+        return (score(for: servingTeam), score(for: servingTeam.opponent), serverNumber.rawValue)
+    }
+
     /// What a tap on this team's zone means, same wording as the iPhone's score
     /// card caption: in side-out scoring a tap on the receiving team is not a
     /// point but "second server" or "side out", which users otherwise tapped

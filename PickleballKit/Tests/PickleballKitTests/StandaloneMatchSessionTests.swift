@@ -116,6 +116,44 @@ final class StandaloneMatchSessionTests: XCTestCase {
         XCTAssertEqual(singles.tapCaption(for: .teamB), "Tap for Side Out")
     }
 
+    func testScoreCallIsServingScoreThenReceivingScoreThenServerNumber() {
+        let session = makeSession()
+        XCTAssertNil(session.scoreCall)  // no match yet
+
+        session.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        XCTAssertEqual(session.scoreCall, "0–0–2")  // the 0-0-2 start
+        tap(session, .teamA, times: 2)
+        XCTAssertEqual(session.scoreCall, "2–0–2")
+        session.recordPoint(for: .teamB)             // side out: B serves, Server 1
+        XCTAssertEqual(session.scoreCall, "0–2–1")   // serving B first, whichever zone is on top
+        session.recordPoint(for: .teamA)             // Server 1 lost the rally: 2nd server
+        XCTAssertEqual(session.scoreCall, "0–2–2")
+    }
+
+    func testScoreCallExistsOnlyWhereThereIsAServerNumberToCall() {
+        let singles = makeSession()
+        singles.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfOne, firstServingTeam: .teamA)
+        XCTAssertNil(singles.scoreCall)
+
+        let rally = makeSession()
+        rally.start(configuration: GameConfiguration(scoringFormat: .rally(freeze: false)), format: .bestOfOne, firstServingTeam: .teamA)
+        XCTAssertNil(rally.scoreCall)
+
+        let doubles = makeSession()
+        doubles.start(configuration: GameConfiguration(), format: .bestOfThree, firstServingTeam: .teamA)
+        playOutGame(doubles, winner: .teamA)
+        XCTAssertTrue(doubles.isGameOver)
+        XCTAssertNil(doubles.scoreCall)              // held on the Game Over screen
+        doubles.startNextGame()
+        XCTAssertNotNil(doubles.scoreCall)
+
+        let decided = makeSession()
+        decided.start(configuration: GameConfiguration(), format: .bestOfOne, firstServingTeam: .teamA)
+        playOutGame(decided, winner: .teamA)
+        XCTAssertTrue(decided.isMatchOver)
+        XCTAssertNil(decided.scoreCall)
+    }
+
     func testSpokenSummaryIncludesGamesWonOnlyWhenTheFormatHasGames() {
         let session = makeSession()
         session.start(configuration: GameConfiguration(playMode: .singles), format: .bestOfThree, firstServingTeam: .teamA)

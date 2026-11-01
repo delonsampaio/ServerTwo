@@ -11,6 +11,8 @@ struct CoinFlipView: View {
     let onBegin: (Team) -> Void
 
     @State private var firstServer: Team?
+    /// The first server came from "X Won Spin", not from the coin.
+    @State private var enteredByHand = false
 
     var body: some View {
         ScrollView {
@@ -26,8 +28,17 @@ struct CoinFlipView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("Begin Match")
-                    Button("Flip Again") { firstServer = CoinFlip.flip() }
-                        .frame(minHeight: 44)
+                    // A flip can be flipped again; a spin the players already
+                    // did cannot (a random flip would overrule what they
+                    // entered), so that one goes back to the choice instead.
+                    if enteredByHand {
+                        Button("Change") { firstServer = nil; enteredByHand = false }
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("Change Server")
+                    } else {
+                        Button("Flip Again") { firstServer = CoinFlip.flip() }
+                            .frame(minHeight: 44)
+                    }
                 } else {
                     Button { firstServer = CoinFlip.flip() } label: {
                         Text("Flip").frame(maxWidth: .infinity, minHeight: 44)
@@ -39,14 +50,14 @@ struct CoinFlipView: View {
                         .font(.footnote)
                         .foregroundStyle(Color.secondaryText)
                         .multilineTextAlignment(.center)
-                    Button { firstServer = .teamA } label: {
+                    Button { firstServer = .teamA; enteredByHand = true } label: {
                         Text("\(teamAName) Won Spin")
                             .lineLimit(2)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .accessibilityIdentifier("Team A Won Spin")
-                    Button { firstServer = .teamB } label: {
+                    Button { firstServer = .teamB; enteredByHand = true } label: {
                         Text("\(teamBName) Won Spin")
                             .lineLimit(2)
                             .multilineTextAlignment(.center)

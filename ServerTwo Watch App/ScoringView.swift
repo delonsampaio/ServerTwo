@@ -46,11 +46,12 @@ struct ScoringView: View {
         VStack(spacing: 4) {
             ScoreZone(session: session, team: .teamA)
             ScoreZone(session: session, team: .teamB)
-            HStack(spacing: 6) {
-                undoButton
-                if let bpm = workout.heartRate, !isLuminanceReduced {
-                    heartRateReadout(bpm)
-                }
+            // Undo keeps the room it needs; the call and then the heart rate
+            // take what is left. On a narrow watch at a large text size the
+            // heart rate is the first to go, never the call or Undo.
+            ViewThatFits(in: .horizontal) {
+                bottomRow(showingHeartRate: true)
+                bottomRow(showingHeartRate: false)
             }
         }
         .scenePadding(.horizontal)
@@ -61,8 +62,39 @@ struct ScoringView: View {
         .ignoresSafeArea(.container, edges: .bottom)
     }
 
-    /// Keeps the flexible width and 44 pt height: the readout beside it is
-    /// small and only takes what it needs.
+    private func bottomRow(showingHeartRate: Bool) -> some View {
+        HStack(spacing: 6) {
+            undoButton
+            if let call = session.scoreCall {
+                scoreCallPill(call)
+            }
+            if showingHeartRate, let bpm = workout.heartRate, !isLuminanceReduced {
+                heartRateReadout(bpm)
+            }
+        }
+    }
+
+    /// What the server says before serving ("7–5–2"): serving score, receiving
+    /// score, server number. The zones are in fixed top and bottom order, so
+    /// the serving score is not always the one on top. Doubles side-out only.
+    /// Capped at `.large` like the heart rate, so it stays small beside Undo.
+    private func scoreCallPill(_ call: String) -> some View {
+        Text(call)
+            .font(.footnote.weight(.semibold))
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 8)
+            .frame(minHeight: 32)
+            .overlay(Capsule().stroke(Color.secondary, lineWidth: 1))
+            .dynamicTypeSize(...DynamicTypeSize.large)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(session.spokenScoreCall ?? call)
+            .accessibilityIdentifier("ScoreCall")
+    }
+
+    /// Keeps the flexible width and 44 pt height: the readouts beside it are
+    /// small and only take what they need.
     private var undoButton: some View {
         Button {
             session.undo()
