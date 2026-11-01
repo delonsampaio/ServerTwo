@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(AppSettings.self) private var appSettings
     @Environment(ActiveMatchController.self) private var activeMatchController
     @Environment(StoreManager.self) private var storeManager
+    @Environment(CloudSyncMonitor.self) private var cloudSync
     @State private var mePlayer: SavedPlayer?
     @State private var isShowingPaywall = false
 
@@ -111,6 +112,16 @@ struct SettingsView: View {
                 }
             }
 
+            Section(
+                header: Text("iCloud").foregroundStyle(Color.secondaryText),
+                footer: Text("Matches and players sync through your private iCloud. This shows what sync did since the app opened.")
+                    .foregroundStyle(Color.secondaryText)
+            ) {
+                syncRow("Account", value: cloudSync.accountStatus, failure: nil)
+                syncRow("Last download", outcome: cloudSync.lastImport)
+                syncRow("Last upload", outcome: cloudSync.lastExport)
+            }
+
             Section {
                 HStack {
                     Text("Version")
@@ -131,10 +142,34 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .task { loadMePlayer() }
+        .task { await cloudSync.refreshAccountStatus() }
         .onAppear { storeManager.clearRestoreResult() }
         .sheet(isPresented: $isShowingPaywall) {
             PaywallView()
         }
+    }
+
+    private func syncRow(_ title: String, outcome: CloudSyncMonitor.Outcome?) -> some View {
+        guard let outcome else { return syncRow(title, value: "Nothing yet", failure: nil) }
+        let time = outcome.finished.formatted(date: .omitted, time: .shortened)
+        return syncRow(title, value: outcome.failure == nil ? "OK, \(time)" : "Failed, \(time)", failure: outcome.failure)
+    }
+
+    private func syncRow(_ title: String, value: String, failure: String?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(value).foregroundStyle(failure == nil ? Color.secondaryText : Color.red)
+            }
+            if let failure {
+                Text(failure)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondaryText)
+                    .textSelection(.enabled)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     /// Always present, so the purchase (and a restore on a new device) can be
@@ -211,6 +246,7 @@ struct SettingsView: View {
     .environment(AppSettings())
     .environment(try! ActiveMatchController(modelContext: ModelContext(PersistenceContainer.makeInMemoryContainer())))
     .environment(StoreManager.preview)
+    .environment(CloudSyncMonitor())
     .modelContainer(try! PersistenceContainer.makeInMemoryContainer())
 }
 #endif

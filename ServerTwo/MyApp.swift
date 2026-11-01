@@ -16,6 +16,8 @@ struct MyApp: App {
     @State private var appSettings: AppSettings
     @State private var voiceAnnouncer: VoiceAnnouncer
     @State private var storeManager: StoreManager
+    /// Created before the container so it is listening when mirroring starts.
+    @State private var cloudSync = CloudSyncMonitor()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -88,6 +90,7 @@ struct MyApp: App {
                 .environment(appSettings)
                 .environment(voiceAnnouncer)
                 .environment(storeManager)
+                .environment(cloudSync)
                 .onChange(of: appSettings.voiceAnnouncerEnabled) { _, enabled in
                     if !enabled { voiceAnnouncer.stop() }
                 }
