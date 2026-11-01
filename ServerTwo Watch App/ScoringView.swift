@@ -200,18 +200,32 @@ private struct ScoreZone: View {
 
     private var caption: String { session.servingCaption(for: team) ?? session.tapCaption(for: team) }
 
+    /// The longest form of the team name that fits the zone: the full name,
+    /// then first name and last initial ("Delon S. & Mike R."), then first
+    /// names. Only the shortest may wrap or be cut off. VoiceOver reads the
+    /// full name from the zone's label.
+    private func teamNameText(lines: Int, minimumScale: CGFloat) -> some View {
+        let variants = session.teamNameVariants(for: team)
+        return ViewThatFits(in: .horizontal) {
+            ForEach(variants.dropLast(), id: \.self) { name in
+                Text(name).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            }
+            Text(variants.last ?? session.teamName(for: team))
+                .lineLimit(lines)
+                .minimumScaleFactor(minimumScale)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.footnote.weight(.semibold))
+    }
+
     /// Full-width zone: names and caption on the left, the score on the right.
     private var stackedLabel: some View {
         HStack(spacing: 4) {
             VStack(alignment: .leading, spacing: 1) {
-                // Players' names can be long ("Mike & Sarah"): one line,
-                // shrunk a little, then cut off at the end. VoiceOver reads
-                // the whole name from the zone's label.
-                Text(session.teamName(for: team))
-                    .font(.footnote.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .truncationMode(.tail)
+                // Players' names can be long ("Mike & Sarah"): the longest
+                // form that fits on one line, shrunk a little at the last
+                // step, then cut off at the end.
+                teamNameText(lines: 1, minimumScale: 0.75)
                 // The serving badge says who is up, in words, so the cue is
                 // never colour alone; the receiving zone says what a tap
                 // does, because it is not a point.
@@ -242,13 +256,8 @@ private struct ScoreZone: View {
     /// the text wraps to two lines because each zone is only about half as wide.
     private var sideBySideLabel: some View {
         VStack(spacing: 2) {
-            Text(session.teamName(for: team))
-                .font(.footnote.weight(.semibold))
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
+            teamNameText(lines: 2, minimumScale: 0.7)
                 .multilineTextAlignment(.center)
-                // Without this the name stays on one line and is cut off.
-                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Text("\(session.score(for: team))")
                 .font(.system(size: 52, weight: .bold, design: .rounded))
@@ -259,13 +268,15 @@ private struct ScoreZone: View {
             Spacer(minLength: 0)
             // "Tap for 2nd Server" is too long for half a screen; the zone
             // itself says it is a tap. VoiceOver keeps the full hint.
+            // Footnote size, a step above the stacked layout's caption2: this
+            // is the line that says who serves.
             Text(caption.replacingOccurrences(of: "Tap for ", with: ""))
-                .font(.caption2.weight(isServing ? .bold : .regular))
+                .font(.footnote.weight(isServing ? .bold : .regular))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             if showsGames {
                 Text("Games \(session.gamesWon(for: team))")
-                    .font(.caption2)
+                    .font(.caption)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
             }

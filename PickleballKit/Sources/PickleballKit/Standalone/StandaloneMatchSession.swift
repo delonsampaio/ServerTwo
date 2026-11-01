@@ -158,6 +158,12 @@ public final class StandaloneMatchSession {
         players.teamName(for: team)
     }
 
+    /// `teamName` and its shorter forms, longest first (see
+    /// `WatchMatchPlayers.teamNameVariants`).
+    public func teamNameVariants(for team: Team) -> [String] {
+        players.teamNameVariants(for: team)
+    }
+
     /// Zero-based index of the game being played (the decided one once the
     /// match is over).
     public var currentGameIndex: Int {
