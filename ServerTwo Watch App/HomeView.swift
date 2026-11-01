@@ -98,6 +98,7 @@ struct RulesSheet: View {
     @Binding var rules: LastUsedRules
     @Environment(\.dismiss) private var dismiss
     @AppStorage(WorkoutPreference.key) private var recordsWorkout = true
+    @AppStorage(ScoringLayoutPreference.key) private var scoringLayout = ScoringLayout.stacked
 
     var body: some View {
         NavigationStack {
@@ -117,6 +118,13 @@ struct RulesSheet: View {
                 }
                 // Read when a match starts; a match already under way keeps
                 // the workout it began with.
+                // Stacked zones are wide and thin; side by side are narrower
+                // and taller, a thicker target. Read live by the scoring screen.
+                Picker("Layout", selection: $scoringLayout) {
+                    Text("Stacked").tag(ScoringLayout.stacked)
+                    Text("Side by side").tag(ScoringLayout.sideBySide)
+                }
+                .accessibilityIdentifier("Scoring Layout")
                 Toggle("Record workout", isOn: $recordsWorkout)
                     .accessibilityIdentifier("Record workout")
             }

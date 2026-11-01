@@ -10,6 +10,7 @@ struct ScoringView: View {
 
     @State private var confirmingEnd = false
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+    @AppStorage(ScoringLayoutPreference.key) private var layout = ScoringLayout.stacked
 
     var body: some View {
         Group {
@@ -44,8 +45,7 @@ struct ScoringView: View {
 
     private var zones: some View {
         VStack(spacing: 4) {
-            ScoreZone(session: session, team: .teamA)
-            ScoreZone(session: session, team: .teamB)
+            scoreZones
             // Undo keeps the room it needs; the call and then the heart rate
             // take what is left. On a narrow watch at a large text size the
             // heart rate is the first to go, never the call or Undo.
@@ -60,6 +60,22 @@ struct ScoringView: View {
         // screen's), which gives each zone more than the 44 pt minimum height
         // on the smaller watches.
         .ignoresSafeArea(.container, edges: .bottom)
+    }
+
+    /// Team A on top or on the left, Team B below or on the right. Stacked
+    /// zones are wide and thin; side-by-side zones are narrower but much
+    /// taller, a thicker target for a quick tap (Rules > Layout).
+    @ViewBuilder
+    private var scoreZones: some View {
+        if layout == .sideBySide {
+            HStack(spacing: 4) {
+                ScoreZone(session: session, team: .teamA, layout: layout)
+                ScoreZone(session: session, team: .teamB, layout: layout)
+            }
+        } else {
+            ScoreZone(session: session, team: .teamA, layout: layout)
+            ScoreZone(session: session, team: .teamB, layout: layout)
+        }
     }
 
     private func bottomRow(showingHeartRate: Bool) -> some View {
@@ -138,6 +154,7 @@ struct ScoringView: View {
 private struct ScoreZone: View {
     let session: StandaloneMatchSession
     let team: Team
+    let layout: ScoringLayout
 
     private var isServing: Bool { session.servingCaption(for: team) != nil }
     private var showsGames: Bool { session.matchFormat != .bestOfOne }
@@ -155,39 +172,8 @@ private struct ScoreZone: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                VStack(alignment: .leading, spacing: 1) {
-                    // Players' names can be long ("Mike & Sarah"): one line,
-                    // shrunk a little, then cut off at the end. VoiceOver reads
-                    // the whole name from the zone's label.
-                    Text(session.teamName(for: team))
-                        .font(.footnote.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .truncationMode(.tail)
-                    // The serving badge says who is up, in words, so the cue is
-                    // never colour alone; the receiving zone says what a tap
-                    // does, because it is not a point.
-                    Text(session.servingCaption(for: team) ?? session.tapCaption(for: team))
-                        .font(.caption2.weight(isServing ? .bold : .regular))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                    if showsGames {
-                        Text("Games \(session.gamesWon(for: team))")
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                    }
-                }
-                Spacer(minLength: 0)
-                // The score keeps its room: a long name gives way to it, never
-                // the other way round.
-                Text("\(session.score(for: team))")
-                    .font(.system(size: 52, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .layoutPriority(1)
+            Group {
+                if layout == .sideBySide { sideBySideLabel } else { stackedLabel }
             }
             .foregroundStyle(.white)
             // A zone is a fixed-height surface (two share the screen with
@@ -210,6 +196,80 @@ private struct ScoreZone: View {
         .accessibilityLabel(session.spokenSummary(for: team))
         .accessibilityHint(session.tapCaption(for: team))
         .accessibilityIdentifier(team == .teamA ? "Team A Zone" : "Team B Zone")
+    }
+
+    private var caption: String { session.servingCaption(for: team) ?? session.tapCaption(for: team) }
+
+    /// Full-width zone: names and caption on the left, the score on the right.
+    private var stackedLabel: some View {
+        HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: 1) {
+                // Players' names can be long ("Mike & Sarah"): one line,
+                // shrunk a little, then cut off at the end. VoiceOver reads
+                // the whole name from the zone's label.
+                Text(session.teamName(for: team))
+                    .font(.footnote.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .truncationMode(.tail)
+                // The serving badge says who is up, in words, so the cue is
+                // never colour alone; the receiving zone says what a tap
+                // does, because it is not a point.
+                Text(caption)
+                    .font(.caption2.weight(isServing ? .bold : .regular))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                if showsGames {
+                    Text("Games \(session.gamesWon(for: team))")
+                        .font(.caption2)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                }
+            }
+            Spacer(minLength: 0)
+            // The score keeps its room: a long name gives way to it, never
+            // the other way round.
+            Text("\(session.score(for: team))")
+                .font(.system(size: 52, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .layoutPriority(1)
+        }
+    }
+
+    /// Half-width zone, name on top, the score in the middle, then the caption:
+    /// the text wraps to two lines because each zone is only about half as wide.
+    private var sideBySideLabel: some View {
+        VStack(spacing: 2) {
+            Text(session.teamName(for: team))
+                .font(.footnote.weight(.semibold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.center)
+                // Without this the name stays on one line and is cut off.
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Text("\(session.score(for: team))")
+                .font(.system(size: 52, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .layoutPriority(1)
+            Spacer(minLength: 0)
+            // "Tap for 2nd Server" is too long for half a screen; the zone
+            // itself says it is a tap. VoiceOver keeps the full hint.
+            Text(caption.replacingOccurrences(of: "Tap for ", with: ""))
+                .font(.caption2.weight(isServing ? .bold : .regular))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            if showsGames {
+                Text("Games \(session.gamesWon(for: team))")
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            }
+        }
     }
 }
 
