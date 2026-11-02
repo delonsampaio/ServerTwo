@@ -25,7 +25,7 @@ struct ScoringView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .overlay(alignment: .top) { centredTitle }
+        .centredTitleBar(session.matchFormat == .bestOfOne ? "Match" : "Game \(session.currentGameIndex + 1)")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("End Match", systemImage: "xmark") { confirmingEnd = true }
@@ -43,34 +43,18 @@ struct ScoringView: View {
         }
     }
 
-    /// "Game 2" centred in the top bar, between the End Match button and the
-    /// clock. The system navigation title sits at the trailing edge under the
-    /// clock instead, and watchOS has no principal toolbar slot, so the title
-    /// is drawn over the bar: as tall as the top inset, lifted into it.
-    private var centredTitle: some View {
-        GeometryReader { proxy in
-            Text(session.matchFormat == .bestOfOne ? "Match" : "Game \(session.currentGameIndex + 1)")
-                .font(.headline)
-                .foregroundStyle(Color.accentColor)
-                .lineLimit(1)
-                .dynamicTypeSize(...DynamicTypeSize.large)
-                .frame(maxWidth: .infinity)
-                .frame(height: proxy.safeAreaInsets.top)
-                .offset(y: -proxy.safeAreaInsets.top)
-                .accessibilityAddTraits(.isHeader)
-                .allowsHitTesting(false)
-        }
-    }
-
     private var zones: some View {
         VStack(spacing: 4) {
             scoreZones
             // Undo keeps the room it needs; the call and then the heart rate
-            // take what is left. On a narrow watch at a large text size the
-            // heart rate is the first to go, never the call or Undo.
+            // take what is left. In doubles side-out on a small watch the word
+            // "Undo" does not leave room for the heart rate, so Undo first
+            // shrinks to its icon; only then does the heart rate go, never the
+            // call or Undo.
             ViewThatFits(in: .horizontal) {
-                bottomRow(showingHeartRate: true)
-                bottomRow(showingHeartRate: false)
+                bottomRow(showingHeartRate: true, compactUndo: false)
+                bottomRow(showingHeartRate: true, compactUndo: true)
+                bottomRow(showingHeartRate: false, compactUndo: false)
             }
         }
         .scenePadding(.horizontal)
@@ -84,22 +68,38 @@ struct ScoringView: View {
     /// Team A on top or on the left, Team B below or on the right. Stacked
     /// zones are wide and thin; side-by-side zones are narrower but much
     /// taller, a thicker target for a quick tap (Rules > Layout).
-    @ViewBuilder
+    ///
+    /// Both zones show the same form of the name: the longest level (full
+    /// names, first name and last initial, first names) at which both fit, so
+    /// the pair never reads "Delon Sampaio" beside "Priya R.". Only the last
+    /// level may wrap or be cut off.
     private var scoreZones: some View {
-        if layout == .sideBySide {
-            HStack(spacing: 4) {
-                ScoreZone(session: session, team: .teamA, layout: layout)
-                ScoreZone(session: session, team: .teamB, layout: layout)
+        let levels = max(session.teamNameVariants(for: .teamA).count, session.teamNameVariants(for: .teamB).count)
+        return ViewThatFits(in: .horizontal) {
+            ForEach(0..<levels, id: \.self) { level in
+                zonePair(nameLevel: level, wrapsName: level == levels - 1)
             }
-        } else {
-            ScoreZone(session: session, team: .teamA, layout: layout)
-            ScoreZone(session: session, team: .teamB, layout: layout)
         }
     }
 
-    private func bottomRow(showingHeartRate: Bool) -> some View {
+    @ViewBuilder
+    private func zonePair(nameLevel: Int, wrapsName: Bool) -> some View {
+        if layout == .sideBySide {
+            EqualWidthHStack(spacing: 4) {
+                ScoreZone(session: session, team: .teamA, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName)
+                ScoreZone(session: session, team: .teamB, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName)
+            }
+        } else {
+            VStack(spacing: 4) {
+                ScoreZone(session: session, team: .teamA, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName)
+                ScoreZone(session: session, team: .teamB, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName)
+            }
+        }
+    }
+
+    private func bottomRow(showingHeartRate: Bool, compactUndo: Bool) -> some View {
         HStack(spacing: 6) {
-            undoButton
+            undoButton(compact: compactUndo)
             if let call = session.scoreCall {
                 scoreCallPill(call)
             }
@@ -131,7 +131,7 @@ struct ScoringView: View {
     /// Keeps the flexible width at 36 pt tall, not 44: it is the least-used
     /// button, and the points go to the tap zones. The readouts beside it are
     /// small and only take what they need.
-    private var undoButton: some View {
+    private func undoButton(compact: Bool) -> some View {
         Button {
             session.undo()
             // An undo can bring the "Switch back" notice up; one haptic,
@@ -142,9 +142,15 @@ struct ScoringView: View {
                 WatchHaptics.playUndo()
             }
         } label: {
-            Label("Undo", systemImage: "arrow.uturn.backward")
-                .font(.footnote.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 36)
+            Group {
+                if compact {
+                    Image(systemName: "arrow.uturn.backward")
+                } else {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+            }
+            .font(.footnote.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: 36)
         }
         .buttonStyle(.bordered)
         .disabled(!session.canUndo)
@@ -175,6 +181,10 @@ private struct ScoreZone: View {
     let session: StandaloneMatchSession
     let team: Team
     let layout: ScoringLayout
+    /// Which form of the team name to show (see `ScoringView.scoreZones`), and
+    /// whether this is the last, shortest one, which may wrap or be cut off.
+    let nameLevel: Int
+    let wrapsName: Bool
 
     private var isServing: Bool { session.servingCaption(for: team) != nil }
     private var showsGames: Bool { session.matchFormat != .bestOfOne }
@@ -200,7 +210,9 @@ private struct ScoreZone: View {
             // Undo), so its text stops growing at xLarge instead of clipping;
             // VoiceOver reads the full label whatever the size.
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
-            .padding(.horizontal, 10)
+            // Half-width zones give up some side padding to the name and caption.
+            .padding(.horizontal, layout == .sideBySide ? 6 : 10)
+            .padding(.vertical, layout == .sideBySide ? 4 : 0)
             // 44 pt floor: with large system text the title and Undo grow and
             // squeeze the zones, which must never get shorter than a tap target.
             .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity)
@@ -220,13 +232,23 @@ private struct ScoreZone: View {
 
     private var caption: String { session.servingCaption(for: team) ?? session.tapCaption(for: team) }
 
-    /// The longest form of the team name that fits the zone: the full name,
-    /// then first name and last initial ("Delon S. & Mike R."), then first
-    /// names. Only the shortest may wrap or be cut off. VoiceOver reads the
-    /// full name from the zone's label.
+    /// The name at this zone's level. Every level but the last stays on one
+    /// line at its full width, so the parent can tell when it does not fit.
+    /// VoiceOver reads the full name from the zone's label.
     private func teamNameText(lines: Int, minimumScale: CGFloat) -> some View {
-        FittingTeamName(variants: session.teamNameVariants(for: team), lines: lines, minimumScale: minimumScale)
-            .font(.footnote.weight(.semibold))
+        let variants = session.teamNameVariants(for: team)
+        let name = variants[min(nameLevel, variants.count - 1)]
+        return Group {
+            if wrapsName {
+                Text(name)
+                    .lineLimit(lines)
+                    .minimumScaleFactor(minimumScale)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(name).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .font(.footnote.weight(.semibold))
     }
 
     /// "Tap for 2nd Server" is too long for a zone at full size: it shrank
@@ -327,6 +349,35 @@ private struct SideSwitchNoticeView: View {
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("Dismiss Side Switch")
             }
+        }
+    }
+}
+
+/// Two zones of the same width, each half of what is offered. Its ideal width
+/// is twice the wider zone's, so a `ViewThatFits` asks "does the wider of the
+/// two fit its half?" and not "do the two fit side by side?".
+private struct EqualWidthHStack: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
+        let count = CGFloat(subviews.count)
+        let idealWidth = (ideals.map(\.width).max() ?? 0) * count + spacing * max(count - 1, 0)
+        return CGSize(
+            width: proposal.width ?? idealWidth,
+            height: proposal.height ?? ideals.map(\.height).max() ?? 0
+        )
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else { return }
+        let count = CGFloat(subviews.count)
+        let width = (bounds.width - spacing * (count - 1)) / count
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(x: bounds.minX + CGFloat(index) * (width + spacing), y: bounds.minY),
+                proposal: ProposedViewSize(width: width, height: bounds.height)
+            )
         }
     }
 }

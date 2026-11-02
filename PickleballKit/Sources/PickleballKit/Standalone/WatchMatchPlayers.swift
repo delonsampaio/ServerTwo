@@ -31,6 +31,17 @@ public struct WatchMatchPlayers: Codable, Sendable, Equatable {
         TeamNaming.displayName(forPlayerNames: players(for: team).map(\.name), team: team)
     }
 
+    /// "Delon & Sarah win", "Mike wins", "Team A wins": two named players are
+    /// plural, one player or a placeholder name is singular.
+    public func winnerHeadline(for team: Team) -> String {
+        "\(teamName(for: team)) \(isPair(team) ? "win" : "wins")"
+    }
+
+    /// Two named players on the side, so a verb after the name is plural.
+    public func isPair(_ team: Team) -> Bool {
+        players(for: team).count > 1
+    }
+
     /// The team name from longest to shortest, for a zone that shows the
     /// longest one that fits: the full name ("Delon Sampaio & Mike Ross"),
     /// first name and last initial ("Delon S. & Mike R."), then first names

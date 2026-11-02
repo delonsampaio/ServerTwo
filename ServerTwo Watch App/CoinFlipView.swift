@@ -67,7 +67,8 @@ struct CoinFlipView: View {
                 }
             }
         }
-        .navigationTitle("Serve")
+        .navigationBarTitleDisplayMode(.inline)
+        .centredTitleBar("Serve")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel", systemImage: "xmark", action: onCancel)

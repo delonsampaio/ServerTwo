@@ -10,16 +10,24 @@ struct GameOverView: View {
         ScrollView {
             VStack(spacing: 4) {
                 if let summary = session.lastCompletedGame {
-                    Text("Game \(summary.gameNumber) to \(session.teamName(for: summary.winner))")
-                        .font(.headline)
-                        .multilineTextAlignment(.center)
+                    // One line shorter than "Game 1 to Delon & Sarah", so
+                    // "Next Game" stays on screen.
+                    FittingTeamName(
+                        variants: session.teamNameVariants(for: summary.winner),
+                        suffix: session.isPair(summary.winner) ? " win" : " wins", lines: 2, minimumScale: 0.8
+                    )
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
                     Text("\(summary.winnerScore) to \(summary.loserScore)")
                         .font(.title3.weight(.bold))
                         .monospacedDigit()
                     if let next = summary.nextServingTeam {
-                        Text("Next game, \(session.teamName(for: next)) serving")
-                            .font(.footnote)
-                            .multilineTextAlignment(.center)
+                        FittingTeamName(
+                            variants: session.teamNameVariants(for: next),
+                            suffix: session.isPair(next) ? " serve next" : " serves next", lines: 2, minimumScale: 0.8
+                        )
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
                     }
                 }
                 Text("Teams switch sides")
@@ -42,7 +50,7 @@ struct GameOverView: View {
                 .accessibilityIdentifier("Undo")
             }
         }
-        .navigationTitle("Game Over")
         .navigationBarTitleDisplayMode(.inline)
+        .centredTitleBar("Game Over")
     }
 }

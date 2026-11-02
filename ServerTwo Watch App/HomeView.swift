@@ -86,6 +86,9 @@ struct HomeView: View {
                     .multilineTextAlignment(.center)
                 }
             }
+            // Clear of the button's rounded ends, so a long second line does
+            // not touch the curve.
+            .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, minHeight: 44)
         }

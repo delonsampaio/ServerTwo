@@ -117,8 +117,11 @@ struct WatchDemo {
             session.startNextGame()
             play(session, toScoreA: 11, b: 9)
         default:
-            play(session, toScoreA: 11, b: 4)
-            session.startNextGame()
+            // A single game is still being played at 7-3; best of 3 is in game 2.
+            if bestOfThree {
+                play(session, toScoreA: 11, b: 4)
+                session.startNextGame()
+            }
             play(session, toScoreA: 7, b: 3)
             serve(session, .teamA)
         }

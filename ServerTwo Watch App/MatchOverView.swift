@@ -9,7 +9,7 @@ struct MatchOverView: View {
         ScrollView {
             VStack(spacing: 4) {
                 if let winner = session.matchWinner {
-                    Text("\(session.teamName(for: winner)) wins")
+                    Text(session.winnerHeadline(for: winner))
                         .font(.headline)
                         .multilineTextAlignment(.center)
                 }
@@ -46,8 +46,8 @@ struct MatchOverView: View {
                 .accessibilityIdentifier("Undo")
             }
         }
-        .navigationTitle("Match Over")
         .navigationBarTitleDisplayMode(.inline)
+        .centredTitleBar("Match Over")
         .alert("Couldn't save the match", isPresented: $saveFailed) {
             Button("OK", role: .cancel) {}
         } message: {

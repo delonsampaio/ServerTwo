@@ -158,6 +158,16 @@ public final class StandaloneMatchSession {
         players.teamName(for: team)
     }
 
+    /// "Delon & Sarah win" (see `WatchMatchPlayers.winnerHeadline`).
+    public func winnerHeadline(for team: Team) -> String {
+        players.winnerHeadline(for: team)
+    }
+
+    /// Two named players on the side: a verb after the name is plural.
+    public func isPair(_ team: Team) -> Bool {
+        players.isPair(team)
+    }
+
     /// `teamName` and its shorter forms, longest first (see
     /// `WatchMatchPlayers.teamNameVariants`).
     public func teamNameVariants(for team: Team) -> [String] {

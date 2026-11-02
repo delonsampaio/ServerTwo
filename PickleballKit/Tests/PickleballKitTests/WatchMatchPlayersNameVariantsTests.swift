@@ -51,4 +51,16 @@ final class WatchMatchPlayersNameVariantsTests: XCTestCase {
         let players = WatchMatchPlayers(teamB: [ref("Ana Souza"), ref("Bo Lee")])
         XCTAssertEqual(players.teamNameVariants(for: .teamB).first, players.teamName(for: .teamB))
     }
+
+    func testWinnerHeadlineAgreesWithOneOrTwoPlayers() {
+        let players = WatchMatchPlayers(
+            teamA: [ref("Delon"), ref("Sarah")], teamB: [ref("Priya")]
+        )
+        XCTAssertEqual(players.winnerHeadline(for: .teamA), "Delon & Sarah win")
+        XCTAssertEqual(players.winnerHeadline(for: .teamB), "Priya wins")
+    }
+
+    func testWinnerHeadlineForAnEmptySideUsesItsPlaceholder() {
+        XCTAssertEqual(WatchMatchPlayers.empty.winnerHeadline(for: .teamA), "Team A wins")
+    }
 }
