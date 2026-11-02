@@ -9,13 +9,25 @@ import PickleballKit
 ///     -Debug-WatchDemoMatch                         doubles best of 3, game 2, Team A serving
 ///     -Debug-WatchDemoMatch -Debug-WatchDemoState <scoringB|gameOver|matchOver|sideSwitch|coinFlip|home|homeBlocked>
 ///     ... -Debug-WatchDemoPlayers                   also a saved-player list and a chosen doubles selection
+///     ... -Debug-WatchDemoLongNames                 with players: full first and last names
+///     ... -Debug-WatchDemoSingles                   singles instead of doubles
+///     ... -Debug-WatchDemoRally                     rally scoring instead of side-out
+///     ... -Debug-WatchDemoSingleGame                one game ("Match") instead of best of 3
 struct WatchDemo {
     let state: String
     let withPlayers: Bool
+    let longNames: Bool
+    let singles: Bool
+    let rally: Bool
+    let singleGame: Bool
 
     init?(arguments: [String]) {
         guard arguments.contains("-Debug-WatchDemoMatch") else { return nil }
         withPlayers = arguments.contains("-Debug-WatchDemoPlayers")
+        longNames = arguments.contains("-Debug-WatchDemoLongNames")
+        singles = arguments.contains("-Debug-WatchDemoSingles")
+        rally = arguments.contains("-Debug-WatchDemoRally")
+        singleGame = arguments.contains("-Debug-WatchDemoSingleGame")
         if let index = arguments.firstIndex(of: "-Debug-WatchDemoState"), arguments.indices.contains(index + 1) {
             state = arguments[index + 1]
         } else {
@@ -36,18 +48,25 @@ struct WatchDemo {
         return access
     }
 
-    private static let demoList = [
-        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Delon", isMe: true),
-        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, name: "Mike"),
-        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, name: "Sarah"),
-        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!, name: "Priya"),
-        WatchPlayer(id: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!, name: "Tom"),
-    ]
+    private static let shortNames = ["Delon", "Mike", "Sarah", "Priya", "Tom"]
+    private static let longerNames = ["Delon Sampaio", "Mike Rodriguez", "Sarah Johnson", "Priya Raghunathan", "Tom Anderson"]
+
+    private var demoList: [WatchPlayer] {
+        let names = longNames ? Self.longerNames : Self.shortNames
+        return names.enumerated().map { index, name in
+            WatchPlayer(
+                id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\(index + 1)")!,
+                name: name,
+                isMe: index == 0
+            )
+        }
+    }
 
     /// Delon and Sarah against Priya and Tom, all from `demoList`.
-    private static var demoSelection: WatchPlayerSelection {
+    private var demoSelection: WatchPlayerSelection {
+        let list = demoList
         func entry(_ index: Int) -> SyncedPlayerRef {
-            SyncedPlayerRef(savedPlayerID: demoList[index].id, name: demoList[index].name)
+            SyncedPlayerRef(savedPlayerID: list[index].id, name: list[index].name)
         }
         return WatchPlayerSelection(teamA: [entry(0), entry(2)], teamB: [entry(3), entry(4)])
     }
@@ -57,9 +76,9 @@ struct WatchDemo {
     @MainActor
     func seedPlayers(directory: WatchPlayerDirectory, suiteName: String) -> LastUsedPlayers {
         guard withPlayers, let defaults = UserDefaults(suiteName: suiteName) else { return LastUsedPlayers() }
-        directory.apply(PhoneStateContext(proUnlocked: false, completedMatchCount: 0, players: Self.demoList))
+        directory.apply(PhoneStateContext(proUnlocked: false, completedMatchCount: 0, players: demoList))
         var last = LastUsedPlayers(userDefaults: defaults)
-        last.selection = Self.demoSelection
+        last.selection = demoSelection
         return last
     }
 
@@ -71,12 +90,13 @@ struct WatchDemo {
             flow.startMatchTapped()
             return flow
         }
-        let bestOfThree = state != "sideSwitch"
+        let bestOfThree = state != "sideSwitch" && !singleGame
+        let mode: PlayMode = singles ? .singles : .doubles
         session.start(
-            configuration: GameConfiguration(playMode: .doubles, scoringFormat: .sideOut),
+            configuration: GameConfiguration(playMode: mode, scoringFormat: rally ? .rally(freeze: false) : .sideOut),
             format: bestOfThree ? .bestOfThree : .bestOfOne,
             firstServingTeam: .teamA,
-            players: withPlayers ? Self.demoSelection.matchPlayers(for: .doubles) : .empty
+            players: withPlayers ? demoSelection.matchPlayers(for: mode) : .empty
         )
         switch state {
         case "gameOver":
