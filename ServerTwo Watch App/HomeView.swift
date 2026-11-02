@@ -68,18 +68,25 @@ struct HomeView: View {
     /// "Players" and, under it, who is chosen for the next match (nothing when
     /// nobody is). Optional: Start Match works without it.
     private var playersRow: some View {
-        let summary = players.selection.summary(for: rules.configuration.playMode)
+        let mode = rules.configuration.playMode
+        let summary = players.selection.summary(for: mode)
+        let chosen = players.selection.matchPlayers(for: mode)
         return Button { showingPlayers = true } label: {
             VStack(spacing: 2) {
                 Text("Players")
-                if let summary {
-                    Text(summary)
-                        .font(.caption2)
-                        .foregroundStyle(Color.secondaryText)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
+                // One team a line, each in the longest form that fits, so a
+                // long name never spills out of the button.
+                if summary != nil {
+                    VStack(spacing: 1) {
+                        FittingTeamName(variants: chosen.teamNameVariants(for: .teamA), minimumScale: 0.6)
+                        FittingTeamName(variants: chosen.teamNameVariants(for: .teamB), prefix: "vs ", minimumScale: 0.6)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(Color.secondaryText)
+                    .multilineTextAlignment(.center)
                 }
             }
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, minHeight: 44)
         }
         .accessibilityElement(children: .ignore)
