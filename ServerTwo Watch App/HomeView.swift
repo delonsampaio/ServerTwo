@@ -65,6 +65,33 @@ struct HomeView: View {
         }
     }
 
+    /// "Delon S. & Sarah J." over "vs Priya R. & Tom A.", at the same level of
+    /// shortening on both lines (full names, first name and last initial, first
+    /// names); only the last level may wrap or be cut off.
+    private func teamLines(_ chosen: WatchMatchPlayers) -> some View {
+        let a = chosen.teamNameVariants(for: .teamA)
+        let b = chosen.teamNameVariants(for: .teamB)
+        let levels = max(a.count, b.count)
+        func line(_ variants: [String], _ level: Int, prefix: String, wraps: Bool) -> some View {
+            let text = prefix + variants[min(level, variants.count - 1)]
+            return Group {
+                if wraps {
+                    Text(text).lineLimit(2).minimumScaleFactor(0.6).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(text).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                }
+            }
+        }
+        return ViewThatFits(in: .horizontal) {
+            ForEach(0..<levels, id: \.self) { level in
+                VStack(spacing: 1) {
+                    line(a, level, prefix: "", wraps: level == levels - 1)
+                    line(b, level, prefix: "vs ", wraps: level == levels - 1)
+                }
+            }
+        }
+    }
+
     /// "Players" and, under it, who is chosen for the next match (nothing when
     /// nobody is). Optional: Start Match works without it.
     private var playersRow: some View {
@@ -74,21 +101,17 @@ struct HomeView: View {
         return Button { showingPlayers = true } label: {
             VStack(spacing: 2) {
                 Text("Players")
-                // One team a line, each in the longest form that fits, so a
-                // long name never spills out of the button.
+                // One team a line, both in the same form (the longest where
+                // both fit), so a long name never spills out of the button.
                 if summary != nil {
-                    VStack(spacing: 1) {
-                        FittingTeamName(variants: chosen.teamNameVariants(for: .teamA), minimumScale: 0.6)
-                        FittingTeamName(variants: chosen.teamNameVariants(for: .teamB), prefix: "vs ", minimumScale: 0.6)
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(Color.secondaryText)
-                    .multilineTextAlignment(.center)
+                    teamLines(chosen)
+                        .font(.caption2)
+                        .foregroundStyle(Color.secondaryText)
+                        .multilineTextAlignment(.center)
                 }
             }
-            // Clear of the button's rounded ends, so a long second line does
-            // not touch the curve.
-            .padding(.horizontal, 8)
+            // A little clear of the button's rounded ends.
+            .padding(.horizontal, 4)
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, minHeight: 44)
         }

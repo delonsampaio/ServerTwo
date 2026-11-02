@@ -120,7 +120,7 @@ struct ScoringView: View {
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, 8)
-            .frame(minHeight: 32)
+            .frame(minHeight: 36, maxHeight: 36)
             .overlay(Capsule().stroke(Color.secondary, lineWidth: 1))
             .dynamicTypeSize(...DynamicTypeSize.large)
             .accessibilityElement(children: .ignore)
@@ -150,9 +150,15 @@ struct ScoringView: View {
                 }
             }
             .font(.footnote.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: 36)
+            // Drawn here rather than by `.bordered`, which adds its own
+            // padding outside the frame (a "36 pt" Undo was 40 pt tall, taller
+            // than the call beside it and 4 pt out of the zones' height).
+            .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36)
+            .background(Color.white.opacity(0.2), in: Capsule())
+            .opacity(session.canUndo ? 1 : 0.4)
+            .contentShape(Capsule())
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.plain)
         .disabled(!session.canUndo)
         .accessibilityLabel("Undo last point")
         .accessibilityIdentifier("Undo")
@@ -238,14 +244,18 @@ private struct ScoreZone: View {
     private func teamNameText(lines: Int, minimumScale: CGFloat) -> some View {
         let variants = session.teamNameVariants(for: team)
         let name = variants[min(nameLevel, variants.count - 1)]
+        // Half-width zones break a pair at the "&" at every level ("Delon S." /
+        // "& Sarah J."), so a longer form is judged by its longer half and can
+        // fit in two lines instead of being skipped for needing one.
+        let shown = layout == .sideBySide ? name.replacingOccurrences(of: " & ", with: "\n& ") : name
         return Group {
             if wrapsName {
-                Text(name)
+                Text(shown)
                     .lineLimit(lines)
                     .minimumScaleFactor(minimumScale)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Text(name).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                Text(shown).lineLimit(lines).fixedSize()
             }
         }
         .font(.footnote.weight(.semibold))
@@ -253,10 +263,16 @@ private struct ScoreZone: View {
 
     /// "Tap for 2nd Server" is too long for a zone at full size: it shrank
     /// while "SERVER 1" on the other zone did not, so the two lines looked
-    /// like different sizes. The zone itself says it is a tap; VoiceOver
-    /// keeps the full hint.
+    /// like different sizes. The shorter forms are the same length as
+    /// "SERVER 1"; VoiceOver keeps the full hint.
     private var shortCaption: String {
-        caption.replacingOccurrences(of: "Tap for ", with: "")
+        switch caption {
+        // "2nd Server" under the receiving team read as that team being the
+        // second server; the arrow says what a tap leads to.
+        case "Tap for 2nd Server": "→ Server 2"
+        case "Tap for Side Out": "→ Side Out"
+        default: caption
+        }
     }
 
     /// Full-width zone: names and caption on the left, the score on the right.

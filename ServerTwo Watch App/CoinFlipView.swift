@@ -18,7 +18,8 @@ struct CoinFlipView: View {
         ScrollView {
             VStack(spacing: 8) {
                 if let first = firstServer {
-                    Text("\(name(first)) serves first")
+                    // Two players ("A & B") take a plural verb.
+                    Text("\(name(first)) \(name(first).contains(" & ") ? "serve" : "serves") first")
                         .font(.headline)
                         .multilineTextAlignment(.center)
                         .lineLimit(3)

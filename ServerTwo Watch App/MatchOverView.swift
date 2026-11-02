@@ -9,9 +9,12 @@ struct MatchOverView: View {
         ScrollView {
             VStack(spacing: 4) {
                 if let winner = session.matchWinner {
-                    Text(session.winnerHeadline(for: winner))
-                        .font(.headline)
-                        .multilineTextAlignment(.center)
+                    FittingTeamName(
+                        variants: session.teamNameVariants(for: winner),
+                        suffix: session.isPair(winner) ? " win" : " wins", lines: 2, minimumScale: 0.8
+                    )
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
                 }
                 if session.matchFormat != .bestOfOne {
                     Text("\(session.gamesWon(for: .teamA)) to \(session.gamesWon(for: .teamB)) in games")
