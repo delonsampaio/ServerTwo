@@ -24,8 +24,8 @@ struct ScoringView: View {
                 zones
             }
         }
-        .navigationTitle(session.matchFormat == .bestOfOne ? "Match" : "Game \(session.currentGameIndex + 1)")
         .navigationBarTitleDisplayMode(.inline)
+        .overlay(alignment: .top) { centredTitle }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("End Match", systemImage: "xmark") { confirmingEnd = true }
@@ -40,6 +40,25 @@ struct ScoringView: View {
             Button("Keep Playing", role: .cancel) {}
         } message: {
             Text("The score will not be saved.")
+        }
+    }
+
+    /// "Game 2" centred in the top bar, between the End Match button and the
+    /// clock. The system navigation title sits at the trailing edge under the
+    /// clock instead, and watchOS has no principal toolbar slot, so the title
+    /// is drawn over the bar: as tall as the top inset, lifted into it.
+    private var centredTitle: some View {
+        GeometryReader { proxy in
+            Text(session.matchFormat == .bestOfOne ? "Match" : "Game \(session.currentGameIndex + 1)")
+                .font(.headline)
+                .foregroundStyle(Color.accentColor)
+                .lineLimit(1)
+                .dynamicTypeSize(...DynamicTypeSize.large)
+                .frame(maxWidth: .infinity)
+                .frame(height: proxy.safeAreaInsets.top)
+                .offset(y: -proxy.safeAreaInsets.top)
+                .accessibilityAddTraits(.isHeader)
+                .allowsHitTesting(false)
         }
     }
 
@@ -109,7 +128,8 @@ struct ScoringView: View {
             .accessibilityIdentifier("ScoreCall")
     }
 
-    /// Keeps the flexible width and 44 pt height: the readouts beside it are
+    /// Keeps the flexible width at 36 pt tall, not 44: it is the least-used
+    /// button, and the points go to the tap zones. The readouts beside it are
     /// small and only take what they need.
     private var undoButton: some View {
         Button {
@@ -124,7 +144,7 @@ struct ScoringView: View {
         } label: {
             Label("Undo", systemImage: "arrow.uturn.backward")
                 .font(.footnote.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: 36)
         }
         .buttonStyle(.bordered)
         .disabled(!session.canUndo)
@@ -240,13 +260,13 @@ private struct ScoreZone: View {
                 }
             }
             Spacer(minLength: 0)
-            // The score keeps its room: a long name gives way to it, never
-            // the other way round.
+            // The score is always the same size: a long name gives way to
+            // it (a shorter form, then smaller text), never the other way round.
             Text("\(session.score(for: team))")
                 .font(.system(size: 52, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                .fixedSize()
                 .layoutPriority(1)
         }
     }

@@ -151,8 +151,12 @@ struct SettingsView: View {
 
     private func syncRow(_ title: String, outcome: CloudSyncMonitor.Outcome?) -> some View {
         guard let outcome else { return syncRow(title, value: "Nothing yet", failure: nil) }
-        let time = outcome.finished.formatted(date: .omitted, time: .shortened)
-        return syncRow(title, value: outcome.failure == nil ? "OK, \(time)" : "Failed, \(time)", failure: outcome.failure)
+        // "OK at 6:46 PM", or "OK on Oct 31, 6:46 PM" when it was not today.
+        let finished = outcome.finished
+        let when = Calendar.current.isDateInToday(finished)
+            ? "at \(finished.formatted(date: .omitted, time: .shortened))"
+            : "on \(finished.formatted(date: .abbreviated, time: .shortened))"
+        return syncRow(title, value: "\(outcome.failure == nil ? "OK" : "Failed") \(when)", failure: outcome.failure)
     }
 
     private func syncRow(_ title: String, value: String, failure: String?) -> some View {
