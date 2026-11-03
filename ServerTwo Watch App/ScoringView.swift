@@ -218,7 +218,7 @@ private struct ScoreZone: View {
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
             // Half-width zones give up some side padding to the name and caption.
             .padding(.horizontal, layout == .sideBySide ? 6 : 10)
-            .padding(.vertical, layout == .sideBySide ? 4 : 0)
+            .padding(.vertical, layout == .sideBySide ? 3 : 0)
             // 44 pt floor: with large system text the title and Undo grow and
             // squeeze the zones, which must never get shorter than a tap target.
             .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity)
@@ -248,16 +248,20 @@ private struct ScoreZone: View {
         // "& Sarah J."), so a longer form is judged by its longer half and can
         // fit in two lines instead of being skipped for needing one.
         let shown = layout == .sideBySide ? name.replacingOccurrences(of: " & ", with: "\n& ") : name
+        // The name is the part that gives way: it is never taller than the
+        // room left after the score and captions, which keep their size
+        // (`layoutPriority(-1)`, and they are not allowed to shrink).
         return Group {
             if wrapsName {
+                Text(shown).lineLimit(lines).minimumScaleFactor(minimumScale)
+            } else {
                 Text(shown)
                     .lineLimit(lines)
                     .minimumScaleFactor(minimumScale)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text(shown).lineLimit(lines).fixedSize()
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
+        .layoutPriority(-1)
         .font(.footnote.weight(.semibold))
     }
 
@@ -282,7 +286,7 @@ private struct ScoreZone: View {
                 // Players' names can be long ("Mike & Sarah"): the longest
                 // form that fits on one line, shrunk a little at the last
                 // step, then cut off at the end.
-                teamNameText(lines: 1, minimumScale: 0.75)
+                teamNameText(lines: 1, minimumScale: 0.5)
                 // The serving badge says who is up, in words, so the cue is
                 // never colour alone; the receiving zone says what a tap
                 // does, because it is not a point.
@@ -290,11 +294,15 @@ private struct ScoreZone: View {
                     .font(.caption2.weight(isServing ? .bold : .regular))
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .leading)
                 if showsGames {
                     Text("Games \(session.gamesWon(for: team))")
                         .font(.caption2)
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .leading)
                 }
             }
             Spacer(minLength: 0)
@@ -313,27 +321,38 @@ private struct ScoreZone: View {
     /// the text wraps to two lines because each zone is only about half as wide.
     private var sideBySideLabel: some View {
         VStack(spacing: 2) {
-            teamNameText(lines: 2, minimumScale: 0.7)
+            teamNameText(lines: 2, minimumScale: 0.6)
                 .multilineTextAlignment(.center)
             Spacer(minLength: 0)
             Text("\(session.score(for: team))")
                 .font(.system(size: 52, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                .fixedSize()
+                // A 52 pt line is about 62 pt tall, most of it empty space
+                // above and below the digits. Reserving 46 pt gives that room
+                // to the name, so the score and the captions keep their size
+                // and a two-line name only has to shrink a little.
+                .frame(height: 46)
                 .layoutPriority(1)
             Spacer(minLength: 0)
             // Footnote size, a step above the stacked layout's caption2: this
-            // is the line that says who serves.
+            // is the line that says who serves. An ideal width of 0 keeps the
+            // captions out of the "does this form of the name fit" test in
+            // `scoreZones`; they scale to the width they are given.
             Text(shortCaption)
                 .font(.footnote.weight(isServing ? .bold : .regular))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity)
             if showsGames {
                 Text("Games \(session.gamesWon(for: team))")
                     .font(.caption)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity)
             }
         }
     }
