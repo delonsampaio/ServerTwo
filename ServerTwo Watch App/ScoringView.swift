@@ -73,26 +73,42 @@ struct ScoringView: View {
     /// names, first name and last initial, first names) at which both fit, so
     /// the pair never reads "Delon Sampaio" beside "Priya R.". Only the last
     /// level may wrap or be cut off.
+    ///
+    /// In side by side the captions under the score also have to fit the
+    /// narrow zone, and must be the same size in both: the largest size at
+    /// which both fit is chosen, trying every name level at a size before
+    /// moving to a smaller one (the name gives way first).
     private var scoreZones: some View {
-        let levels = max(session.teamNameVariants(for: .teamA).count, session.teamNameVariants(for: .teamB).count)
+        let nameLevels = max(session.teamNameVariants(for: .teamA).count, session.teamNameVariants(for: .teamB).count)
+        let sizes = layout == .sideBySide ? ScoreZone.captionSizes.count : 1
+        let combos = (0..<sizes).flatMap { size in (0..<nameLevels).map { (size: size, name: $0) } }
         return ViewThatFits(in: .horizontal) {
-            ForEach(0..<levels, id: \.self) { level in
-                zonePair(nameLevel: level, wrapsName: level == levels - 1)
+            ForEach(combos.indices, id: \.self) { index in
+                zonePair(
+                    nameLevel: combos[index].name,
+                    wrapsName: combos[index].name == nameLevels - 1,
+                    captionLevel: combos[index].size,
+                    isLastResort: index == combos.count - 1
+                )
             }
         }
     }
 
     @ViewBuilder
-    private func zonePair(nameLevel: Int, wrapsName: Bool) -> some View {
+    private func zonePair(nameLevel: Int, wrapsName: Bool, captionLevel: Int, isLastResort: Bool) -> some View {
         if layout == .sideBySide {
             EqualWidthHStack(spacing: 4) {
-                ScoreZone(session: session, team: .teamA, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName)
-                ScoreZone(session: session, team: .teamB, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName)
+                ScoreZone(session: session, team: .teamA, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName, captionLevel: captionLevel, isLastResort: isLastResort)
+                ScoreZone(session: session, team: .teamB, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName, captionLevel: captionLevel, isLastResort: isLastResort)
             }
+            // Half-width zones are the narrow ones: let them run a little past
+            // the scene padding (the zones sit in the middle of the screen,
+            // clear of the rounded corners).
+            .padding(.horizontal, -6)
         } else {
             VStack(spacing: 4) {
-                ScoreZone(session: session, team: .teamA, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName)
-                ScoreZone(session: session, team: .teamB, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName)
+                ScoreZone(session: session, team: .teamA, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName, captionLevel: captionLevel, isLastResort: isLastResort)
+                ScoreZone(session: session, team: .teamB, layout: layout, nameLevel: nameLevel, wrapsName: wrapsName, captionLevel: captionLevel, isLastResort: isLastResort)
             }
         }
     }
@@ -191,6 +207,18 @@ private struct ScoreZone: View {
     /// whether this is the last, shortest one, which may wrap or be cut off.
     let nameLevel: Int
     let wrapsName: Bool
+    /// Which size of caption and "Games" line to use in side by side (an index
+    /// into `captionSizes`); the same for both zones.
+    var captionLevel = 0
+    /// The last candidate `scoreZones` tries: only then may a caption scale
+    /// down to fit. Before that it must keep its natural width, so the test
+    /// "does this size fit" sees how wide it really is.
+    var isLastResort = true
+
+    /// Largest first: (caption under the score, "Games N" line).
+    static let captionSizes: [(caption: Font, games: Font)] = [
+        (.footnote, .caption), (.caption, .caption2), (.caption2, .caption2),
+    ]
 
     private var isServing: Bool { session.servingCaption(for: team) != nil }
     private var showsGames: Bool { session.matchFormat != .bestOfOne }
@@ -216,8 +244,9 @@ private struct ScoreZone: View {
             // Undo), so its text stops growing at xLarge instead of clipping;
             // VoiceOver reads the full label whatever the size.
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
-            // Half-width zones give up some side padding to the name and caption.
-            .padding(.horizontal, layout == .sideBySide ? 6 : 10)
+            // Half-width zones give up some side padding to the name and caption
+            // (a 40 mm watch leaves each only about 60 pt).
+            .padding(.horizontal, layout == .sideBySide ? 4 : 10)
             .padding(.vertical, layout == .sideBySide ? 3 : 0)
             // 44 pt floor: with large system text the title and Undo grow and
             // squeeze the zones, which must never get shorter than a tap target.
@@ -251,12 +280,18 @@ private struct ScoreZone: View {
         // The name is the part that gives way: it is never taller than the
         // room left after the score and captions, which keep their size
         // (`layoutPriority(-1)`, and they are not allowed to shrink).
+        // A single word ("Masterson") is scaled down to fit, never split in
+        // the middle ("Master-" / "son").
+        let allowedLines = shown.contains(where: \.isWhitespace) ? lines : 1
         return Group {
             if wrapsName {
-                Text(shown).lineLimit(lines).minimumScaleFactor(minimumScale)
+                Text(shown).lineLimit(allowedLines).minimumScaleFactor(minimumScale)
+                    // In side by side the captions decide whether a size fits:
+                    // the last level of the name can always shrink and wrap.
+                    .frame(minWidth: 0, idealWidth: layout == .sideBySide ? 0 : nil, maxWidth: .infinity)
             } else {
                 Text(shown)
-                    .lineLimit(lines)
+                    .lineLimit(allowedLines)
                     .minimumScaleFactor(minimumScale)
                     .fixedSize(horizontal: true, vertical: false)
             }
@@ -270,12 +305,16 @@ private struct ScoreZone: View {
     /// like different sizes. The shorter forms are the same length as
     /// "SERVER 1"; VoiceOver keeps the full hint.
     private var shortCaption: String {
+        // Half-width zones (about 60 pt on a 40 mm watch) have no room for the
+        // arrow: the same size in both zones matters more than the arrow.
+        let narrow = layout == .sideBySide
         switch caption {
         // "2nd Server" under the receiving team read as that team being the
         // second server; the arrow says what a tap leads to.
-        case "Tap for 2nd Server": "→ Server 2"
-        case "Tap for Side Out": "→ Side Out"
-        default: caption
+        case "Tap for 2nd Server": return narrow ? "Server 2" : "→ Server 2"
+        case "Tap for Side Out": return narrow ? "Side Out" : "→ Side Out"
+        case "Tap to Score": return narrow ? "+1 Point" : caption
+        default: return caption
         }
     }
 
@@ -336,23 +375,19 @@ private struct ScoreZone: View {
                 .frame(height: 46)
                 .layoutPriority(1)
             Spacer(minLength: 0)
-            // Footnote size, a step above the stacked layout's caption2: this
-            // is the line that says who serves. An ideal width of 0 keeps the
-            // captions out of the "does this form of the name fit" test in
-            // `scoreZones`; they scale to the width they are given.
+            // The line that says who serves: footnote size when it fits, a
+            // step or two smaller on a narrow watch (the same in both zones).
             Text(shortCaption)
-                .font(.footnote.weight(isServing ? .bold : .regular))
+                .font(Self.captionSizes[captionLevel].caption.weight(isServing ? .bold : .regular))
                 .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity)
+                .minimumScaleFactor(isLastResort ? 0.6 : 1)
+                .fixedSize(horizontal: !isLastResort, vertical: true)
             if showsGames {
                 Text("Games \(session.gamesWon(for: team))")
-                    .font(.caption)
+                    .font(Self.captionSizes[captionLevel].games)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity)
+                    .minimumScaleFactor(isLastResort ? 0.5 : 1)
+                    .fixedSize(horizontal: !isLastResort, vertical: true)
             }
         }
     }
